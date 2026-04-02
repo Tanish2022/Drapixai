@@ -142,6 +142,12 @@ bash deploy/runpod/bootstrap.sh /workspace/drapixai
 cp deploy/env/ai.production.example deploy/env/ai.production.env
 ```
 
+The bootstrap step now also:
+
+- initializes the `IDM-VTON` git submodule on the Pod
+- reapplies DrapixAI's OpenPose compatibility patch
+- downloads the required `human parsing` and `body_pose_model` checkpoints if they are missing
+
 Fill `deploy/env/ai.production.env`, then:
 
 ```bash
@@ -166,6 +172,8 @@ Build from `drapixai_ai/docker/Dockerfile` and use that as the Pod image if you 
 
 - Put the IDM-VTON model files in:
 - `/workspace/drapixai/models/idm_vton`
+- The third-party `IDM-VTON` support assets under `drapixai_ai/third_party/IDM-VTON/ckpt` are now prepared by:
+- `python -m drapixai_ai.scripts.prepare_idm_vton`
 - The AI defaults are now tuned for `DRAPIXAI_GPU_PRESET=runpod-a100`
 - The API now exposes `/ready`, and the web exposes `/api/health`
 - The API S3 client no longer forces MinIO-style path access unless explicitly configured

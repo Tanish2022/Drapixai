@@ -27,8 +27,13 @@ fi
 
 cd "$APP_ROOT"
 
+if [[ -f .gitmodules ]]; then
+  git submodule update --init --recursive
+fi
+
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r drapixai_ai/requirements.txt
+python -m drapixai_ai.scripts.prepare_idm_vton
 
 mkdir -p \
   "$APP_ROOT/models" \
@@ -41,4 +46,3 @@ echo "1. Copy deploy/env/ai.production.example to deploy/env/ai.production.env"
 echo "2. Fill the secrets and model paths"
 echo "3. Run: set -a && source deploy/env/ai.production.env && set +a"
 echo "4. Run: bash deploy/runpod/start-all.sh"
-
