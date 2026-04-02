@@ -1,0 +1,13 @@
+NODE_ENV=production
+PORT=3000
+NEXT_PUBLIC_WEB_BASE_URL=https://drapixai.com
+NEXT_PUBLIC_API_BASE_URL=https://api.drapixai.com
+DRAPIXAI_API_URL=https://api.drapixai.com
+NEXTAUTH_URL=https://drapixai.com
+NEXTAUTH_SECRET=replace-with-a-long-random-secret
+ADMIN_SESSION_SECRET=replace-with-a-long-random-secret
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=0
+NEXT_PUBLIC_DEMO_VIDEO_URL=
+NEXT_PUBLIC_ADMIN_EMAIL=admin@drapixai.com

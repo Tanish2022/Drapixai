@@ -1,0 +1,16 @@
+{
+  "name": "drapixai",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "docker-compose up -d",
+    "dev:api": "cd apps\\api && npm run dev",
+    "dev:web": "cd apps\\web && npm run dev",
+    "dev:worker": "cd workers\\gpu-worker && python src\\worker.py",
+    "stop": "docker-compose down",
+    "build": "npm --prefix apps/api run build && npm --prefix apps/web run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

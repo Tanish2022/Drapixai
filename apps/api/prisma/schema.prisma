@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  email           String   @unique
+  passwordHash    String
+  companyName     String?
+  planType        String   @default("trial")
+  trialExpiresAt  DateTime?
+  createdAt       DateTime @default(now())
+  apiKeys         ApiKey[]
+  emailLogs       EmailLog[]
+  garments        Garment[]
+}
+
+model ApiKey {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  keyHash         String   @unique
+  domainWhitelist String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id])
+  renders         Render[]
+  usages          Usage[]
+  dailyUsages     UsageDaily[]
+}
+
+model Usage {
+  id          Int     @id @default(autoincrement())
+  apiKeyId    Int
+  renderCount Int     @default(0)
+  month       Int
+  year        Int
+  apiKey      ApiKey  @relation(fields: [apiKeyId], references: [id])
+  @@unique([apiKeyId, month, year])
+}
+
+model UsageDaily {
+  id        Int      @id @default(autoincrement())
+  apiKeyId  Int
+  date      DateTime
+  count     Int      @default(0)
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id])
+  @@unique([apiKeyId, date])
+}
+
+model EmailLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  email     String
+  event     String
+  status    String
+  error     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Render {
+  id        Int      @id @default(autoincrement())
+  apiKeyId  Int
+  status    String   @default("pending")
+  progress  Int      @default(0)
+  inputUrl  String?
+  outputUrl String?
+  productId String?
+  error     String?
+  createdAt DateTime @default(now())
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id])
+}
+
+model Garment {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  garmentId   String
+  cacheKey    String?
+  originalHash String
+  originalUrl String?
+  thumbnailUrl String?
+  status      String   @default("missing")
+  rejectedReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+  @@unique([userId, garmentId])
+  @@index([userId])
+}
+
+model WebsiteEvent {
+  id        Int      @id @default(autoincrement())
+  event     String
+  path      String?
+  visitorId String?
+  referrer  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([event, createdAt])
+  @@index([path, createdAt])
+}

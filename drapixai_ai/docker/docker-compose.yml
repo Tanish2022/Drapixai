@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  drapixai_ai_api:
+    build:
+      context: ../..
+      dockerfile: drapixai_ai/docker/Dockerfile
+    environment:
+      - DRAPIXAI_REDIS_URL=redis://redis:6379/0
+      - DRAPIXAI_MODEL_DIR=/app/models/idm_vton
+      - DRAPIXAI_DEVICE=cuda
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+    volumes:
+      - ../../models:/app/models
+
+  gpu_worker:
+    build:
+      context: ../..
+      dockerfile: drapixai_ai/docker/Dockerfile
+    command: ["python3.10", "-m", "drapixai_ai.worker.gpu_worker"]
+    environment:
+      - DRAPIXAI_REDIS_URL=redis://redis:6379/0
+      - DRAPIXAI_MODEL_DIR=/app/models/idm_vton
+      - DRAPIXAI_DEVICE=cuda
+    depends_on:
+      - redis
+    volumes:
+      - ../../models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    runtime: nvidia
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities: [gpu]

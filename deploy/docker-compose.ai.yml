@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - ai_redis_data:/data
+
+  ai-api:
+    build:
+      context: ..
+      dockerfile: drapixai_ai/docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./env/ai.production.env
+    environment:
+      DRAPIXAI_REDIS_URL: redis://redis:6379/0
+    command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
+    depends_on:
+      - redis
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../models:/workspace/drapixai/models
+      - ai_runtime:/workspace/drapixai/runtime
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities: ["gpu"]
+
+  ai-worker:
+    build:
+      context: ..
+      dockerfile: drapixai_ai/docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./env/ai.production.env
+    environment:
+      DRAPIXAI_REDIS_URL: redis://redis:6379/0
+    command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-worker.sh"]
+    depends_on:
+      - redis
+    volumes:
+      - ../models:/workspace/drapixai/models
+      - ai_runtime:/workspace/drapixai/runtime
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities: ["gpu"]
+
+volumes:
+  ai_redis_data:
+  ai_runtime:
