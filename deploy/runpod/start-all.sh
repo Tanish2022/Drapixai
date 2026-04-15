@@ -27,6 +27,19 @@ fi
 bash "$SCRIPT_DIR/start-ai-api.sh" &
 API_PID=$!
 
+for attempt in {1..30}; do
+  if curl -fsS "http://127.0.0.1:${PORT:-8080}/health" >/dev/null 2>&1; then
+    echo "AI API is responding on port ${PORT:-8080}."
+    break
+  fi
+  sleep 2
+done
+
+if ! curl -fsS "http://127.0.0.1:${PORT:-8080}/health" >/dev/null 2>&1; then
+  echo "AI API failed to become healthy on port ${PORT:-8080}." >&2
+  exit 1
+fi
+
 cleanup() {
   kill "$API_PID" 2>/dev/null || true
 }

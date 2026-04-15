@@ -1,185 +1,503 @@
 (function () {
-  const DrapixAI = {
+  function createWatermarkedBlob(imageUrl) {
+    return new Promise(function (resolve, reject) {
+      var image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = function () {
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth || image.width;
+          canvas.height = image.naturalHeight || image.height;
+          var context = canvas.getContext('2d');
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+          var watermarkText = 'DrapixAI';
+          var fontSize = Math.max(18, Math.round(canvas.width * 0.026));
+          var padding = Math.max(18, Math.round(canvas.width * 0.028));
+          context.font = '700 ' + fontSize + 'px Arial, sans-serif';
+          context.textAlign = 'right';
+          context.textBaseline = 'bottom';
+
+          var metrics = context.measureText(watermarkText);
+          var textWidth = metrics.width;
+          var boxWidth = textWidth + 24;
+          var boxHeight = fontSize + 18;
+          var x = canvas.width - padding;
+          var y = canvas.height - padding;
+
+          context.fillStyle = 'rgba(5, 8, 22, 0.62)';
+          context.beginPath();
+          context.roundRect(x - boxWidth, y - boxHeight, boxWidth, boxHeight, 12);
+          context.fill();
+
+          context.fillStyle = 'rgba(255,255,255,0.94)';
+          context.fillText(watermarkText, x - 12, y - 10);
+
+          canvas.toBlob(function (blob) {
+            if (!blob) {
+              reject(new Error('EXPORT_FAILED'));
+              return;
+            }
+            resolve(blob);
+          }, 'image/png');
+        } catch (error) {
+          reject(error);
+        }
+      };
+      image.onerror = function () {
+        reject(new Error('IMAGE_LOAD_FAILED'));
+      };
+      image.src = imageUrl;
+    });
+  }
+
+  function downloadBlob(blob, fileName) {
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1500);
+  }
+
+  function ensureWidgetStyles() {
+    if (document.getElementById('drapixai-sdk-styles')) {
+      return;
+    }
+
+    var style = document.createElement('style');
+    style.id = 'drapixai-sdk-styles';
+    style.textContent = [
+      '@keyframes drapixPulse {',
+      '  0% { transform: translateY(0px); opacity: 0.55; }',
+      '  50% { transform: translateY(-4px); opacity: 0.85; }',
+      '  100% { transform: translateY(0px); opacity: 0.55; }',
+      '}',
+      '.drapix-dropzone.dragover { border-color: rgba(34,211,238,0.7) !important; background: rgba(34,211,238,0.12) !important; }'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  window.DrapixAI = {
     init: async function (options) {
-      const config = {
+      var config = {
         apiKey: options.apiKey,
         productId: options.productId || 'default',
         containerId: options.containerId || 'drapixai-container',
+        autoAttach: Boolean(options.autoAttach),
+        productSelector: options.productSelector || '[data-drapix-product-id]',
+        productIdAttribute: options.productIdAttribute || 'data-drapix-product-id',
+        buttonTargetSelector: options.buttonTargetSelector || '[data-drapix-button-slot]',
         baseUrl: options.baseUrl || window.DRAPIXAI_API_BASE_URL || window.location.origin,
         garmentType: (options.garmentType || 'upper').toLowerCase(),
         buttonText: options.buttonText || 'Try On',
-        modalTitle: options.modalTitle || 'DrapixAI Try-On (Upper Body)',
-        modalSubtitle: options.modalSubtitle || 'Upload a person image. Garment is linked to the product ID.',
-        footerText: options.footerText || 'Your photo is processed securely and not stored.',
-        primaryGradient: options.primaryGradient || 'linear-gradient(90deg,#22d3ee,#3b82f6)',
+        modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
+        modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
+        footerText: options.footerText || 'Your uploaded photo is processed only for the preview flow.',
+        primaryGradient: options.primaryGradient || 'linear-gradient(135deg,#22d3ee 0%,#3b82f6 100%)'
       };
 
       if (config.garmentType !== 'upper') {
         throw new Error('UPPER_BODY_ONLY');
       }
 
-      const container = document.getElementById(config.containerId);
-      if (!container) throw new Error('Container not found');
+      var container = document.getElementById(config.containerId);
+      if (!config.autoAttach && !container) {
+        throw new Error('CONTAINER_NOT_FOUND');
+      }
 
-      const domain = window.location.hostname;
-      const validateRes = await fetch(`${config.baseUrl}/sdk/validate`, {
+      ensureWidgetStyles();
+
+      var domain = window.location.hostname;
+      var validateRes = await fetch(config.baseUrl + '/sdk/validate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
+          'Authorization': 'Bearer ' + config.apiKey
         },
-        body: JSON.stringify({ domain })
+        body: JSON.stringify({ domain: domain })
       });
 
       if (!validateRes.ok) {
-        const err = await validateRes.json();
-        throw new Error(err?.message || 'Validation failed');
+        var validateErr = await validateRes.json().catch(function () { return {}; });
+        throw new Error(validateErr && (validateErr.message || validateErr.error) || 'VALIDATION_FAILED');
       }
 
-      container.innerHTML = `
-        <div style="font-family: Arial, sans-serif;">
-          <button id="vx-open" style="background:${config.primaryGradient}; color:#fff; border:none; padding:10px 16px; border-radius:999px; cursor:pointer; font-weight:600; box-shadow:0 10px 25px rgba(34,211,238,0.15);">
-            ${config.buttonText}
-          </button>
-        </div>
-      `;
+      function createLauncherMarkup(productId) {
+        return [
+          '<div style="font-family: Arial, sans-serif;">',
+          '  <button data-drapix-launcher="true" data-drapix-product-id="', productId, '" style="display:inline-flex;align-items:center;gap:10px;background:', config.primaryGradient, ';color:#fff;border:none;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:700;box-shadow:0 18px 40px rgba(34,211,238,0.18);">',
+          '    <span style="display:inline-flex;width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,0.16);align-items:center;justify-content:center;font-size:12px;">D</span>',
+          '    ', config.buttonText,
+          '  </button>',
+          '</div>'
+        ].join('');
+      }
 
-      const openBtn = container.querySelector('#vx-open');
-      let modal;
-      let personInput;
-      let runBtn;
-      let status;
-      let result;
-      const logoData = 'data:image/webp;base64,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';
+      function bindLauncher(openBtn, productId) {
+        openBtn.addEventListener('click', function () {
+        if (document.getElementById('drapix-modal')) {
+          return;
+        }
 
-      const buildModal = () => {
-        modal = document.createElement('div');
-        modal.id = 'vx-modal';
+        var modal = document.createElement('div');
+        modal.id = 'drapix-modal';
         modal.style.position = 'fixed';
         modal.style.inset = '0';
-        modal.style.background = 'rgba(5,8,22,0.65)';
+        modal.style.zIndex = '9999';
         modal.style.display = 'flex';
         modal.style.alignItems = 'center';
         modal.style.justifyContent = 'center';
-        modal.style.zIndex = '9999';
-        modal.innerHTML = `
-          <div style="width:min(560px, 92vw); background:radial-gradient(120% 120% at 0% 0%, rgba(34,211,238,0.12), rgba(11,17,32,0.9)), #0b1120; color:#fff; border:1px solid rgba(255,255,255,0.08); border-radius:18px; padding:20px; position:relative; box-shadow:0 40px 80px rgba(5,8,22,0.75);">
-            <div style="position:absolute; inset:-40px; background:radial-gradient(40% 40% at 20% 10%, rgba(34,211,238,0.18), rgba(0,0,0,0)), radial-gradient(30% 30% at 80% 20%, rgba(59,130,246,0.16), rgba(0,0,0,0)); filter:blur(30px); opacity:0.7; animation: drapixaiGlow 6s ease-in-out infinite;"></div>
-            <button id="vx-close" style="position:absolute; top:10px; right:12px; background:transparent; border:none; color:#9aa4b2; font-size:18px; cursor:pointer;">×</button>
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-              <img src="${logoData}" width="36" height="36" alt="DrapixAI" style="border-radius:10px;" />
-              <div style="font-weight:700; letter-spacing:0.4px;">DrapixAI</div>
-            </div>
-            <div style="font-weight:600; margin-bottom:8px;">${config.modalTitle}</div>
-            <div style="font-size:12px; color:#9aa4b2; margin-bottom:12px;">${config.modalSubtitle}</div>
-            <div style="display:grid; gap:10px;">
-              <label style="display:block; padding:12px; background:rgba(255,255,255,0.03); border:1px dashed rgba(255,255,255,0.15); border-radius:12px; cursor:pointer;">
-                <input id="vx-person" type="file" accept="image/*" style="display:none;" />
-                <span style="font-size:12px; color:#cbd5e1;">Click to upload your photo</span>
-              </label>
-              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <label style="font-size:12px; color:#cbd5e1; display:flex; gap:8px; align-items:center;">
-                  <input id="vx-consent" type="checkbox" style="accent-color:#22d3ee;" />
-                  I agree to upload my photo for try‑on preview.
-                </label>
-                <button id="vx-run" style="background:${config.primaryGradient}; color:#fff; border:none; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600;">Generate</button>
-              </div>
-              <div style="font-size:11px; color:#8b9bb4;">Best results: front‑facing, good lighting, plain background.</div>
-            </div>
-            <div id="vx-progress" style="margin-top:10px; height:6px; border-radius:999px; background:rgba(255,255,255,0.06); overflow:hidden; display:none;">
-              <div id="vx-progress-bar" style="height:100%; width:0%; background:${config.primaryGradient}; transition:width 300ms ease;"></div>
-            </div>
-            <div id="vx-status" style="margin-top:10px; font-size:12px; color:#9aa4b2;"></div>
-            <img id="vx-result" style="margin-top:12px; width:100%; border-radius:8px; display:none;" />
-            <div style="margin-top:12px; font-size:11px; color:#6b7280;">${config.footerText}</div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-        personInput = modal.querySelector('#vx-person');
-        runBtn = modal.querySelector('#vx-run');
-        status = modal.querySelector('#vx-status');
-        result = modal.querySelector('#vx-result');
-        modal.querySelector('#vx-close').addEventListener('click', () => {
-          modal.remove();
-        });
-        modal.addEventListener('click', (e) => {
-          if (e.target === modal) modal.remove();
-        });
+        modal.style.padding = '18px';
+        modal.style.background = 'rgba(4, 8, 20, 0.72)';
 
-        if (!document.getElementById('drapixai-modal-styles')) {
-          const style = document.createElement('style');
-          style.id = 'drapixai-modal-styles';
-          style.textContent = `
-            @keyframes drapixaiGlow {
-              0% { opacity: 0.45; transform: translateY(0px); }
-              50% { opacity: 0.7; transform: translateY(-6px); }
-              100% { opacity: 0.45; transform: translateY(0px); }
-            }
-          `;
-          document.head.appendChild(style);
+        modal.innerHTML = [
+          '<div style="position:relative;width:min(680px,96vw);max-height:92vh;overflow:auto;border-radius:28px;border:1px solid rgba(255,255,255,0.08);background:linear-gradient(180deg,rgba(11,17,32,0.96) 0%,rgba(8,12,24,0.98) 100%);color:#fff;box-shadow:0 40px 120px rgba(4,8,20,0.65);">',
+          '  <div style="position:absolute;inset:-20% auto auto -10%;width:220px;height:220px;border-radius:999px;background:rgba(34,211,238,0.14);filter:blur(45px);animation:drapixPulse 6s ease-in-out infinite;"></div>',
+          '  <div style="position:absolute;inset:auto -12% -18% auto;width:240px;height:240px;border-radius:999px;background:rgba(59,130,246,0.12);filter:blur(55px);animation:drapixPulse 7s ease-in-out infinite;"></div>',
+          '  <button id="drapix-close" style="position:absolute;top:16px;right:18px;width:36px;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#cbd5e1;cursor:pointer;font-size:18px;">×</button>',
+          '  <div style="position:relative;padding:26px;">',
+          '    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">',
+          '      <div style="display:flex;width:40px;height:40px;border-radius:14px;align-items:center;justify-content:center;background:', config.primaryGradient, ';font-weight:800;letter-spacing:0.02em;">D</div>',
+          '      <div>',
+          '        <div style="font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#dbeafe;">DrapixAI</div>',
+          '        <div style="font-size:12px;color:#94a3b8;">Premium virtual try-on preview</div>',
+          '      </div>',
+          '    </div>',
+          '    <div style="font-size:24px;font-weight:700;line-height:1.2;margin-bottom:8px;">', config.modalTitle, '</div>',
+          '    <div style="font-size:13px;line-height:1.6;color:#9fb0c7;max-width:560px;margin-bottom:20px;">', config.modalSubtitle, '</div>',
+          '    <div style="display:grid;gap:18px;">',
+          '      <div id="drapix-dropzone" class="drapix-dropzone" style="position:relative;border:1px dashed rgba(255,255,255,0.16);border-radius:22px;padding:24px;background:rgba(255,255,255,0.03);transition:all .2s ease;">',
+          '        <input id="drapix-person" type="file" accept="image/*" style="display:none;" />',
+          '        <div id="drapix-upload-state">',
+          '          <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:18px;background:rgba(255,255,255,0.06);margin-bottom:14px;">',
+          '            <span style="font-size:22px;">↑</span>',
+          '          </div>',
+          '          <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Upload your front-facing image or drop it here</div>',
+          '          <div style="font-size:13px;color:#94a3b8;line-height:1.6;">Clear lighting and a straight-facing pose produce the strongest DrapixAI try-on previews.</div>',
+          '        </div>',
+          '        <div id="drapix-preview-shell" style="display:none;">',
+          '          <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:center;">',
+          '            <img id="drapix-preview" alt="Preview" style="width:160px;height:200px;object-fit:cover;border-radius:18px;border:1px solid rgba(255,255,255,0.08);background:#081226;" />',
+          '            <div>',
+          '              <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Ready to proceed</div>',
+          '              <div id="drapix-file-name" style="font-size:13px;color:#cbd5e1;margin-bottom:10px;"></div>',
+          '              <div style="font-size:12px;line-height:1.6;color:#94a3b8;">If you want a different photo, use Reset and upload another front-facing image before starting the virtual try-on process.</div>',
+          '            </div>',
+          '          </div>',
+          '        </div>',
+          '      </div>',
+          '      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;">',
+          '        <label style="font-size:12px;color:#cbd5e1;display:flex;gap:10px;align-items:flex-start;max-width:390px;">',
+          '          <input id="drapix-consent" type="checkbox" style="accent-color:#22d3ee;margin-top:2px;" />',
+          '          <span>I confirm I have permission to upload this image for DrapixAI try-on preview processing.</span>',
+          '        </label>',
+          '        <div style="display:flex;gap:10px;flex-wrap:wrap;">',
+          '          <button id="drapix-reset" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#e2e8f0;font-weight:600;cursor:pointer;">Reset</button>',
+          '          <button id="drapix-run" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:none;background:', config.primaryGradient, ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 18px 40px rgba(34,211,238,0.16);">Proceed</button>',
+          '        </div>',
+          '      </div>',
+          '      <div id="drapix-progress" style="display:none;">',
+          '        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">',
+          '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', config.primaryGradient, ';transition:width .25s ease;"></div>',
+          '        </div>',
+          '      </div>',
+          '      <div id="drapix-status" style="font-size:13px;color:#a7b8cc;min-height:20px;"></div>',
+          '      <div id="drapix-result-shell" style="display:none;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:18px;background:rgba(255,255,255,0.03);">',
+          '        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;">',
+          '          <div>',
+          '            <div style="font-size:18px;font-weight:700;">Your try-on preview is ready</div>',
+          '            <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
+          '          </div>',
+          '          <div style="display:flex;gap:10px;flex-wrap:wrap;">',
+          '            <button id="drapix-download" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:none;background:', config.primaryGradient, ';color:#fff;font-weight:700;cursor:pointer;">Download</button>',
+          '            <button id="drapix-share" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#fff;font-weight:600;cursor:pointer;">Share</button>',
+          '          </div>',
+          '        </div>',
+          '        <img id="drapix-result" alt="DrapixAI Result" style="width:100%;display:block;border-radius:18px;background:#081226;border:1px solid rgba(255,255,255,0.06);" />',
+          '      </div>',
+          '      <div style="font-size:11px;color:#7f91a8;">', config.footerText, '</div>',
+          '    </div>',
+          '  </div>',
+          '</div>'
+        ].join('');
+
+        document.body.appendChild(modal);
+
+        var personInput = modal.querySelector('#drapix-person');
+        var dropzone = modal.querySelector('#drapix-dropzone');
+        var uploadState = modal.querySelector('#drapix-upload-state');
+        var previewShell = modal.querySelector('#drapix-preview-shell');
+        var preview = modal.querySelector('#drapix-preview');
+        var fileName = modal.querySelector('#drapix-file-name');
+        var resetBtn = modal.querySelector('#drapix-reset');
+        var runBtn = modal.querySelector('#drapix-run');
+        var status = modal.querySelector('#drapix-status');
+        var resultShell = modal.querySelector('#drapix-result-shell');
+        var result = modal.querySelector('#drapix-result');
+        var progress = modal.querySelector('#drapix-progress');
+        var progressBar = modal.querySelector('#drapix-progress-bar');
+        var downloadBtn = modal.querySelector('#drapix-download');
+        var shareBtn = modal.querySelector('#drapix-share');
+        var activePreviewUrl = '';
+        var activeResultUrl = '';
+
+        function closeModal() {
+          if (activePreviewUrl) {
+            URL.revokeObjectURL(activePreviewUrl);
+          }
+          if (activeResultUrl) {
+            URL.revokeObjectURL(activeResultUrl);
+          }
+          modal.remove();
         }
 
-        runBtn.addEventListener('click', async function () {
-          if (!personInput.files[0]) {
-            status.textContent = 'Please select a person image.';
-            return;
+        function updatePreview(file) {
+          if (activePreviewUrl) {
+            URL.revokeObjectURL(activePreviewUrl);
           }
-          const consent = modal.querySelector('#vx-consent');
-          if (consent && !consent.checked) {
-            status.textContent = 'Please accept the consent checkbox.';
-            return;
+          activePreviewUrl = URL.createObjectURL(file);
+          preview.src = activePreviewUrl;
+          fileName.textContent = file.name;
+          uploadState.style.display = 'none';
+          previewShell.style.display = 'block';
+          status.textContent = 'Photo ready. Click Proceed to start the virtual try-on.';
+        }
+
+        function resetState() {
+          if (activePreviewUrl) {
+            URL.revokeObjectURL(activePreviewUrl);
+            activePreviewUrl = '';
           }
-          status.textContent = 'Generating...';
-          result.style.display = 'none';
-          const progress = modal.querySelector('#vx-progress');
-          const bar = modal.querySelector('#vx-progress-bar');
-          if (progress && bar) {
-            progress.style.display = 'block';
-            bar.style.width = '15%';
+          if (activeResultUrl) {
+            URL.revokeObjectURL(activeResultUrl);
+            activeResultUrl = '';
           }
+          personInput.value = '';
+          preview.removeAttribute('src');
+          result.removeAttribute('src');
+          uploadState.style.display = 'block';
+          previewShell.style.display = 'none';
+          resultShell.style.display = 'none';
+          progress.style.display = 'none';
+          progressBar.style.width = '14%';
+          status.textContent = 'Upload a new front-facing image to continue.';
+        }
 
-          const form = new FormData();
-          form.append('person_image', personInput.files[0]);
-          form.append('productId', config.productId);
-          form.append('quality', 'enhanced');
-          form.append('garment_type', 'upper');
+        function setSelectedFile(file) {
+          var transfer = new DataTransfer();
+          transfer.items.add(file);
+          personInput.files = transfer.files;
+          updatePreview(file);
+        }
 
-          const res = await fetch(`${config.baseUrl}/sdk/tryon`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${config.apiKey}` },
-            body: form
-          });
+        async function exportWatermarkedBlob() {
+          if (!activeResultUrl) {
+            throw new Error('RESULT_NOT_READY');
+          }
+          return createWatermarkedBlob(activeResultUrl);
+        }
 
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            status.textContent = err?.error || 'Try-on failed.';
-            if (progress && bar) {
-              bar.style.width = '0%';
-              progress.style.display = 'none';
+        async function handleDownload() {
+          try {
+            status.textContent = 'Preparing watermarked download...';
+            var blob = await exportWatermarkedBlob();
+            downloadBlob(blob, 'drapixai-tryon.png');
+            status.textContent = 'Downloaded your watermarked DrapixAI result.';
+          } catch (error) {
+            status.textContent = 'Unable to prepare the download right now.';
+          }
+        }
+
+        async function handleShare() {
+          try {
+            status.textContent = 'Preparing shareable result...';
+            var blob = await exportWatermarkedBlob();
+            var file = new File([blob], 'drapixai-tryon.png', { type: 'image/png' });
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                title: 'DrapixAI Virtual Try-On',
+                text: 'Generated with DrapixAI',
+                files: [file]
+              });
+              status.textContent = 'Share sheet opened.';
+              return;
             }
-            return;
-          }
 
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          result.src = url;
-          result.style.display = 'block';
-          status.textContent = 'Done.';
-          if (progress && bar) {
-            bar.style.width = '100%';
-            setTimeout(() => {
-              progress.style.display = 'none';
-              bar.style.width = '0%';
-            }, 600);
+            downloadBlob(blob, 'drapixai-tryon-share.png');
+            status.textContent = 'Your browser does not support direct file sharing here, so we downloaded the watermarked result instead.';
+          } catch (error) {
+            status.textContent = 'Unable to share the result right now.';
+          }
+        }
+
+        modal.querySelector('#drapix-close').addEventListener('click', closeModal);
+        modal.addEventListener('click', function (event) {
+          if (event.target === modal) {
+            closeModal();
           }
         });
-      };
 
-      openBtn.addEventListener('click', () => {
-        if (!document.getElementById('vx-modal')) buildModal();
-      });
+        dropzone.addEventListener('click', function () {
+          personInput.click();
+        });
+        personInput.addEventListener('change', function () {
+          if (personInput.files && personInput.files[0]) {
+            updatePreview(personInput.files[0]);
+          }
+        });
+        ['dragenter', 'dragover'].forEach(function (eventName) {
+          dropzone.addEventListener(eventName, function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            dropzone.classList.add('dragover');
+          });
+        });
+        ['dragleave', 'drop'].forEach(function (eventName) {
+          dropzone.addEventListener(eventName, function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            dropzone.classList.remove('dragover');
+          });
+        });
+        dropzone.addEventListener('drop', function (event) {
+          var droppedFile = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+          if (droppedFile && droppedFile.type.indexOf('image/') === 0) {
+            setSelectedFile(droppedFile);
+          } else {
+            status.textContent = 'Please drop a valid image file.';
+          }
+        });
+
+        resetBtn.addEventListener('click', function () {
+          resetState();
+        });
+        downloadBtn.addEventListener('click', handleDownload);
+        shareBtn.addEventListener('click', handleShare);
+
+        runBtn.addEventListener('click', async function () {
+          if (!personInput.files || !personInput.files[0]) {
+            status.textContent = 'Please upload your front-facing image first.';
+            return;
+          }
+
+          var consent = modal.querySelector('#drapix-consent');
+          if (consent && !consent.checked) {
+            status.textContent = 'Please confirm image upload consent before proceeding.';
+            return;
+          }
+
+          status.textContent = 'Brewing your DrapixAI virtual try-on...';
+          resultShell.style.display = 'none';
+          progress.style.display = 'block';
+          progressBar.style.width = '18%';
+          runBtn.disabled = true;
+          runBtn.style.opacity = '0.7';
+          runBtn.style.cursor = 'wait';
+
+          var progressStops = [18, 32, 52, 72, 88];
+          var progressIndex = 0;
+          var progressTimer = setInterval(function () {
+            if (progressIndex < progressStops.length) {
+              progressBar.style.width = progressStops[progressIndex] + '%';
+              progressIndex += 1;
+            }
+          }, 520);
+
+          try {
+            var form = new FormData();
+            form.append('person_image', personInput.files[0]);
+            form.append('productId', productId || config.productId);
+            form.append('quality', 'enhanced');
+            form.append('garment_type', 'upper');
+
+            var res = await fetch(config.baseUrl + '/sdk/tryon', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + config.apiKey },
+              body: form
+            });
+
+            if (!res.ok) {
+              var err = await res.json().catch(function () { return {}; });
+              throw new Error(err && (err.message || err.error) || 'TRY_ON_FAILED');
+            }
+
+            var blob = await res.blob();
+            if (activeResultUrl) {
+              URL.revokeObjectURL(activeResultUrl);
+            }
+            activeResultUrl = URL.createObjectURL(blob);
+            result.src = activeResultUrl;
+            resultShell.style.display = 'block';
+            progressBar.style.width = '100%';
+            status.textContent = 'Your DrapixAI try-on is ready.';
+          } catch (error) {
+            status.textContent = error && error.message ? error.message : 'Try-on failed.';
+            progressBar.style.width = '0%';
+            resultShell.style.display = 'none';
+          } finally {
+            clearInterval(progressTimer);
+            setTimeout(function () {
+              progress.style.display = 'none';
+              progressBar.style.width = '14%';
+            }, 500);
+            runBtn.disabled = false;
+            runBtn.style.opacity = '1';
+            runBtn.style.cursor = 'pointer';
+          }
+        });
+        });
+      }
+
+      function attachLaunchers(root) {
+        var scope = root && root.querySelectorAll ? root : document;
+        var productNodes = Array.prototype.slice.call(scope.querySelectorAll(config.productSelector));
+        productNodes.forEach(function (node) {
+          var productId = node.getAttribute(config.productIdAttribute);
+          if (!productId) {
+            return;
+          }
+          var targetNode = node.querySelector(config.buttonTargetSelector) || node;
+          if (targetNode.querySelector('[data-drapix-launcher="true"]')) {
+            return;
+          }
+          var wrapper = document.createElement('div');
+          wrapper.innerHTML = createLauncherMarkup(productId);
+          targetNode.appendChild(wrapper.firstElementChild);
+          var launcher = targetNode.querySelector('[data-drapix-launcher="true"][data-drapix-product-id="' + productId + '"]');
+          if (launcher) {
+            bindLauncher(launcher, productId);
+          }
+        });
+      }
+
+      if (config.autoAttach) {
+        attachLaunchers(document);
+
+        if (!window.__drapixObserverAttached) {
+          var observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+              Array.prototype.slice.call(mutation.addedNodes || []).forEach(function (node) {
+                if (node && node.nodeType === 1) {
+                  attachLaunchers(node);
+                }
+              });
+            });
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
+          window.__drapixObserverAttached = true;
+        }
+        return;
+      }
+
+      container.innerHTML = createLauncherMarkup(config.productId);
+      var openBtn = container.querySelector('[data-drapix-launcher="true"]');
+      bindLauncher(openBtn, config.productId);
     }
   };
-
-  window.DrapixAI = DrapixAI;
 })();

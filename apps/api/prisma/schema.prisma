@@ -8,16 +8,33 @@ datasource db {
 }
 
 model User {
-  id              Int      @id @default(autoincrement())
-  email           String   @unique
-  passwordHash    String
-  companyName     String?
-  planType        String   @default("trial")
-  trialExpiresAt  DateTime?
-  createdAt       DateTime @default(now())
-  apiKeys         ApiKey[]
-  emailLogs       EmailLog[]
-  garments        Garment[]
+  id                           Int      @id @default(autoincrement())
+  email                        String   @unique
+  emailVerifiedAt              DateTime?
+  passwordHash                 String
+  companyName                  String?
+  mobileNumber                 String?
+  themePreference              String   @default("dark")
+  storeVerificationToken       String?
+  storeVerifiedAt              DateTime?
+  catalogSyncSource            String?
+  catalogFeedUrl               String?
+  catalogLastSyncedAt          DateTime?
+  catalogLastSyncStatus        String?
+  planType                     String   @default("trial")
+  selectedPlan                 String?
+  subscriptionPlan             String?
+  subscriptionStatus           String?
+  subscriptionProvider         String?
+  subscriptionCustomerId       String?
+  subscriptionId               String?
+  subscriptionCurrentPeriodEndsAt DateTime?
+  trialExpiresAt               DateTime?
+  createdAt                    DateTime @default(now())
+  apiKeys                      ApiKey[]
+  emailLogs                    EmailLog[]
+  garments                     Garment[]
+  verificationCodes            VerificationCode[]
 }
 
 model ApiKey {
@@ -83,7 +100,11 @@ model Garment {
   cacheKey    String?
   originalHash String
   originalUrl String?
+  sourceImageUrl String?
   thumbnailUrl String?
+  productName String?
+  category    String?
+  garmentType String?
   status      String   @default("missing")
   rejectedReason String?
   createdAt   DateTime @default(now())
@@ -104,4 +125,19 @@ model WebsiteEvent {
 
   @@index([event, createdAt])
   @@index([path, createdAt])
+}
+
+model VerificationCode {
+  id         Int       @id @default(autoincrement())
+  userId     Int?
+  email      String
+  purpose    String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User?     @relation(fields: [userId], references: [id])
+
+  @@index([email, purpose, expiresAt])
+  @@index([userId, purpose, expiresAt])
 }

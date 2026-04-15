@@ -19,6 +19,9 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 drapixai_ai/.hf_cache/
+drapixai_ai/garments/
+drapixai_ai/runtime/
 drapixai_ai/outputs/
+tmp_*
 *.pem
 deploy/env/*.production.env

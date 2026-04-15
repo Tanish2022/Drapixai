@@ -116,7 +116,7 @@ router.post(
           person_image_base64: personBytes.toString('base64'),
           cloth_image_base64: '',
           cloth_cache_key: preprocessResult.cache_key,
-          quality: 'standard',
+          quality: 'enhanced',
           garment_type: 'upper',
         }),
       });

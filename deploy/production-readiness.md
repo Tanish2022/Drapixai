@@ -139,6 +139,8 @@ Recommended defaults already match the A100 path:
 - `DRAPIXAI_ENABLE_TF32=1`
 - `DRAPIXAI_ENABLE_VAE_TILING=1`
 - `DRAPIXAI_ENABLE_CPU_OFFLOAD=0`
+- `DRAPIXAI_OPENPOSE_DEVICE=cuda`
+- `DRAPIXAI_PRELOAD_MODEL=1`
 
 ## 3. Domain, DNS, And Reverse Proxy
 
@@ -237,6 +239,8 @@ These are the current recommended assumptions for Runpod A100:
 - Linux only
 - AI process runs directly on the Pod
 - Redis can be local on the Pod for first staging, but managed Redis is better for production
+- Hugging Face, Torch, and U2NET caches live under `/workspace/drapixai/runtime/cache`
+- the worker preloads the model on startup so first-request latency is not inflated by cold boot
 
 ### Assumptions that still need live confirmation
 
@@ -279,6 +283,7 @@ set -a
 source deploy/env/ai.production.env
 set +a
 bash deploy/scripts/validate-env.sh ai
+bash deploy/runpod/preflight.sh
 bash deploy/runpod/start-all.sh
 ```
 
@@ -288,6 +293,11 @@ Verify AI:
 curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8080/ready
 ```
+
+Expected result:
+
+- `/health` returns `{"status":"ok"}`
+- `/ready` returns `{"status":"ready","model_ready":true}`
 
 ## 8. Staging Checklist
 

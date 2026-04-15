@@ -147,6 +147,7 @@ The bootstrap step now also:
 - initializes the `IDM-VTON` git submodule on the Pod
 - reapplies DrapixAI's OpenPose compatibility patch
 - downloads the required `human parsing` and `body_pose_model` checkpoints if they are missing
+- prepares Hugging Face, Torch, and U2NET cache directories inside the workspace runtime path
 
 Fill `deploy/env/ai.production.env`, then:
 
@@ -155,6 +156,7 @@ set -a
 source deploy/env/ai.production.env
 set +a
 bash deploy/scripts/validate-env.sh ai
+bash deploy/runpod/preflight.sh
 bash deploy/runpod/start-all.sh
 ```
 
@@ -163,6 +165,7 @@ This starts:
 - local Redis on the Pod if `DRAPIXAI_REDIS_URL` points to localhost
 - AI API on port `8080`
 - GPU worker in the foreground
+- model preload on the A100 path so the first real try-on is not also the first model load
 
 ### Option B: Custom image
 
@@ -175,6 +178,7 @@ Build from `drapixai_ai/docker/Dockerfile` and use that as the Pod image if you 
 - The third-party `IDM-VTON` support assets under `drapixai_ai/third_party/IDM-VTON/ckpt` are now prepared by:
 - `python -m drapixai_ai.scripts.prepare_idm_vton`
 - The AI defaults are now tuned for `DRAPIXAI_GPU_PRESET=runpod-a100`
+- A100 presets now default to model preloading and explicit CUDA OpenPose usage
 - The API now exposes `/ready`, and the web exposes `/api/health`
 - The API S3 client no longer forces MinIO-style path access unless explicitly configured
 
@@ -214,9 +218,10 @@ bash deploy/scripts/smoke-test.sh
 3. Copy the repo into `/workspace/drapixai`.
 4. Run `bash deploy/runpod/bootstrap.sh /workspace/drapixai`.
 5. Fill `deploy/env/ai.production.env`.
-6. Start the AI stack with `bash deploy/runpod/start-all.sh`.
-7. Bring up the edge host with `deploy/docker-compose.edge.yml`.
-8. Point the API to the Runpod AI URL with `DRAPIXAI_AI_URL`.
-9. Run `deploy/scripts/healthcheck.sh`.
-10. Run `deploy/scripts/smoke-test.sh`.
-11. Only declare public readiness after one real `/sdk/tryon` request returns an image successfully.
+6. Run `bash deploy/runpod/preflight.sh`.
+7. Start the AI stack with `bash deploy/runpod/start-all.sh`.
+8. Bring up the edge host with `deploy/docker-compose.edge.yml`.
+9. Point the API to the Runpod AI URL with `DRAPIXAI_AI_URL`.
+10. Run `deploy/scripts/healthcheck.sh`.
+11. Run `deploy/scripts/smoke-test.sh`.
+12. Only declare public readiness after one real `/sdk/tryon` request returns an image successfully.

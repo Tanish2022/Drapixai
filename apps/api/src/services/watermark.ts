@@ -2,7 +2,7 @@
  * Watermark Service
  * 
  * Adds small, noticeable watermark to images in the corner.
- * Used for Basic plan users.
+ * Currently disabled for the public plan set, but kept for future gated previews.
  */
 
 import {
@@ -189,9 +189,8 @@ export async function processWithWatermark(
     fs.writeFileSync(tempInput, Buffer.concat(chunks));
     tempFiles.push(tempInput);
     
-    // Add watermark only for basic plan
-    if (userPlan === 'basic') {
-      console.log('Adding watermark for Basic plan...');
+    if (shouldAddWatermark(userPlan)) {
+      console.log(`Adding watermark for ${userPlan} plan...`);
       await addWatermarkWithSharp(tempInput, tempOutput, {
         text: 'DRAPIXAI',
         position: 'bottom-right',
@@ -201,7 +200,6 @@ export async function processWithWatermark(
         color: 'white'
       });
     } else {
-      // Pro plan - no watermark, just copy
       fs.copyFileSync(tempInput, tempOutput);
     }
     
@@ -248,8 +246,9 @@ export async function processWithWatermark(
 }
 
 /**
- * Check if user should have watermark
+ * Check if user should have watermark.
+ * The current public pricing flow does not watermark paid or trial outputs.
  */
 export function shouldAddWatermark(planType: string): boolean {
-  return planType === 'basic';
+  return false;
 }

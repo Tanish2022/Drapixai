@@ -23,8 +23,8 @@ interface AdminOverview {
     emailsSent: number;
     emailsFailed: number;
   };
-  plans: { planType: string; count: number }[];
-  recentUsers: { email: string; planType: string; createdAt: string }[];
+  plans: { planType: string; planName?: string; count: number }[];
+  recentUsers: { email: string; planType: string; planName?: string; createdAt: string }[];
   dailyUsage: { date: string; count: number }[];
   signups: { date: string; count: number }[];
 }
@@ -208,7 +208,7 @@ export default function AdminDashboard() {
             <div className="space-y-3">
               {overview.plans.map((plan) => (
                 <div key={plan.planType} className="flex items-center justify-between text-sm text-gray-300">
-                  <span className="capitalize">{plan.planType}</span>
+                  <span>{plan.planName || plan.planType}</span>
                   <span className="font-semibold text-white">{plan.count}</span>
                 </div>
               ))}
@@ -219,7 +219,7 @@ export default function AdminDashboard() {
                 {overview.recentUsers.map((user) => (
                   <div key={`${user.email}-${user.createdAt}`} className="flex items-center justify-between text-sm text-gray-300">
                     <span>{user.email}</span>
-                    <span className="capitalize">{user.planType}</span>
+                    <span>{user.planName || user.planType}</span>
                   </div>
                 ))}
               </div>

@@ -1,22 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { Zap, Mail, Lock, User, ArrowRight, Check } from 'lucide-react';
-import { useState } from 'react';
+import { Zap, Mail, Lock, User, ArrowRight, Check, Phone, ShieldCheck } from 'lucide-react';
+import { Suspense, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { GOOGLE_AUTH_ENABLED, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 import { trackEvent } from '@/app/lib/analytics';
 
-export default function RegisterPage() {
+const formatSelectedPlan = (value: string | null) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
+function RegisterPageContent() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [status, setStatus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [otpRequested, setOtpRequested] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedPlan = searchParams.get('plan');
+  const selectedPlanLabel = formatSelectedPlan(selectedPlan);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -29,13 +41,39 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${PUBLIC_API_BASE_URL}/auth/register`, {
+      if (!otpRequested) {
+        const response = await fetch(`${PUBLIC_API_BASE_URL}/auth/register/request-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          setStatus(data?.error || 'Unable to send verification code.');
+          return;
+        }
+
+        setOtpRequested(true);
+        setStatus(
+          data?.debugOtp
+            ? `Local dev verification code: ${data.debugOtp}`
+            : 'We sent a 6-digit verification code to your email. Enter it below to finish creating the account.'
+        );
+        return;
+      }
+
+      const response = await fetch('/api/dashboard/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          mode: 'register',
           email,
           password,
+          otp,
+          mobileNumber,
           companyName: name.trim(),
+          selectedPlan,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -48,7 +86,7 @@ export default function RegisterPage() {
       if (data?.apiKey) {
         localStorage.setItem('apiKey', data.apiKey);
       }
-      router.push('/dashboard');
+      router.push('/');
       trackEvent('trial_signup', { metadata: { source: 'password' } });
     } catch {
       setStatus('Unable to create account.');
@@ -77,7 +115,19 @@ export default function RegisterPage() {
           </Link>
 
           <h1 className="text-3xl font-bold mb-2">Create your account</h1>
-          <p className="text-gray-400 mb-8">Start your 12-day free trial. No credit card required.</p>
+          <p className="text-gray-400 mb-8">
+            Start your free trial with up to 300 try-ons over 12 days. No credit card required.
+            {selectedPlanLabel ? ` Selected plan after trial: ${selectedPlanLabel}.` : ''}
+          </p>
+
+          {selectedPlanLabel ? (
+            <div className="mb-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+              <p className="text-sm font-medium text-cyan-100">Plan selected</p>
+              <p className="text-sm text-gray-200 mt-1">
+                You&apos;ll start on the shared trial first, then continue with the {selectedPlanLabel} plan if it matches your usage.
+              </p>
+            </div>
+          ) : null}
 
           {/* Form */}
           <form className="space-y-6" onSubmit={handleSubmit}>
@@ -106,6 +156,21 @@ export default function RegisterPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@company.com"
+                  disabled={otpRequested}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-[#0b1120] border border-white/[0.06] text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Mobile Number (optional)</label>
+              <div className="relative">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <input
+                  type="tel"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  placeholder="+91 98765 43210"
                   className="w-full pl-12 pr-4 py-3 rounded-xl bg-[#0b1120] border border-white/[0.06] text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
                 />
               </div>
@@ -121,6 +186,7 @@ export default function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Create a strong password"
+                  disabled={otpRequested}
                   className="w-full pl-12 pr-12 py-3 rounded-xl bg-[#0b1120] border border-white/[0.06] text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 transition-colors"
                 />
                 <button
@@ -138,6 +204,54 @@ export default function RegisterPage() {
                 <div className={`h-1 flex-1 rounded-full ${password.length >= 12 ? 'bg-green-500' : 'bg-white/[0.06]'}`} />
               </div>
             </div>
+
+            {otpRequested ? (
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                <label className="block text-sm font-medium text-cyan-100 mb-2">Email Verification Code</label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-300" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    placeholder="Enter the 6-digit code"
+                    className="w-full pl-12 pr-4 py-3 rounded-xl bg-[#081226] border border-cyan-400/20 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400/60 transition-colors"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    try {
+                      const response = await fetch(`${PUBLIC_API_BASE_URL}/auth/register/request-otp`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email }),
+                      });
+                      const data = await response.json().catch(() => ({}));
+                      if (!response.ok) {
+                        setStatus(data?.error || 'Unable to resend verification code.');
+                        return;
+                      }
+                      setStatus(
+                        data?.debugOtp
+                          ? `Local dev verification code: ${data.debugOtp}`
+                          : 'A fresh verification code has been sent to your email.'
+                      );
+                    } catch {
+                      setStatus('Unable to resend verification code.');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  className="mt-3 text-sm text-cyan-300 hover:text-cyan-200 transition-colors"
+                >
+                  Resend verification code
+                </button>
+              </div>
+            ) : null}
 
             {/* Terms */}
             <div>
@@ -163,7 +277,7 @@ export default function RegisterPage() {
               disabled={!agreeTerms || isSubmitting}
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 text-white font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Creating Account...' : 'Create Account'}
+              {isSubmitting ? (otpRequested ? 'Verifying...' : 'Sending Code...') : (otpRequested ? 'Verify Email and Create Account' : 'Send Verification Code')}
               <ArrowRight className="w-5 h-5" />
             </button>
           </form>
@@ -215,12 +329,12 @@ export default function RegisterPage() {
           </div>
           <h2 className="text-3xl font-bold mb-4">Start Your Free Trial</h2>
           <p className="text-gray-400 max-w-md mb-8">
-            Get instant access to AI-powered virtual try-on technology. No credit card required.
+            Get instant access to AI-powered virtual try-on with up to 300 trial try-ons before choosing the plan that fits your real monthly volume.
           </p>
           
           {/* Trust Badges */}
           <div className="flex flex-wrap justify-center gap-4">
-            {['12-day free trial', 'No credit card', 'Cancel anytime', '24/7 support'].map((badge, i) => (
+            {['300 try-on trial', '12-day window', 'No credit card', 'Help center included'].map((badge, i) => (
               <div key={i} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.05] border border-white/[0.06]">
                 <Check className="w-4 h-4 text-green-400" />
                 <span className="text-sm text-gray-300">{badge}</span>
@@ -230,5 +344,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#050816] text-white flex items-center justify-center">
+          <p className="text-gray-400">Loading registration...</p>
+        </div>
+      }
+    >
+      <RegisterPageContent />
+    </Suspense>
   );
 }

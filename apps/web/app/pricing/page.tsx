@@ -1,188 +1,238 @@
 'use client';
-import { useState } from 'react';
+
 import Link from 'next/link';
+import { ArrowRight, Check, Mail, Sparkles, Zap } from 'lucide-react';
 
-export default function Pricing() {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+const TRIAL_TRYONS = 300;
 
-  const plans = [
-    {
-      name: 'Basic',
-      monthlyPrice: 89,
-      yearlyPrice: 76, // 15% off: 89 * 0.85 = 75.65 ≈ 76
-      renders: '1,200',
-      features: [
-        '1,200 renders/month',
-        '1 domain',
-        'Watermark',
-        '12-day free trial',
-        'Email support',
-        'Standard quality'
-      ]
-    },
-    {
-      name: 'Pro',
-      monthlyPrice: 159,
-      yearlyPrice: 135, // 15% off: 159 * 0.85 = 135.15 ≈ 135
-      renders: '3,000',
-      features: [
-        '3,000 renders/month',
-        '1 domain',
-        'No watermark',
-        'Priority support',
-        'Enhanced quality',
-        'Advanced analytics'
-      ],
-      popular: true,
-      comingSoon: true
-    },
-    {
-      name: 'Enterprise',
-      monthlyPrice: 'Custom',
-      yearlyPrice: 'Custom',
-      renders: 'Unlimited',
-      features: [
-        'Unlimited renders',
-        'Unlimited domains',
-        'No watermark',
-        'Dedicated GPU',
-        'SLA guarantee',
-        '24/7 support'
-      ],
-      comingSoon: true
-    }
-  ];
+const plans = [
+  {
+    name: 'Starter',
+    price: 49,
+    tryons: '1,000',
+    perTryOn: '$0.049',
+    badge: 'Entry Plan',
+    accent: 'from-slate-200/20 to-white/5',
+    border: 'border-white/[0.08]',
+    cta: '/auth/register?plan=starter',
+    description: 'For small brands validating demand and testing AI try-on on live product pages.',
+    features: [
+      '1,000 try-ons per month',
+      'Upper-body garments only',
+      '1 production domain',
+      'Standard support',
+      'Dashboard analytics',
+      'SDK + REST API access',
+    ],
+  },
+  {
+    name: 'Growth',
+    price: 149,
+    tryons: '7,500',
+    perTryOn: '$0.0199',
+    badge: 'Best Value',
+    accent: 'from-cyan-400/20 to-blue-500/10',
+    border: 'border-cyan-400/30',
+    cta: '/auth/register?plan=growth',
+    description: 'For growing stores that need stronger unit economics and regular try-on usage.',
+    highlights: '59% lower cost per try-on than Starter',
+    features: [
+      '7,500 try-ons per month',
+      'Upper-body garments only',
+      '1 production domain',
+      'Priority email support',
+      'Advanced analytics',
+      'Better margin for high-traffic products',
+    ],
+  },
+  {
+    name: 'Pro',
+    price: 399,
+    tryons: '25,000',
+    perTryOn: '$0.0160',
+    badge: 'Scale Plan',
+    accent: 'from-blue-500/20 to-cyan-400/10',
+    border: 'border-blue-400/30',
+    cta: '/auth/register?plan=pro',
+    description: 'For serious brands and higher-volume teams running DrapixAI as a real conversion lever.',
+    highlights: 'Best blended value before enterprise support',
+    features: [
+      '25,000 try-ons per month',
+      'Upper-body garments only',
+      'Priority support queue',
+      'Admin analytics + ops visibility',
+      'Best public pricing efficiency',
+      'Built for serious staging and launch traffic',
+    ],
+  },
+];
 
+export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-black text-white py-20">
-      <div className="max-w-7xl mx-auto px-6">
-        <h1 className="text-4xl font-bold text-center mb-4">Simple Pricing</h1>
-        <p className="text-gray-400 text-center mb-12">Start free, upgrade when ready</p>
+    <main className="min-h-screen bg-[#050816] text-white">
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[720px] bg-gradient-glow opacity-40" />
+        <div className="absolute bottom-0 right-0 w-[520px] h-[520px] rounded-full bg-cyan-500/10 blur-[120px]" />
+      </div>
 
-        {/* Billing Toggle */}
-        <div className="flex justify-center mb-12">
-          <div className="inline-flex items-center bg-white/5 rounded-full p-1 border border-white/10">
-            <button
-              onClick={() => setBillingCycle('monthly')}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
-                billingCycle === 'monthly'
-                  ? 'bg-purple-500 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
+        <div className="max-w-4xl mb-14">
+          <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Pricing</p>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Simple plans, stronger value as usage scales.</h1>
+          <p className="text-lg text-gray-300 leading-8 max-w-3xl">
+            Every public plan starts with the same free evaluation path: activate your account, use up to {TRIAL_TRYONS} trial try-ons, validate quality on your own products, then continue on the plan that matches your monthly volume.
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-6 mb-10">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <Sparkles className="w-5 h-5 text-emerald-300" />
+                <p className="font-semibold text-emerald-200">Free Trial Included On Every Plan</p>
+              </div>
+              <p className="text-gray-100 leading-7">
+                Use the same trial regardless of plan choice, evaluate output quality with your own catalog, and upgrade only once the workflow is proven for your team.
+              </p>
+            </div>
+            <Link
+              href="/auth/register"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-300/30 px-5 py-3 font-semibold hover:bg-white/[0.05] transition-colors"
             >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBillingCycle('yearly')}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
-                billingCycle === 'yearly'
-                  ? 'bg-purple-500 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Yearly
-              <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-                Save 15%
-              </span>
-            </button>
+              Start {TRIAL_TRYONS} Try-On Trial
+              <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
         </div>
 
-        {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {plans.map((plan) => {
-            const price = billingCycle === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
-            
-            return (
-              <div 
-                key={plan.name} 
-                className={`p-8 border rounded-2xl relative ${
-                  plan.popular && !plan.comingSoon 
-                    ? 'border-purple-500 bg-purple-500/10' 
-                    : 'border-white/10'
-                } ${plan.comingSoon ? 'opacity-60' : ''}`}
-              >
-                {plan.popular && !plan.comingSoon && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-                    Most Popular
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_1fr_320px] gap-6 items-stretch">
+          {plans.map((plan, index) => (
+            <section
+              key={plan.name}
+              className={`relative overflow-hidden rounded-3xl bg-[#0b1120]/75 backdrop-blur-xl p-8 ${plan.border} ${index === 1 ? 'xl:-translate-y-3 shadow-[0_24px_80px_rgba(34,211,238,0.12)]' : ''}`}
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${plan.accent} opacity-70`} />
+              <div className="relative z-10 h-full flex flex-col">
+                <div className="flex items-center justify-between gap-3 mb-6">
+                  <div>
+                    <p className="text-2xl font-bold">{plan.name}</p>
+                    <p className="text-sm text-gray-400 mt-1">{plan.badge}</p>
                   </div>
-                )}
-                
-                {plan.comingSoon && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gray-500 text-white px-3 py-1 rounded-full text-sm font-medium">
-                    Coming Soon
-                  </div>
-                )}
-                
-                <h2 className="text-2xl font-bold mb-2">{plan.name}</h2>
-                <div className="text-4xl font-bold mb-2">
-                  {typeof price === 'number' ? (
-                    <span>${price}<span className="text-lg text-gray-400">/mo</span></span>
-                  ) : (
-                    <span>{price}</span>
-                  )}
+                  {index === 1 ? (
+                    <span className="rounded-full border border-cyan-300/30 bg-cyan-400/15 px-3 py-1 text-xs font-semibold text-cyan-100">
+                      Recommended
+                    </span>
+                  ) : null}
                 </div>
-                {billingCycle === 'yearly' && typeof price === 'number' && (
-                  <p className="text-sm text-gray-400 mb-2">
-                    Billed ${price * 12}/year
-                  </p>
-                )}
-                <p className="text-purple-400 mb-6">{plan.renders} renders/month</p>
-                
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="text-gray-400 flex items-center gap-2">
-                      <span className="text-purple-400">✓</span> {feature}
-                    </li>
-                  ))}
-                </ul>
-                
-                {plan.comingSoon ? (
-                  <button 
-                    disabled 
-                    className="w-full py-3 bg-gray-800 rounded-lg cursor-not-allowed text-gray-400"
-                  >
-                    Coming Soon
-                  </button>
+
+                <div className="mb-6">
+                  <div className="flex items-end gap-2">
+                    <span className="text-5xl font-bold">${plan.price}</span>
+                    <span className="text-lg text-gray-400 mb-1">/mo</span>
+                  </div>
+                  <p className="mt-2 text-cyan-200 font-medium">{plan.tryons} try-ons per month</p>
+                  <p className="text-sm text-gray-400 mt-1">Effective price: {plan.perTryOn} per try-on</p>
+                </div>
+
+                <p className="text-gray-300 leading-7 mb-4">{plan.description}</p>
+
+                {plan.highlights ? (
+                  <div className="rounded-2xl border border-cyan-300/20 bg-black/20 p-4 mb-6">
+                    <p className="text-sm font-medium text-cyan-100">{plan.highlights}</p>
+                  </div>
                 ) : (
-                  <Link 
-                    href="/auth/register" 
-                    className={`block w-full py-3 rounded-lg text-center font-semibold hover:opacity-90 ${
-                      plan.popular 
-                        ? 'bg-gradient-to-r from-purple-500 to-pink-500' 
-                        : 'bg-white/10 hover:bg-white/20'
-                    }`}
-                  >
-                    Get Started
-                  </Link>
+                  <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4 mb-6">
+                    <p className="text-sm text-gray-300">Includes the same {TRIAL_TRYONS} try-on free trial before you commit.</p>
+                  </div>
                 )}
+
+                <div className="space-y-3 mb-8 flex-1">
+                  {plan.features.map((feature) => (
+                    <div key={feature} className="flex items-start gap-3">
+                      <Check className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
+                      <p className="text-gray-200 leading-7">{feature}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <Link
+                  href={plan.cta}
+                  className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold transition-colors ${
+                    index === 1
+                      ? 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90'
+                      : 'border border-white/[0.12] hover:bg-white/[0.05]'
+                  }`}
+                >
+                  Start Trial
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
-            );
-          })}
+            </section>
+          ))}
+
+          <aside className="rounded-3xl border border-amber-400/25 bg-[#0b1120]/80 backdrop-blur-xl p-8 flex flex-col">
+            <div className="flex items-center gap-3 mb-4">
+              <Zap className="w-5 h-5 text-amber-300" />
+              <p className="text-sm font-medium uppercase tracking-[0.2em] text-amber-200">Enterprise</p>
+            </div>
+
+            <h2 className="text-3xl font-bold mb-4">Custom volume, custom support.</h2>
+            <p className="text-gray-300 leading-7 mb-6">
+              For large brands, multi-store teams, negotiated usage, onboarding support, or custom deployment structure.
+            </p>
+
+            <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4 mb-6">
+              <p className="text-sm text-gray-200">Best fit if you expect unusually high try-on volume, custom contract terms, or direct commercial onboarding.</p>
+            </div>
+
+            <div className="space-y-3 mb-8 flex-1">
+              {[
+                'Custom volume allocation',
+                'Commercial onboarding path',
+                'Priority solution design',
+                'Optional private support workflow',
+              ].map((feature) => (
+                <div key={feature} className="flex items-start gap-3">
+                  <Check className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
+                  <p className="text-gray-200 leading-7">{feature}</p>
+                </div>
+              ))}
+            </div>
+
+            <a
+              href="mailto:sales@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-300/30 px-5 py-3 font-semibold hover:bg-white/[0.05] transition-colors"
+            >
+              <Mail className="w-4 h-4" />
+              Contact Sales
+            </a>
+            <p className="text-xs text-gray-500 mt-3 break-all">sales@drapixai.com</p>
+          </aside>
         </div>
 
-        {/* FAQ Section */}
-        <div className="mt-20 max-w-3xl mx-auto">
-          <h2 className="text-2xl font-bold text-center mb-8">Frequently Asked Questions</h2>
-          
-          <div className="space-y-4">
-            <div className="p-6 border border-white/10 rounded-xl">
-              <h3 className="font-semibold mb-2">What happens after my 12-day trial?</h3>
-              <p className="text-gray-400">You'll need to upgrade to Basic ($89/mo) or Pro ($159/mo) to continue using DrapixAI.</p>
-            </div>
-            
-            <div className="p-6 border border-white/10 rounded-xl">
-              <h3 className="font-semibold mb-2">Can I change plans later?</h3>
-              <p className="text-gray-400">Yes, you can upgrade or downgrade at any time. Changes take effect on your next billing cycle.</p>
-            </div>
-            
-            <div className="p-6 border border-white/10 rounded-xl">
-              <h3 className="font-semibold mb-2">What payment methods do you accept?</h3>
-              <p className="text-gray-400">We accept all major credit cards, PayPal, and bank transfers for Enterprise plans.</p>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-12">
+          <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
+            <h3 className="text-xl font-semibold mb-3">Trial before billing</h3>
+            <p className="text-gray-300 leading-7">
+              Validate quality and workflow with the same {TRIAL_TRYONS} try-on trial before your team commits to monthly usage.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
+            <h3 className="text-xl font-semibold mb-3">Built around upper-body rollout</h3>
+            <p className="text-gray-300 leading-7">
+              Public plans are intentionally focused on upper-body try-on so quality, speed, and rollout discipline stay cleaner from day one.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
+            <h3 className="text-xl font-semibold mb-3">Upgrade when volume is real</h3>
+            <p className="text-gray-300 leading-7">
+              Start smaller, prove demand, then move into higher monthly volume once DrapixAI becomes part of your live conversion workflow.
+            </p>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

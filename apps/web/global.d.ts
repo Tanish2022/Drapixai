@@ -7,6 +7,10 @@ declare global {
     containerId?: string;
     baseUrl?: string;
     garmentType?: 'upper';
+    autoAttach?: boolean;
+    productSelector?: string;
+    productIdAttribute?: string;
+    buttonTargetSelector?: string;
     buttonText?: string;
     modalTitle?: string;
     modalSubtitle?: string;

@@ -7,6 +7,7 @@ import { createClient } from 'redis';
 import { sendGarmentApprovalEmail } from '../services/emailer';
 import { createStorageClient, getStorageSummary } from '../lib/storage';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { formatPlanLabel } from '../lib/plans';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -103,11 +104,13 @@ router.get('/overview', async (req, res) => {
     },
     plans: planGroups.map((group) => ({
       planType: group.planType,
+      planName: formatPlanLabel(group.planType),
       count: group._count._all,
     })),
     recentUsers: recentUsers.map((user) => ({
       email: user.email,
       planType: user.planType,
+      planName: formatPlanLabel(user.planType),
       createdAt: user.createdAt.toISOString(),
     })),
     dailyUsage: dailyUsage.map((item) => ({

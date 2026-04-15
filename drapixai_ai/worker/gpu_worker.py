@@ -46,9 +46,14 @@ def _get_pipeline() -> DrapixAITryOnPipeline:
     return _PIPELINE
 
 
-def _decode_image(data_b64: str) -> Image.Image:
+def _decode_image(data_b64: str, *, preserve_white_background: bool = False) -> Image.Image:
     raw = base64.b64decode(data_b64)
-    return Image.open(io.BytesIO(raw)).convert("RGB")
+    image = Image.open(io.BytesIO(raw))
+    if preserve_white_background and image.mode in ("RGBA", "LA"):
+        rgba = image.convert("RGBA")
+        background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+        return Image.alpha_composite(background, rgba).convert("RGB")
+    return image.convert("RGB")
 
 
 def _encode_image(image: Image.Image) -> str:
@@ -61,7 +66,7 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     pipeline = _get_pipeline()
 
     person = _decode_image(payload["person_image"])
-    cloth = _decode_image(payload["cloth_image"])
+    cloth = _decode_image(payload["cloth_image"], preserve_white_background=True)
 
     logger.info(
         "job_start",
@@ -93,6 +98,10 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
 def main() -> None:
     if settings.device == "cuda" and torch.cuda.is_available():
         torch.cuda.set_device(settings.cuda_device_index)
+
+    if settings.preload_model_on_start:
+        logger.info("preloading_pipeline")
+        _get_pipeline()
 
     queue = get_queue()
     worker_cls = WindowsSimpleWorker if os.name == "nt" else Worker

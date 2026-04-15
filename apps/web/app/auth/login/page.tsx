@@ -22,10 +22,10 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${PUBLIC_API_BASE_URL}/auth/login`, {
+      const response = await fetch('/api/dashboard/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ mode: 'login', email, password }),
       });
       const data = await response.json().catch(() => ({}));
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
       if (data?.apiKey) {
         localStorage.setItem('apiKey', data.apiKey);
       }
-      router.push('/dashboard');
+      router.push('/');
       trackEvent('user_login', { metadata: { source: 'password' } });
     } catch {
       setStatus('Unable to sign in.');
@@ -176,7 +176,7 @@ export default function LoginPage() {
           </div>
           <h2 className="text-3xl font-bold mb-4">AI Virtual Try-On</h2>
           <p className="text-gray-400 max-w-md">
-            Transform your eCommerce with photorealistic AI try-on technology. Increase conversions by up to 32%.
+            Evaluate photorealistic upper-body try-on, monitor usage, and move from trial to rollout without rebuilding your storefront flow.
           </p>
         </div>
       </div>

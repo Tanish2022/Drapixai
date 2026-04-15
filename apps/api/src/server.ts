@@ -9,6 +9,7 @@ import sdkRoutes from './routes/sdk';
 import analyticsRoutes from './routes/analytics';
 import adminRoutes from './routes/admin';
 import publicRoutes from './routes/public';
+import accountRoutes from './routes/account';
 import cron from 'node-cron';
 import { startTrialNotifications } from './services/trial_notifier';
 import { getStorageSummary } from './lib/storage';
@@ -22,10 +23,26 @@ redis.connect().catch((error) => {
 });
 const aiBaseUrl = (process.env.DRAPIXAI_AI_URL || '').trim();
 
-const allowedOrigins = (process.env.DRAPIXAI_CORS_ORIGINS || '*')
+const configuredOrigins = (process.env.DRAPIXAI_CORS_ORIGINS || '*')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const localDevOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+];
+
+const allowedOrigins = Array.from(
+  new Set(
+    process.env.NODE_ENV === 'production'
+      ? configuredOrigins
+      : [...configuredOrigins, ...localDevOrigins]
+  )
+);
+
 const allowAnyOrigin = allowedOrigins.includes('*');
 const trustProxy = (process.env.DRAPIXAI_TRUST_PROXY || '').trim();
 
@@ -48,6 +65,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/auth', authRoutes);
 app.use('/sdk', sdkRoutes);
 app.use('/analytics', analyticsRoutes);
+app.use('/account', accountRoutes);
 app.use('/admin', adminRoutes);
 app.use('/', publicRoutes);
 
@@ -109,7 +127,13 @@ cron.schedule('0 0 * * *', async () => {
     where: { trialExpiresAt: { lt: new Date() }, planType: 'trial' }
   });
   for (const u of expired) {
-    await prisma.user.update({ where: { id: u.id }, data: { planType: 'expired' } });
+    await prisma.user.update({
+      where: { id: u.id },
+      data: {
+        planType: 'expired',
+        subscriptionStatus: u.subscriptionStatus === 'trialing' ? 'trial_expired' : u.subscriptionStatus,
+      }
+    });
   }
 });
 

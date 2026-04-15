@@ -22,21 +22,37 @@ export const ensureAdminUser = async () => {
         passwordHash,
         companyName: 'DrapixAI Admin',
         planType: 'pro',
+        selectedPlan: 'pro',
+        subscriptionPlan: 'pro',
+        subscriptionStatus: 'active',
+        subscriptionProvider: 'internal',
         trialExpiresAt: null,
+        subscriptionCurrentPeriodEndsAt: null,
       },
     });
     return;
   }
 
   const passwordMatches = await bcrypt.compare(adminPassword, existing.passwordHash);
-  if (!passwordMatches || existing.companyName !== 'DrapixAI Admin' || existing.planType !== 'pro') {
+  if (
+    !passwordMatches ||
+    existing.companyName !== 'DrapixAI Admin' ||
+    existing.planType !== 'pro' ||
+    existing.subscriptionPlan !== 'pro' ||
+    existing.subscriptionStatus !== 'active'
+  ) {
     await prisma.user.update({
       where: { id: existing.id },
       data: {
         passwordHash,
         companyName: 'DrapixAI Admin',
         planType: 'pro',
+        selectedPlan: 'pro',
+        subscriptionPlan: 'pro',
+        subscriptionStatus: 'active',
+        subscriptionProvider: 'internal',
         trialExpiresAt: null,
+        subscriptionCurrentPeriodEndsAt: null,
       },
     });
   }

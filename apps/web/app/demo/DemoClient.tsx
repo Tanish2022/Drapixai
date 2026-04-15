@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { Loader2, Play, Sparkles, Video } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Download, Loader2, Play, Sparkles, Video } from 'lucide-react';
 import { DEMO_VIDEO_URL, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 import { trackEvent } from '@/app/lib/analytics';
 
@@ -11,9 +11,33 @@ const isEmbeddableVideo = (value: string) => value.includes('youtube.com/embed/'
 export default function DemoClient() {
   const [personImage, setPersonImage] = useState<File | null>(null);
   const [clothImage, setClothImage] = useState<File | null>(null);
+  const [personPreviewUrl, setPersonPreviewUrl] = useState('');
+  const [clothPreviewUrl, setClothPreviewUrl] = useState('');
   const [status, setStatus] = useState('');
   const [resultUrl, setResultUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!personImage) {
+      setPersonPreviewUrl('');
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(personImage);
+    setPersonPreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [personImage]);
+
+  useEffect(() => {
+    if (!clothImage) {
+      setClothPreviewUrl('');
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(clothImage);
+    setClothPreviewUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [clothImage]);
 
   const runDemo = async () => {
     if (!personImage || !clothImage) {
@@ -47,7 +71,13 @@ export default function DemoClient() {
       }
 
       const blob = await response.blob();
-      setResultUrl(URL.createObjectURL(blob));
+      const nextResultUrl = URL.createObjectURL(blob);
+      setResultUrl((currentUrl) => {
+        if (currentUrl) {
+          URL.revokeObjectURL(currentUrl);
+        }
+        return nextResultUrl;
+      });
       setStatus('Demo try-on complete.');
       trackEvent('cta_click', { metadata: { target: 'demo_result_generated' } });
     } catch {
@@ -56,6 +86,20 @@ export default function DemoClient() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (resultUrl) {
+        URL.revokeObjectURL(resultUrl);
+      }
+    };
+  }, [resultUrl]);
+
+  const statusTone = status.toLowerCase().includes('complete')
+    ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+    : status.toLowerCase().includes('failed') || status.toLowerCase().includes('limit') || status.toLowerCase().includes('upload')
+      ? 'border-rose-400/20 bg-rose-400/10 text-rose-100'
+      : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-100';
 
   return (
     <main className="min-h-screen bg-[#050816] text-white">
@@ -71,6 +115,18 @@ export default function DemoClient() {
           <p className="text-lg text-gray-300 leading-8">
             This public demo allows a small number of free upper-body try-ons so brands can verify image quality and flow before creating an account.
           </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-8 text-left">
+            {[
+              ['01', 'Upload a clean person image'],
+              ['02', 'Add one isolated garment image'],
+              ['03', 'Run the enhanced-quality demo'],
+            ].map(([step, label]) => (
+              <div key={step} className="rounded-2xl border border-white/[0.08] bg-[#0b1120]/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-2">Step {step}</p>
+                <p className="text-sm text-gray-200">{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/70 backdrop-blur-xl p-8 mb-6">
@@ -115,7 +171,7 @@ export default function DemoClient() {
 
             <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4 mb-6 text-sm text-gray-300">
               <p className="font-semibold text-white mb-2">Recommended test images</p>
-              <p>Use a clear front-facing person photo and a single-garment image on a plain background. If you want instant testing later, upload sample assets into `apps/web/public/demo/` and update this page to preload them.</p>
+              <p>Use a clear front-facing person photo and a single-garment image on a plain background. The public demo now runs the enhanced quality path so prospects see a stronger first impression, not a reduced preview mode.</p>
             </div>
 
             <div className="space-y-4">
@@ -127,6 +183,11 @@ export default function DemoClient() {
                   onChange={(event) => setPersonImage(event.target.files?.[0] || null)}
                   className="w-full rounded-xl border border-white/[0.08] bg-black/20 p-3 text-sm text-gray-300"
                 />
+                {personPreviewUrl ? (
+                  <div className="mt-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                    <img src={personPreviewUrl} alt="Person preview" className="h-48 w-full rounded-xl object-cover" />
+                  </div>
+                ) : null}
               </div>
 
               <div>
@@ -137,6 +198,11 @@ export default function DemoClient() {
                   onChange={(event) => setClothImage(event.target.files?.[0] || null)}
                   className="w-full rounded-xl border border-white/[0.08] bg-black/20 p-3 text-sm text-gray-300"
                 />
+                {clothPreviewUrl ? (
+                  <div className="mt-3 rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+                    <img src={clothPreviewUrl} alt="Garment preview" className="h-48 w-full rounded-xl object-contain bg-white" />
+                  </div>
+                ) : null}
               </div>
 
               <button
@@ -149,7 +215,11 @@ export default function DemoClient() {
                 {isSubmitting ? 'Running demo...' : 'Run Free Try-On'}
               </button>
 
-              {status && <p className="text-sm text-gray-300">{status}</p>}
+              {status ? (
+                <div className={`rounded-2xl border p-4 text-sm ${statusTone}`}>
+                  {status}
+                </div>
+              ) : null}
             </div>
           </section>
 
@@ -164,6 +234,16 @@ export default function DemoClient() {
             )}
 
             <div className="mt-6 pt-6 border-t border-white/[0.08]">
+              {resultUrl ? (
+                <a
+                  href={resultUrl}
+                  download="drapixai-demo-result.png"
+                  className="mb-4 inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-white/[0.05] transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download result
+                </a>
+              ) : null}
               <p className="text-sm text-gray-300 mb-4">
                 Need more than a few tests? Create a trial account to access garment caching, analytics, the SDK, and higher try-on limits.
               </p>
@@ -171,8 +251,8 @@ export default function DemoClient() {
                 <Link href="/auth/register" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_start_trial' } })} className="px-4 py-2 rounded-xl border border-cyan-400/30 hover:bg-white/[0.05] transition-colors">
                   Start Free Trial
                 </Link>
-                <Link href="/docs" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_read_docs' } })} className="px-4 py-2 rounded-xl border border-white/[0.12] hover:bg-white/[0.05] transition-colors">
-                  Read Docs
+                <Link href="/help" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_read_help' } })} className="px-4 py-2 rounded-xl border border-white/[0.12] hover:bg-white/[0.05] transition-colors">
+                  Open Help Center
                 </Link>
               </div>
             </div>

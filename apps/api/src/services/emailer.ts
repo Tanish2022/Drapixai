@@ -13,7 +13,7 @@ const getTransporter = () => nodemailer.createTransport({
   } : undefined
 });
 
-export const sendEmail = async (userId: number, to: string, event: string, subject: string, text: string) => {
+export const sendEmail = async (userId: number | null, to: string, event: string, subject: string, text: string) => {
   if (!process.env.SMTP_HOST) return;
   try {
     await getTransporter().sendMail({
@@ -22,14 +22,40 @@ export const sendEmail = async (userId: number, to: string, event: string, subje
       subject,
       text
     });
-    await prisma.emailLog.create({
-      data: { userId, email: to, event, status: 'sent' }
-    });
+    if (userId) {
+      await prisma.emailLog.create({
+        data: { userId, email: to, event, status: 'sent' }
+      });
+    }
   } catch (err: any) {
-    await prisma.emailLog.create({
-      data: { userId, email: to, event, status: 'failed', error: String(err?.message || err) }
-    });
+    if (userId) {
+      await prisma.emailLog.create({
+        data: { userId, email: to, event, status: 'failed', error: String(err?.message || err) }
+      });
+    }
   }
+};
+
+export const sendOtpEmail = async (
+  to: string,
+  code: string,
+  purpose: 'signup' | 'email_change_current' | 'email_change_new',
+  userId?: number | null
+) => {
+  const subjectMap = {
+    signup: 'Your DrapixAI sign-up verification code',
+    email_change_current: 'Verify your current DrapixAI email',
+    email_change_new: 'Verify your new DrapixAI email',
+  } as const;
+
+  const introMap = {
+    signup: 'Use this code to complete your DrapixAI sign-up:',
+    email_change_current: 'Use this code to confirm your current account email before changing it:',
+    email_change_new: 'Use this code to verify your new account email address:',
+  } as const;
+
+  const text = `${introMap[purpose]}\n\n${code}\n\nThis code expires in 10 minutes. If you did not request this, you can ignore this email.`;
+  await sendEmail(userId ?? null, to, purpose, subjectMap[purpose], text);
 };
 
 export const sendGarmentApprovalEmail = async (

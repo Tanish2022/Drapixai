@@ -17,6 +17,7 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_ENHANCED_GUIDANCE": "2.6",
             "DRAPIXAI_LOW_VRAM": "1",
             "DRAPIXAI_OPENPOSE_DEVICE": "cpu",
+            "DRAPIXAI_PRELOAD_MODEL": "0",
         },
         "a10": {
             "DRAPIXAI_INPUT_MAX_SIDE": "512",
@@ -24,6 +25,7 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
             "DRAPIXAI_JOB_TIMEOUT": "1200",
             "DRAPIXAI_MAX_WAIT": "180",
+            "DRAPIXAI_PRELOAD_MODEL": "1",
         },
         "a100": {
             "DRAPIXAI_INPUT_MAX_SIDE": "640",
@@ -33,6 +35,7 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_MAX_WAIT": "300",
             "DRAPIXAI_LOW_VRAM": "0",
             "DRAPIXAI_OPENPOSE_DEVICE": "cuda",
+            "DRAPIXAI_PRELOAD_MODEL": "1",
         },
         "runpod-a100": {
             "DRAPIXAI_INPUT_MAX_SIDE": "640",
@@ -42,8 +45,14 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_MAX_WAIT": "300",
             "DRAPIXAI_LOW_VRAM": "0",
             "DRAPIXAI_OPENPOSE_DEVICE": "cuda",
+            "DRAPIXAI_PRELOAD_MODEL": "1",
         },
-        "t4": {"DRAPIXAI_INPUT_MAX_SIDE": "512", "DRAPIXAI_ENHANCED_STEPS": "28", "DRAPIXAI_ENHANCED_GUIDANCE": "2.6"},
+        "t4": {
+            "DRAPIXAI_INPUT_MAX_SIDE": "512",
+            "DRAPIXAI_ENHANCED_STEPS": "28",
+            "DRAPIXAI_ENHANCED_GUIDANCE": "2.6",
+            "DRAPIXAI_PRELOAD_MODEL": "0",
+        },
     }
     preset_values = mapping.get(key)
     if not preset_values:
@@ -83,6 +92,7 @@ class Settings:
     enable_cpu_offload: bool = os.getenv("DRAPIXAI_ENABLE_CPU_OFFLOAD", "0") == "1"
     enable_vae_tiling: bool = os.getenv("DRAPIXAI_ENABLE_VAE_TILING", "1") == "1"
     low_vram_mode: bool = os.getenv("DRAPIXAI_LOW_VRAM", "0") == "1"
+    preload_model_on_start: bool = os.getenv("DRAPIXAI_PRELOAD_MODEL", "0") == "1"
 
     log_level: str = os.getenv("DRAPIXAI_LOG_LEVEL", "INFO")
     enforce_upper_body: bool = os.getenv("DRAPIXAI_ENFORCE_UPPER_BODY", "1") == "1"

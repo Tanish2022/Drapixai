@@ -15,6 +15,15 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { processWithWatermark } from '../services/watermark';
 import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import { CatalogSyncInputItem, isSupportedUpperBodyItem, normalizeCatalogItem } from '../lib/catalog-feed';
+import {
+  getPlanName,
+  getPlanQuality,
+  getPlanQuota,
+  hasActivePlanAccess,
+  isInactivePlan,
+  normalizePlanKey,
+} from '../lib/plans';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -50,6 +59,24 @@ const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
 const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
 const GARMENT_APPROVAL_REQUIRED = (process.env.DRAPIXAI_GARMENT_APPROVAL_REQUIRED || '0') === '1';
+
+const getUserPlanContext = (planType: string | null | undefined) => {
+  const normalizedPlan = normalizePlanKey(planType);
+  return {
+    normalizedPlan,
+    planName: getPlanName(normalizedPlan),
+    quota: getPlanQuota(normalizedPlan),
+    quality: getPlanQuality(normalizedPlan),
+    active: hasActivePlanAccess(normalizedPlan),
+    inactive: isInactivePlan(normalizedPlan),
+  };
+};
+
+const findSyncedGarment = async (userId: number, garmentId: string) => {
+  return prisma.garment.findUnique({
+    where: { userId_garmentId: { userId, garmentId } }
+  });
+};
 
 const uploadOriginalGarment = async (
   userId: number,
@@ -240,7 +267,8 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
     }
 
     // Check subscription status
-    if (user.planType === 'expired' || user.planType === 'canceled') {
+    const plan = getUserPlanContext(user.planType);
+    if (plan.inactive) {
       return res.status(403).json({ 
         valid: false, 
         error: 'Subscription expired',
@@ -258,24 +286,18 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
       } 
     });
 
-    // Calculate quota based on plan
-    let quota = 0;
-    if (user.planType === 'trial') {
-      quota = 300;
-    } else if (user.planType === 'basic') {
-      quota = 1200;
-    } else if (user.planType === 'pro') {
-      quota = 3000;
-    }
-
     res.json({ 
       valid: true,
-      plan: user.planType,
+      plan: plan.normalizedPlan,
+      planName: plan.planName,
       rendersUsed: usage?.renderCount || 0,
-      quotaRemaining: quota - (usage?.renderCount || 0),
-      quota: quota,
+      quotaRemaining: Math.max(0, plan.quota - (usage?.renderCount || 0)),
+      quota: plan.quota,
       domain: finalWhitelist,
-      trialDaysLeft: user.planType === 'trial' && user.trialExpiresAt 
+      selectedPlan: user.selectedPlan || null,
+      subscriptionPlan: user.subscriptionPlan || null,
+      subscriptionStatus: user.subscriptionStatus || null,
+      trialDaysLeft: plan.normalizedPlan === 'trial' && user.trialExpiresAt 
         ? Math.max(0, Math.ceil((user.trialExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : 0
     });
@@ -311,20 +333,8 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       });
     }
 
-    // Check quota
-    let quota = 0;
-    let quality = 'standard';
-    
-    if (user.planType === 'trial') {
-      quota = 300;
-      quality = 'standard';
-    } else if (user.planType === 'basic') {
-      quota = 1200;
-      quality = 'standard';
-    } else if (user.planType === 'pro') {
-      quota = 3000;
-      quality = 'enhanced';
-    } else {
+    const plan = getUserPlanContext(user.planType);
+    if (!plan.active) {
       return res.status(403).json({ 
         error: 'No active subscription',
         message: 'Please upgrade your plan to continue using DrapixAI'
@@ -340,10 +350,10 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       } 
     });
 
-    if (usage && usage.renderCount >= quota) {
+    if (usage && usage.renderCount >= plan.quota) {
       return res.status(403).json({ 
         error: 'Quota exceeded',
-        message: `You've reached your monthly limit of ${quota} renders. Please upgrade your plan.`
+        message: `You've reached your monthly limit of ${plan.quota} renders. Please upgrade your plan.`
       });
     }
 
@@ -383,8 +393,8 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       jobId: render.id,
       inputKey: inputKey,
       productId: productId || 'default',
-      quality: quality,
-      userPlan: user.planType,
+      quality: plan.quality,
+      userPlan: plan.normalizedPlan,
       userId: user.id,
       apiKeyId: apiKey.id
     }));
@@ -413,8 +423,9 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
     res.json({ 
       jobId: render.id, 
       status: 'pending',
-      quality: quality,
-      plan: user.planType,
+      quality: plan.quality,
+      plan: plan.normalizedPlan,
+      planName: plan.planName,
       message: 'Your render job has been queued. Check status using the job ID.'
     });
   } catch (error) {
@@ -475,19 +486,8 @@ router.post('/tryon', authMiddleware, upload.fields([
     }
 
     const now = new Date();
-    let quota = 0;
-    let quality = 'standard';
-
-    if (user.planType === 'trial') {
-      quota = 300;
-      quality = 'standard';
-    } else if (user.planType === 'basic') {
-      quota = 1200;
-      quality = 'standard';
-    } else if (user.planType === 'pro') {
-      quota = 3000;
-      quality = 'enhanced';
-    } else {
+    const plan = getUserPlanContext(user.planType);
+    if (!plan.active) {
       return res.status(403).json({
         error: 'No active subscription',
         message: 'Please upgrade your plan to continue using DrapixAI'
@@ -501,7 +501,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       }
     });
 
-    if (usage && usage.renderCount >= quota) {
+    if (usage && usage.renderCount >= plan.quota) {
       return res.status(429).json({ error: 'TRY_ON_LIMIT_EXCEEDED' });
     }
 
@@ -542,7 +542,7 @@ router.post('/tryon', authMiddleware, upload.fields([
         const clothBytes = fs.readFileSync(clothFile.path);
         clothBase64 = clothBytes.toString('base64');
       }
-      const selectedQuality = req.body.quality || quality;
+      const selectedQuality = req.body.quality || plan.quality;
 
       const payload = {
         user_id: String(user.id),
@@ -641,6 +641,14 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
       return res.status(400).json({ error: 'CLOTH_IMAGE_REQUIRED' });
     }
 
+    const syncedGarment = await findSyncedGarment(user.id, garmentId);
+    if (!syncedGarment) {
+      return res.status(409).json({
+        error: 'GARMENT_NOT_SYNCED',
+        message: 'Sync upper-body product IDs first, then upload matching garment images.'
+      });
+    }
+
     const clothBytes = fs.readFileSync(req.file.path);
     const originalHash = crypto.createHash('sha256').update(clothBytes).digest('hex');
     const originalUrl = await uploadOriginalGarment(user.id, garmentId, req.file.path, req.file.mimetype);
@@ -711,6 +719,15 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
         results.push({ file: file.originalname, error: 'INVALID_FILENAME' });
         continue;
       }
+      const syncedGarment = await findSyncedGarment(user.id, garmentId);
+      if (!syncedGarment) {
+        results.push({
+          garmentId,
+          error: 'GARMENT_NOT_SYNCED',
+          message: 'Sync upper-body product IDs first, then upload files whose filenames match those IDs.'
+        });
+        continue;
+      }
       const clothBytes = fs.readFileSync(file.path);
       const originalHash = crypto.createHash('sha256').update(clothBytes).digest('hex');
       const originalUrl = await uploadOriginalGarment(user.id, garmentId, file.path, file.mimetype);
@@ -777,6 +794,10 @@ router.get('/garments/:garmentId', authMiddleware, async (req: any, res: any) =>
       garmentId: garment.garmentId,
       cacheKey: garment.cacheKey,
       status: garment.status,
+      productName: garment.productName,
+      category: garment.category,
+      garmentType: garment.garmentType,
+      sourceImageUrl: garment.sourceImageUrl,
       updatedAt: garment.updatedAt
     });
   } catch (error) {
@@ -801,6 +822,10 @@ router.get('/garments', authMiddleware, async (req: any, res: any) => {
         garmentId: g.garmentId,
         cacheKey: g.cacheKey,
         status: g.status,
+        productName: g.productName,
+        category: g.category,
+        garmentType: g.garmentType,
+        sourceImageUrl: g.sourceImageUrl,
         updatedAt: g.updatedAt
       }))
     });
@@ -818,25 +843,62 @@ router.post('/garments/sync', authMiddleware, async (req: any, res: any) => {
   try {
     const user = req.user;
     const productIds: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
-    if (productIds.length === 0) {
+    const rawItems: CatalogSyncInputItem[] = Array.isArray(req.body?.items) ? req.body.items : [];
+
+    if (productIds.length === 0 && rawItems.length === 0) {
       return res.status(400).json({ error: 'PRODUCT_IDS_REQUIRED' });
     }
-    const items = await Promise.all(
-      productIds.map(async (pid) => {
-        const garmentId = String(pid).trim();
-        if (!garmentId) return null;
-        const record = await prisma.garment.upsert({
-          where: { userId_garmentId: { userId: user.id, garmentId } },
-          update: {},
-          create: { userId: user.id, garmentId, cacheKey: null, originalHash: '', status: 'missing' }
-        });
-        return {
-          garmentId: record.garmentId,
-          status: record.status
-        };
-      })
+
+    const normalizedItems = [
+      ...productIds
+        .map((pid) => normalizeCatalogItem({ productId: pid, garmentType: 'upper' }))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item)),
+      ...rawItems
+        .map((item) => normalizeCatalogItem(item))
+        .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    ];
+
+    const uniqueItems = Array.from(
+      new Map(normalizedItems.map((item) => [item.productId, item])).values()
     );
-    res.json({ items: items.filter(Boolean) });
+
+    const synced: Array<{ garmentId: string; status: string }> = [];
+    const skipped: Array<{ productId: string; reason: string }> = [];
+
+    for (const item of uniqueItems) {
+      if (!productIds.includes(item.productId) && !isSupportedUpperBodyItem(item)) {
+        skipped.push({ productId: item.productId, reason: 'NOT_UPPER_BODY' });
+        continue;
+      }
+
+      const record = await prisma.garment.upsert({
+        where: { userId_garmentId: { userId: user.id, garmentId: item.productId } },
+        update: {
+          productName: item.productName,
+          category: item.category,
+          garmentType: item.garmentType || 'upper',
+          sourceImageUrl: item.imageUrl,
+        },
+        create: {
+          userId: user.id,
+          garmentId: item.productId,
+          cacheKey: null,
+          originalHash: '',
+          status: 'missing',
+          productName: item.productName,
+          category: item.category,
+          garmentType: item.garmentType || 'upper',
+          sourceImageUrl: item.imageUrl,
+        }
+      });
+
+      synced.push({
+        garmentId: record.garmentId,
+        status: record.status
+      });
+    }
+
+    res.json({ items: synced, skipped });
   } catch (error) {
     console.error('Garment sync error:', error);
     res.status(500).json({ error: 'Garment sync failed' });
@@ -993,12 +1055,12 @@ router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
       });
     }
 
-    // Process with watermark if Basic plan
+    // Apply post-processing policy by active plan.
     if (render.outputUrl && (render.outputUrl.startsWith('session/') || render.outputUrl.startsWith('outputs/'))) {
       try {
         const watermarkedUrl = await processWithWatermark(
           render.outputUrl,
-          user.planType
+          normalizePlanKey(user.planType)
         );
         
         await prisma.render.update({

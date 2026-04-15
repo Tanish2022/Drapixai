@@ -6,10 +6,22 @@
   --background: #050816;
   --surface: #0b1120;
   --elevated: #111827;
+  --foreground: #ffffff;
+  --foreground-muted: #9ca3af;
+  --border-soft: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='light'] {
+  --background: #eef4ff;
+  --surface: #ffffff;
+  --elevated: #dbe7ff;
+  --foreground: #081226;
+  --foreground-muted: #4b5b78;
+  --border-soft: rgba(8, 18, 38, 0.12);
 }
 
 * {
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-soft);
 }
 
 html {
@@ -18,10 +30,11 @@ html {
 
 body {
   background-color: var(--background);
-  color: #ffffff;
+  color: var(--foreground);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Custom Scrollbar */
