@@ -11,7 +11,7 @@ export default function CookiesPage() {
     <LegalPage
       eyebrow="Cookie and Data Usage"
       title="Cookie and Data Usage Notice"
-      summary="This notice explains the basic categories of cookies and related usage data that DrapixAI may use. You should update it later with your final analytics, consent, and tracking configuration."
+      summary="This notice explains the categories of cookies and related usage data DrapixAI uses to keep the site secure, maintain sessions, and improve reliability. We do not describe this page as a substitute for your own legal advice."
       sections={[
         {
           heading: 'Essential Cookies and Session Data',
@@ -24,7 +24,7 @@ export default function CookiesPage() {
           heading: 'Performance and Product Usage Data',
           body: [
             'We may collect limited technical and usage data such as browser type, device information, request timing, error logs, and feature usage in order to improve reliability, security, and product performance.',
-            'If analytics or third-party tracking tools are added later, this page should be updated to identify them clearly along with any applicable consent requirements.',
+            'DrapixAI is not positioned as an ad-tech product. If we add third-party analytics or marketing tracking, this notice should continue to identify those tools clearly together with any consent requirements that apply.',
           ],
         },
         {

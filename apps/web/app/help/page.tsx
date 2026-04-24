@@ -222,6 +222,12 @@ export default function HelpPage() {
                 <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200">
 {quickStartEmbed}
                 </pre>
+                <div className="mt-4">
+                  <Link href="/docs" className="inline-flex items-center gap-2 text-sm text-cyan-300 hover:text-cyan-200">
+                    Open full SDK installation docs
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
               </div>
             </section>
 

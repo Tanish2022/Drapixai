@@ -11,7 +11,7 @@ export default function RefundPolicyPage() {
     <LegalPage
       eyebrow="Refund and Cancellation"
       title="Refund and Cancellation Policy"
-      summary="This page outlines the basic cancellation and refund expectations for DrapixAI subscriptions. Replace it with your final commercial terms if you introduce annual contracts, onboarding fees, or custom enterprise agreements."
+      summary="This page outlines the baseline cancellation and refund expectations for DrapixAI trials, recurring plans, and sales-led accounts. Any signed enterprise order form or custom agreement will control if it says something different."
       sections={[
         {
           heading: 'Subscription Cancellation',
@@ -24,14 +24,14 @@ export default function RefundPolicyPage() {
           heading: 'Refunds',
           body: [
             'Unless required by law or explicitly stated in writing, fees already paid are generally non-refundable. Promotional credits, trial periods, and discounted plans may have separate rules.',
-            'DrapixAI may review refund requests on a case-by-case basis where there is a verified platform outage, duplicate billing, or another service issue directly caused by us.',
+            'DrapixAI may review refund requests on a case-by-case basis where there is verified duplicate billing, a platform outage that materially prevented use of the service, or another issue directly caused by us.',
           ],
         },
         {
           heading: 'Trial and Promotional Offers',
           body: [
             'Free trials, coupons, credits, and launch promotions may be limited by time, account, usage, geography, or eligibility. Abuse of promotions may lead to suspension or cancellation.',
-            'When a promotional period ends, the applicable standard plan pricing will apply unless a different written offer was accepted.',
+            'When a promotional period ends, the applicable plan or commercial offer in effect at that time will apply unless a different written arrangement was accepted.',
           ],
         },
       ]}

@@ -142,6 +142,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3 md:gap-6">
               <Link href="/pricing" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Pricing</Link>
+              <Link href="/docs" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Docs</Link>
               <Link href="/help" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Help</Link>
               {hasDashboardAccess ? (
                 <div className="relative" ref={profileMenuRef}>
@@ -197,6 +198,7 @@ export default function Home() {
           <div className="mt-3 flex items-center gap-4 text-sm text-gray-400 md:hidden">
             <Link href="/demo" className="hover:text-white transition-colors">Demo</Link>
             <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
+            <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             <Link href="/help" className="hover:text-white transition-colors">Help</Link>
             {hasDashboardAccess ? <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link> : null}
           </div>
