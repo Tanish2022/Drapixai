@@ -47,7 +47,7 @@ const accountHelp = [
 const garmentHelp = [
   {
     title: 'Garment upload is rejected',
-    body: 'Use one upper-body garment only, centered in frame, preferably on a clean background. Avoid folded garments, mannequins, multiple products in one image, or heavy blur.',
+    body: 'Use one isolated upper-body garment only, centered in frame, preferably on a clean background. We now reject model-worn product photos, visible body parts, multiple products in one image, and heavy blur.',
   },
   {
     title: 'Garment stays pending',
@@ -66,7 +66,7 @@ const garmentHelp = [
 const tryOnHelp = [
   {
     title: 'Try-on result looks weak or unrealistic',
-    body: 'Use a clean, front-facing person image with visible upper body and better lighting. Also confirm the garment image is isolated well and belongs to the same upper-body category.',
+    body: 'Use a clean, front-facing person image with visible upper body and better lighting. Also confirm the garment image is garment-only, color-accurate, and belongs to the same upper-body category. Photos of someone already wearing the garment usually degrade the result.',
   },
   {
     title: 'Try-on fails immediately',
@@ -206,7 +206,7 @@ export default function HelpPage() {
                   'Open Settings and save your store domain, sync source, and verification meta tag.',
                   'Add the verification meta tag to your storefront homepage, then run Store Verification.',
                   'Sync your upper-body catalog by feed URL or manual dashboard import.',
-                  'Upload garment images only after those product IDs exist in the synced catalog.',
+                  'Upload garment-only images only after those product IDs exist in the synced catalog.',
                   'Embed the browser SDK or call the REST API directly.',
                   'Run one real try-on on staging before pushing traffic to production.',
                 ].map((item) => (

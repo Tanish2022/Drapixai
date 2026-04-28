@@ -1,0 +1,21 @@
+{
+  "slug": "women_short_kurti_green",
+  "gender": "women",
+  "garment_type": "short-kurti",
+  "person_url": "https://images.pexels.com/photos/20797546/pexels-photo-20797546.jpeg?auto=compress&cs=tinysrgb&w=800",
+  "garment_url": "https://cdn.shopify.com/s/files/1/0341/4805/7228/files/29881_1_baebd071-17dd-4aac-a206-727dde9f02ef.jpg?v=1755939237",
+  "person_source": "https://www.pexels.com/photo/portrait-of-woman-in-top-20797546/",
+  "garment_source": "https://www.libas.in/products/green-printed-cotton-straight-short-kurti-29881",
+  "status": "succeeded",
+  "settings": {
+    "input_max_side": 640,
+    "enhanced_steps": 36,
+    "enhanced_guidance": 3.0
+  },
+  "preprocess": {
+    "mode": "strict",
+    "did_process": true,
+    "reason": "BACKGROUND_REMOVED"
+  },
+  "diagnostic_only": false
+}

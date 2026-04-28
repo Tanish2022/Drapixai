@@ -107,6 +107,10 @@ class Settings:
     garment_target_height: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_HEIGHT", "512"))
     garment_min_fg_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MIN_FG_RATIO", "0.08"))
     garment_max_fg_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MAX_FG_RATIO", "0.9"))
+    garment_max_aspect_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MAX_ASPECT_RATIO", "1.75"))
+    garment_isolation_check: bool = os.getenv("DRAPIXAI_GARMENT_ISOLATION_CHECK", "1") == "1"
+    garment_skin_ratio_threshold: float = float(os.getenv("DRAPIXAI_GARMENT_SKIN_RATIO_THRESHOLD", "0.04"))
+    garment_top_skin_ratio_threshold: float = float(os.getenv("DRAPIXAI_GARMENT_TOP_SKIN_RATIO_THRESHOLD", "0.12"))
     garment_blur_check: bool = os.getenv("DRAPIXAI_GARMENT_BLUR_CHECK", "1") == "1"
     garment_blur_threshold: float = float(os.getenv("DRAPIXAI_GARMENT_BLUR_THRESHOLD", "80.0"))
     garment_cache_dir: str = os.getenv("DRAPIXAI_GARMENT_CACHE_DIR", "drapixai_ai/garments")

@@ -1,0 +1,128 @@
+[
+  {
+    "slug": "men_tshirt_black",
+    "gender": "men",
+    "garment_type": "tshirt",
+    "person_url": "https://images.pexels.com/photos/20594701/pexels-photo-20594701.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "garment_url": "https://wrogn.com/cdn/shop/files/1_16e2557a-78f0-450b-a890-800eb8115440.webp?v=1766953286",
+    "person_source": "https://www.pexels.com/photo/portrait-of-man-in-shirt-20594701/",
+    "garment_source": "https://wrogn.com/products/solid-regular-fit-t-shirt-black-wvts9054mp",
+    "status": "succeeded",
+    "settings": {
+      "input_max_side": 640,
+      "enhanced_steps": 36,
+      "enhanced_guidance": 3.0
+    },
+    "preprocess": {
+      "mode": "strict",
+      "did_process": true,
+      "reason": "BACKGROUND_REMOVED"
+    },
+    "diagnostic_only": false
+  },
+  {
+    "slug": "men_shirt_blue_checks",
+    "gender": "men",
+    "garment_type": "shirt",
+    "person_url": "https://images.pexels.com/photos/20594701/pexels-photo-20594701.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "garment_url": "https://wrogn.com/cdn/shop/files/WTSH9691W.webp?v=1744624168",
+    "person_source": "https://www.pexels.com/photo/portrait-of-man-in-shirt-20594701/",
+    "garment_source": "https://wrogn.com/products/textured-checks-cotton-shirt-blue-wtsh9691w",
+    "status": "succeeded",
+    "settings": {
+      "input_max_side": 640,
+      "enhanced_steps": 36,
+      "enhanced_guidance": 3.0
+    },
+    "preprocess": {
+      "mode": "strict",
+      "did_process": true,
+      "reason": "BACKGROUND_REMOVED"
+    },
+    "diagnostic_only": false
+  },
+  {
+    "slug": "men_hoodie_blue",
+    "gender": "men",
+    "garment_type": "hoodie",
+    "person_url": "https://images.pexels.com/photos/20594701/pexels-photo-20594701.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "garment_url": "https://wrogn.com/cdn/shop/files/1_796ec63e-ecd6-419e-a646-459e304d8b42.jpg?v=1704543393",
+    "person_source": "https://www.pexels.com/photo/portrait-of-man-in-shirt-20594701/",
+    "garment_source": "https://wrogn.com/products/wrogn-enough-blue-hoodie",
+    "status": "succeeded",
+    "settings": {
+      "input_max_side": 640,
+      "enhanced_steps": 36,
+      "enhanced_guidance": 3.0
+    },
+    "preprocess": {
+      "mode": "strict",
+      "did_process": true,
+      "reason": "BACKGROUND_REMOVED"
+    },
+    "diagnostic_only": false
+  },
+  {
+    "slug": "women_short_kurti_pink",
+    "gender": "women",
+    "garment_type": "short-kurti",
+    "person_url": "https://images.pexels.com/photos/20797546/pexels-photo-20797546.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "garment_url": "https://cdn.shopify.com/s/files/1/0341/4805/7228/files/29387_2Main_da1289d6-b266-465b-88c6-c9e47d65763f.webp?v=1757862179",
+    "person_source": "https://www.pexels.com/photo/portrait-of-woman-in-top-20797546/",
+    "garment_source": "https://www.libas.in/products/pink-printed-cotton-anarkali-short-kurti-29387or",
+    "status": "succeeded",
+    "settings": {
+      "input_max_side": 640,
+      "enhanced_steps": 36,
+      "enhanced_guidance": 3.0
+    },
+    "preprocess": {
+      "mode": "strict",
+      "did_process": true,
+      "reason": "BACKGROUND_REMOVED"
+    },
+    "diagnostic_only": false
+  },
+  {
+    "slug": "women_short_kurti_green",
+    "gender": "women",
+    "garment_type": "short-kurti",
+    "person_url": "https://images.pexels.com/photos/20797546/pexels-photo-20797546.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "garment_url": "https://cdn.shopify.com/s/files/1/0341/4805/7228/files/29881_1_baebd071-17dd-4aac-a206-727dde9f02ef.jpg?v=1755939237",
+    "person_source": "https://www.pexels.com/photo/portrait-of-woman-in-top-20797546/",
+    "garment_source": "https://www.libas.in/products/green-printed-cotton-straight-short-kurti-29881",
+    "status": "succeeded",
+    "settings": {
+      "input_max_side": 640,
+      "enhanced_steps": 36,
+      "enhanced_guidance": 3.0
+    },
+    "preprocess": {
+      "mode": "strict",
+      "did_process": true,
+      "reason": "BACKGROUND_REMOVED"
+    },
+    "diagnostic_only": false
+  },
+  {
+    "slug": "women_long_kurta_black",
+    "gender": "women",
+    "garment_type": "kurta",
+    "person_url": "https://images.pexels.com/photos/20797546/pexels-photo-20797546.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "garment_url": "https://cdn.shopify.com/s/files/1/0341/4805/7228/files/black-solid-chanderi-silk-kurta-libas-1.jpg?v=1738916019",
+    "person_source": "https://www.pexels.com/photo/portrait-of-woman-in-top-20797546/",
+    "garment_source": "https://www.libas.in/products/black-solid-chanderi-silk-kurta-22143o-libas",
+    "status": "succeeded",
+    "settings": {
+      "input_max_side": 640,
+      "enhanced_steps": 36,
+      "enhanced_guidance": 3.0
+    },
+    "preprocess": {
+      "mode": "strict",
+      "did_process": true,
+      "reason": "BACKGROUND_REMOVED"
+    },
+    "diagnostic_only": false
+  }
+]

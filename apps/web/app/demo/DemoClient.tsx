@@ -66,7 +66,7 @@ export default function DemoClient() {
           setStatus('Demo limit reached for this IP. Try again later or create a trial account.');
           return;
         }
-        setStatus(data?.error || 'Demo try-on failed.');
+        setStatus(data?.message || data?.error || 'Demo try-on failed.');
         return;
       }
 
@@ -171,7 +171,7 @@ export default function DemoClient() {
 
             <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4 mb-6 text-sm text-gray-300">
               <p className="font-semibold text-white mb-2">Recommended test images</p>
-              <p>Use a clear front-facing person photo and a single-garment image on a plain background. The public demo now runs the enhanced quality path so prospects see a stronger first impression, not a reduced preview mode.</p>
+              <p>Use a clear front-facing person photo and a garment-only product image on a plain background. Do not upload a photo of someone already wearing the garment. The public demo now rejects those inputs because they reduce realism.</p>
             </div>
 
             <div className="space-y-4">

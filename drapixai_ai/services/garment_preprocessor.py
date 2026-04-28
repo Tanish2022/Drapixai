@@ -61,6 +61,57 @@ def _foreground_ratio(image: Image.Image) -> float:
     return float(fg)
 
 
+def _foreground_bbox(image: Image.Image) -> Tuple[int, int, int, int] | None:
+    rgba = image.convert("RGBA")
+    alpha = np.asarray(rgba.getchannel("A"))
+    ys, xs = np.where(alpha > settings.garment_alpha_threshold)
+    if len(xs) == 0 or len(ys) == 0:
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+
+
+def _skin_mask(rgb: np.ndarray) -> np.ndarray:
+    r = rgb[:, :, 0].astype(np.int16)
+    g = rgb[:, :, 1].astype(np.int16)
+    b = rgb[:, :, 2].astype(np.int16)
+    max_rgb = np.maximum(np.maximum(r, g), b)
+    min_rgb = np.minimum(np.minimum(r, g), b)
+
+    return (
+        (r > 95)
+        & (g > 40)
+        & (b > 20)
+        & ((max_rgb - min_rgb) > 15)
+        & (np.abs(r - g) > 15)
+        & (r > g)
+        & (r > b)
+    )
+
+
+def _skin_ratios(image: Image.Image) -> Tuple[float, float]:
+    rgba = image.convert("RGBA")
+    rgb = np.asarray(rgba.convert("RGB"))
+    alpha = np.asarray(rgba.getchannel("A")) > settings.garment_alpha_threshold
+    if not alpha.any():
+        return 0.0, 0.0
+
+    skin = _skin_mask(rgb) & alpha
+    total_skin_ratio = float(skin.sum() / alpha.sum())
+
+    bbox = _foreground_bbox(rgba)
+    if bbox is None:
+        return total_skin_ratio, 0.0
+    _x0, y0, _x1, y1 = bbox
+    crop_h = max(1, y1 - y0 + 1)
+    top_end = min(rgba.height, y0 + max(1, int(crop_h * 0.35)))
+    top_alpha = alpha[y0:top_end, :]
+    if not top_alpha.any():
+        return total_skin_ratio, 0.0
+    top_skin = skin[y0:top_end, :]
+    top_skin_ratio = float(top_skin.sum() / top_alpha.sum())
+    return total_skin_ratio, top_skin_ratio
+
+
 def _blur_score(image: Image.Image) -> float:
     if not settings.garment_blur_check:
         return float("inf")
@@ -84,6 +135,29 @@ def _validate_foreground_ratio(fg_ratio: float) -> None:
         raise GarmentValidationError("SUBJECT_TOO_SMALL")
     if fg_ratio > settings.garment_max_fg_ratio:
         raise GarmentValidationError("NO_BACKGROUND_REMOVAL")
+
+
+def _validate_isolated_garment(image: Image.Image) -> None:
+    if not settings.garment_isolation_check:
+        return
+
+    bbox = _foreground_bbox(image)
+    if bbox is None:
+        raise GarmentValidationError("SUBJECT_TOO_SMALL")
+
+    x0, y0, x1, y1 = bbox
+    width = max(1, x1 - x0 + 1)
+    height = max(1, y1 - y0 + 1)
+    aspect_ratio = height / width
+    if aspect_ratio > settings.garment_max_aspect_ratio:
+        raise GarmentValidationError("GARMENT_TOO_LONG")
+
+    skin_ratio, top_skin_ratio = _skin_ratios(image)
+    if (
+        skin_ratio > settings.garment_skin_ratio_threshold
+        or top_skin_ratio > settings.garment_top_skin_ratio_threshold
+    ):
+        raise GarmentValidationError("MODEL_WORN_GARMENT")
 
 
 def _auto_crop_and_pad(image: Image.Image) -> Image.Image:
@@ -131,12 +205,14 @@ def preprocess_garment(image_bytes: bytes, bypass_validation: bool = False) -> G
     if _is_clean_transparent(image):
         if not bypass_validation:
             _validate_foreground_ratio(_foreground_ratio(image))
+            _validate_isolated_garment(image)
         resized = _resize_with_padding(image, settings.garment_target_size())
         return GarmentPreprocessResult(image=resized, did_process=False, reason="ALREADY_TRANSPARENT")
 
     processed = _remove_background(image)
     if not bypass_validation:
         _validate_foreground_ratio(_foreground_ratio(processed))
+        _validate_isolated_garment(processed)
     processed = _auto_crop_and_pad(processed)
     processed = _resize_with_padding(processed, settings.garment_target_size())
 

@@ -92,6 +92,9 @@ const parseCatalogCsv = (csvText: string): GarmentSyncRow[] => {
   }).filter((item) => item.productId);
 };
 
+const getApiErrorMessage = (payload: { message?: string; error?: string } | null | undefined, fallback: string) =>
+  payload?.message || payload?.error || fallback;
+
 export default function Dashboard() {
   const themePreference = useThemePreference();
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -358,15 +361,21 @@ export default function Dashboard() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setBulkGarmentStatus(data?.error || 'Bulk upload failed.');
-      setToast(data?.error || 'Bulk upload failed.');
+      const message = getApiErrorMessage(data, 'Bulk upload failed.');
+      setBulkGarmentStatus(message);
+      setToast(message);
       return;
     }
 
     const items = Array.isArray(data?.items) ? data.items : [];
     const successCount = items.filter((item: { cacheKey?: string }) => Boolean(item.cacheKey)).length;
     const failedCount = items.length - successCount;
-    setBulkGarmentStatus(`Uploaded ${successCount} garments.${failedCount ? ` ${failedCount} files need matching synced product IDs.` : ''}`);
+    const firstFailure = items.find((item: { message?: string; error?: string }) => item.message || item.error);
+    setBulkGarmentStatus(
+      failedCount && firstFailure
+        ? `Uploaded ${successCount} garments. ${failedCount} file(s) failed. ${getApiErrorMessage(firstFailure, 'Review the rejected uploads and use isolated garment-only images.')}`
+        : `Uploaded ${successCount} garments.${failedCount ? ` ${failedCount} files need valid synced IDs or cleaner garment assets.` : ''}`
+    );
     setToast(`Bulk upload complete. ${successCount} garments are now try-on ready.`);
     setBulkGarmentFiles([]);
     await refreshGarments(apiKey);
@@ -697,6 +706,31 @@ export default function Dashboard() {
           <p className={`mb-4 ${mutedTextClass}`}>
             Upper-body only. First sync your catalog product IDs, then upload garment files that match those IDs exactly.
           </p>
+          <div className={`mb-6 ${panelClass}`}>
+            <p className={`text-sm font-medium mb-3 ${strongTextClass}`}>Launch garment standard</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className={`mb-2 font-medium ${strongTextClass}`}>Use these</p>
+                <ul className={`space-y-2 ${mutedTextClass}`}>
+                  <li>Garment-only product image</li>
+                  <li>Plain, white, or transparent background</li>
+                  <li>One centered upper-body item per file</li>
+                  <li>Sharp image, at least 512x512</li>
+                  <li>Front-facing shirts, tees, tops, blouses, short kurtis</li>
+                </ul>
+              </div>
+              <div>
+                <p className={`mb-2 font-medium ${strongTextClass}`}>Do not upload these</p>
+                <ul className={`space-y-2 ${mutedTextClass}`}>
+                  <li>Photos with a person wearing the garment</li>
+                  <li>Visible face, arms, hands, legs, or torso in the garment file</li>
+                  <li>Long full-body garments cropped with pants or feet visible</li>
+                  <li>Busy lifestyle shots, mannequins, or multi-product layouts</li>
+                  <li>Dark, blurry, or heavily shadowed catalog images</li>
+                </ul>
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
             <div className={panelClass}>
               <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>1. CSV catalog sync</p>
@@ -739,7 +773,7 @@ export default function Dashboard() {
             <div className={panelClass}>
               <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>2. Bulk garment upload</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Upload multiple upper-body garment files at once. Each filename must match a synced product ID, for example <span className="font-mono">shirt-001.png</span>.
+                Upload multiple upper-body garment files at once. Each filename must match a synced product ID, for example <span className="font-mono">shirt-001.png</span>. We now reject model-worn uploads and overlong upper-body assets because they lower try-on realism.
               </p>
               <input
                 type="file"
@@ -764,7 +798,7 @@ export default function Dashboard() {
           </div>
           <div className={`mb-6 ${panelClass}`}>
             <p className={`text-sm mb-3 ${mutedTextClass}`}>
-              3. Single garment upload. Use this when you want to update one synced upper-body product manually.
+              3. Single garment upload. Use this when you want to update one synced upper-body product manually. The best source is a garment-only product asset, not a lifestyle image.
             </p>
             <div className="flex flex-col md:flex-row gap-3">
               <input
@@ -797,8 +831,9 @@ export default function Dashboard() {
                   });
                   const data = await res.json().catch(() => ({}));
                   if (!res.ok) {
-                    setGarmentStatus(data?.error || 'Upload failed.');
-                    setToast(data?.error || 'Upload failed.');
+                    const message = getApiErrorMessage(data, 'Upload failed.');
+                    setGarmentStatus(message);
+                    setToast(message);
                     return;
                   }
                   setGarmentStatus('Uploaded and cached.');
@@ -905,8 +940,9 @@ export default function Dashboard() {
                           });
                           if (!res.ok) {
                             const data = await res.json().catch(() => ({}));
-                            setGarmentStatus(data?.error || 'Upload failed.');
-                            setToast(data?.error || 'Upload failed.');
+                            const message = getApiErrorMessage(data, 'Upload failed.');
+                            setGarmentStatus(message);
+                            setToast(message);
                             return;
                           }
                           setGarmentStatus(`Uploaded ${g.garmentId}.`);

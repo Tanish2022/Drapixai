@@ -19,6 +19,35 @@ const upload = multer({
 
 if (!fs.existsSync('uploads')) fs.mkdirSync('uploads', { recursive: true });
 
+const parseJsonSafe = <T>(value: string): T | null => {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
+
+const getGarmentValidationCode = (raw: string) => {
+  const parsed = parseJsonSafe<{ detail?: string; error?: string }>(raw);
+  const detail = parsed?.detail || parsed?.error || raw;
+  return detail.startsWith('GARMENT_INVALID:') ? detail.replace('GARMENT_INVALID:', '') : detail;
+};
+
+const getGarmentValidationMessage = (code: string) => {
+  switch (code) {
+    case 'MODEL_WORN_GARMENT':
+      return 'Use a garment-only product image. Photos with a person wearing the garment are rejected in the public demo.';
+    case 'GARMENT_TOO_LONG':
+      return 'This garment is outside the current upper-body demo scope. Use a shorter upper-body garment.';
+    case 'LOW_RESOLUTION':
+      return 'Use a higher-resolution garment image for the demo.';
+    case 'IMAGE_BLURRY':
+      return 'The garment image is too blurry. Use a sharper product photo.';
+    default:
+      return 'Garment preprocessing failed. Use one isolated upper-body garment on a plain background.';
+  }
+};
+
 const trackWebsiteEvent = async (
   event: string,
   path: string | null,
@@ -100,7 +129,11 @@ router.post(
 
       if (!preprocessResponse.ok) {
         const errorText = await preprocessResponse.text();
-        return res.status(preprocessResponse.status).json({ error: errorText || 'GARMENT_PREPROCESS_FAILED' });
+        const error = getGarmentValidationCode(errorText || 'GARMENT_PREPROCESS_FAILED');
+        return res.status(preprocessResponse.status).json({
+          error,
+          message: getGarmentValidationMessage(error),
+        });
       }
 
       const preprocessResult = await preprocessResponse.json() as { cache_key?: string };

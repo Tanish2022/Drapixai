@@ -1,0 +1,21 @@
+{
+  "slug": "women_short_kurti_pink",
+  "gender": "women",
+  "garment_type": "short-kurti",
+  "person_url": "https://images.pexels.com/photos/20797546/pexels-photo-20797546.jpeg?auto=compress&cs=tinysrgb&w=800",
+  "garment_url": "https://cdn.shopify.com/s/files/1/0341/4805/7228/files/29387_2Main_da1289d6-b266-465b-88c6-c9e47d65763f.webp?v=1757862179",
+  "person_source": "https://www.pexels.com/photo/portrait-of-woman-in-top-20797546/",
+  "garment_source": "https://www.libas.in/products/pink-printed-cotton-anarkali-short-kurti-29387or",
+  "status": "succeeded",
+  "settings": {
+    "input_max_side": 640,
+    "enhanced_steps": 36,
+    "enhanced_guidance": 3.0
+  },
+  "preprocess": {
+    "mode": "strict",
+    "did_process": true,
+    "reason": "BACKGROUND_REMOVED"
+  },
+  "diagnostic_only": false
+}

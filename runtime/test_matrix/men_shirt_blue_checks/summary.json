@@ -1,0 +1,21 @@
+{
+  "slug": "men_shirt_blue_checks",
+  "gender": "men",
+  "garment_type": "shirt",
+  "person_url": "https://images.pexels.com/photos/20594701/pexels-photo-20594701.jpeg?auto=compress&cs=tinysrgb&w=800",
+  "garment_url": "https://wrogn.com/cdn/shop/files/WTSH9691W.webp?v=1744624168",
+  "person_source": "https://www.pexels.com/photo/portrait-of-man-in-shirt-20594701/",
+  "garment_source": "https://wrogn.com/products/textured-checks-cotton-shirt-blue-wtsh9691w",
+  "status": "succeeded",
+  "settings": {
+    "input_max_side": 640,
+    "enhanced_steps": 36,
+    "enhanced_guidance": 3.0
+  },
+  "preprocess": {
+    "mode": "strict",
+    "did_process": true,
+    "reason": "BACKGROUND_REMOVED"
+  },
+  "diagnostic_only": false
+}

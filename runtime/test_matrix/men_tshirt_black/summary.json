@@ -1,0 +1,21 @@
+{
+  "slug": "men_tshirt_black",
+  "gender": "men",
+  "garment_type": "tshirt",
+  "person_url": "https://images.pexels.com/photos/20594701/pexels-photo-20594701.jpeg?auto=compress&cs=tinysrgb&w=800",
+  "garment_url": "https://wrogn.com/cdn/shop/files/1_16e2557a-78f0-450b-a890-800eb8115440.webp?v=1766953286",
+  "person_source": "https://www.pexels.com/photo/portrait-of-man-in-shirt-20594701/",
+  "garment_source": "https://wrogn.com/products/solid-regular-fit-t-shirt-black-wvts9054mp",
+  "status": "succeeded",
+  "settings": {
+    "input_max_side": 640,
+    "enhanced_steps": 36,
+    "enhanced_guidance": 3.0
+  },
+  "preprocess": {
+    "mode": "strict",
+    "did_process": true,
+    "reason": "BACKGROUND_REMOVED"
+  },
+  "diagnostic_only": false
+}

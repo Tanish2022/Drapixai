@@ -34,6 +34,39 @@ type GarmentPreprocessResponse = {
   reason: string;
 };
 
+const parseJsonSafe = <T>(value: string): T | null => {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
+
+const getGarmentValidationCode = (raw: string) => {
+  const parsed = parseJsonSafe<{ detail?: string; error?: string }>(raw);
+  const detail = parsed?.detail || parsed?.error || raw;
+  return detail.startsWith('GARMENT_INVALID:') ? detail.replace('GARMENT_INVALID:', '') : detail;
+};
+
+const getGarmentValidationMessage = (code: string) => {
+  switch (code) {
+    case 'LOW_RESOLUTION':
+      return 'Use a higher-resolution garment image. Uploads should be at least 512x512.';
+    case 'IMAGE_BLURRY':
+      return 'The garment image is too blurry. Upload a sharper source image.';
+    case 'SUBJECT_TOO_SMALL':
+      return 'The garment is too small in frame. Upload one centered garment that fills more of the image.';
+    case 'NO_BACKGROUND_REMOVAL':
+      return 'The background is too dominant. Use a plain background or a transparent garment image.';
+    case 'MODEL_WORN_GARMENT':
+      return 'Upload a garment-only image. Photos with a person wearing the garment are rejected because they reduce try-on realism.';
+    case 'GARMENT_TOO_LONG':
+      return 'This garment is too long for the current upper-body launch scope. Use tops, shirts, blouses, or short kurtis with tighter framing.';
+    default:
+      return 'Garment upload failed validation. Use one isolated upper-body garment on a clean background.';
+  }
+};
+
 // Initialize Redis client
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
 redis.connect().catch((error) => {
@@ -671,7 +704,11 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
-      return res.status(aiResponse.status).json({ error: errText || 'AI service error' });
+      const error = getGarmentValidationCode(errText || 'AI_SERVICE_ERROR');
+      return res.status(aiResponse.status).json({
+        error,
+        message: getGarmentValidationMessage(error),
+      });
     }
 
     const result = await aiResponse.json() as GarmentPreprocessResponse;
@@ -744,7 +781,12 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
       });
       if (!aiResponse.ok) {
         const errText = await aiResponse.text();
-        results.push({ garmentId, error: errText || 'AI service error' });
+        const error = getGarmentValidationCode(errText || 'AI_SERVICE_ERROR');
+        results.push({
+          garmentId,
+          error,
+          message: getGarmentValidationMessage(error),
+        });
         continue;
       }
       const result = await aiResponse.json() as GarmentPreprocessResponse;

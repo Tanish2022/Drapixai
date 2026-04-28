@@ -8,6 +8,13 @@ Form fields:
 - `cloth_image` (required)
 - `admin_bypass` (optional)
 
+Garment upload standard:
+- one isolated upper-body garment only
+- plain, white, or transparent background
+- no visible face, arms, hands, legs, or torso
+- no model-worn lifestyle photos
+- minimum recommended size: 512x512
+
 Headers:
 - `Authorization: Bearer <api_key>`
 
@@ -20,6 +27,14 @@ Response:
   "reason": "BACKGROUND_REMOVED"
 }
 ```
+
+Common validation errors:
+- `MODEL_WORN_GARMENT`
+- `GARMENT_TOO_LONG`
+- `LOW_RESOLUTION`
+- `IMAGE_BLURRY`
+- `SUBJECT_TOO_SMALL`
+- `NO_BACKGROUND_REMOVAL`
 
 ## 2. Get Garment Info
 **GET** `/sdk/garments/:garmentId`

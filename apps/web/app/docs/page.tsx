@@ -55,7 +55,7 @@ const installChecks = [
   'Open Settings and save the storefront domain that will host the try-on button.',
   'Add the verification meta tag to the storefront homepage and verify the store before production traffic.',
   'Sync the upper-body catalog before uploading garment images.',
-  'Upload garment files only after product IDs exist in the synced catalog.',
+  'Upload garment-only files only after product IDs exist in the synced catalog.',
   'Keep one stable product ID across catalog sync, garment upload, and storefront rendering.',
 ];
 
@@ -74,7 +74,7 @@ const troubleshooting = [
   },
   {
     title: 'Result quality is weak',
-    body: 'Use a front-facing person image with visible upper body, good lighting, and minimal cropping. The garment image should be a clean upper-body item on a simple background.',
+    body: 'Use a front-facing person image with visible upper body, good lighting, and minimal cropping. The garment image should be a garment-only upper-body item on a simple background, not a photo of a person already wearing it.',
   },
 ];
 
@@ -132,7 +132,7 @@ export default function DocsPage() {
                 <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
                   <Upload className="mb-3 h-6 w-6 text-cyan-400" />
                   <p className="font-semibold text-white">Catalog before garments</p>
-                  <p className="mt-2 text-sm leading-7 text-gray-300">Sync upper-body product IDs first, then upload garments whose filenames or IDs match exactly.</p>
+                  <p className="mt-2 text-sm leading-7 text-gray-300">Sync upper-body product IDs first, then upload garment-only assets whose filenames or IDs match exactly.</p>
                 </div>
                 <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
                   <PlugZap className="mb-3 h-6 w-6 text-cyan-400" />
@@ -158,7 +158,7 @@ export default function DocsPage() {
               <div className="mt-8 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
                 <p className="font-semibold text-amber-200">Important scope note</p>
                 <p className="mt-2 leading-7 text-gray-200">
-                  The current public product is upper-body only. Do not wire the SDK onto bottoms or full-body products until the product scope changes and the docs are updated to match.
+                  The current public product is upper-body only. Do not wire the SDK onto bottoms or full-body products, and do not upload model-worn catalog photos as garments. The launch path expects isolated garment assets.
                 </p>
               </div>
             </section>

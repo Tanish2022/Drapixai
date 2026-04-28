@@ -1,0 +1,21 @@
+{
+  "slug": "women_long_kurta_black",
+  "gender": "women",
+  "garment_type": "kurta",
+  "person_url": "https://images.pexels.com/photos/20797546/pexels-photo-20797546.jpeg?auto=compress&cs=tinysrgb&w=800",
+  "garment_url": "https://cdn.shopify.com/s/files/1/0341/4805/7228/files/black-solid-chanderi-silk-kurta-libas-1.jpg?v=1738916019",
+  "person_source": "https://www.pexels.com/photo/portrait-of-woman-in-top-20797546/",
+  "garment_source": "https://www.libas.in/products/black-solid-chanderi-silk-kurta-22143o-libas",
+  "status": "succeeded",
+  "settings": {
+    "input_max_side": 640,
+    "enhanced_steps": 36,
+    "enhanced_guidance": 3.0
+  },
+  "preprocess": {
+    "mode": "strict",
+    "did_process": true,
+    "reason": "BACKGROUND_REMOVED"
+  },
+  "diagnostic_only": false
+}
