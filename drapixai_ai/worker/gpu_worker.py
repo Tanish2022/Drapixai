@@ -25,6 +25,10 @@ class WindowsSimpleWorker(SimpleWorker):
     death_penalty_class = TimerDeathPenalty
 
 
+class CUDASimpleWorker(SimpleWorker):
+    death_penalty_class = TimerDeathPenalty
+
+
 def _get_pipeline() -> DrapixAITryOnPipeline:
     global _PIPELINE
     if _PIPELINE is None:
@@ -96,7 +100,8 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def main() -> None:
-    if settings.device == "cuda" and torch.cuda.is_available():
+    use_cuda = settings.device == "cuda" and torch.cuda.is_available()
+    if use_cuda:
         torch.cuda.set_device(settings.cuda_device_index)
 
     if settings.preload_model_on_start:
@@ -104,7 +109,11 @@ def main() -> None:
         _get_pipeline()
 
     queue = get_queue()
-    worker_cls = WindowsSimpleWorker if os.name == "nt" else Worker
+    if use_cuda:
+        # CUDA inference cannot be re-initialized safely in RQ's forked worker subprocesses.
+        worker_cls = CUDASimpleWorker
+    else:
+        worker_cls = WindowsSimpleWorker if os.name == "nt" else Worker
     worker = worker_cls([queue], connection=get_redis())
     worker.work(with_scheduler=False)
 
