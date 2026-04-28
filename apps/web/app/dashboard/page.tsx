@@ -420,7 +420,7 @@ export default function Dashboard() {
         {usage.planType === 'trial' ? (
           <div className="p-4 mb-8 border border-cyan-500/30 bg-cyan-500/10 rounded-xl">
             <p className={`text-sm ${themePreference === 'light' ? 'text-cyan-900' : 'text-cyan-200'}`}>
-              Trial active: {usage.trialDaysLeft} day(s) left. You have {usage.quotaRemaining} try-ons remaining.
+              Trial active: {usage.trialDaysLeft} day(s) left. You have {usage.quotaRemaining} try-ons remaining to validate product quality, onboarding, and storefront flow before scaling usage.
             </p>
             {usage.selectedPlanName ? (
               <p className={`text-xs mt-2 ${themePreference === 'light' ? 'text-cyan-800/80' : 'text-cyan-100/80'}`}>
@@ -480,12 +480,17 @@ export default function Dashboard() {
               <CheckCircle2 className="w-6 h-6 text-cyan-400" />
               <h2 className="text-xl font-bold">Onboarding Checklist</h2>
             </div>
+            <p className={`text-sm mb-4 ${mutedTextClass}`}>
+              Treat this as the launch sequence for a brand: verify the store, sync product IDs, upload matching garments, then test the widget internally before sending live traffic.
+            </p>
             <div className="space-y-3">
               {[
                 { label: 'Account session active', done: Boolean(apiKey) },
-                { label: 'Store domain connected', done: Boolean(usage.storeConnected) },
+                { label: 'Store domain saved', done: Boolean(usage.domain && usage.domain !== '*') },
+                { label: 'Store verified', done: Boolean(usage.storeVerified) },
+                { label: 'Catalog synced', done: Boolean(usage.catalogLastSyncedAt || usage.catalogLastSyncStatus) },
                 { label: 'At least one garment uploaded', done: garments.length > 0 },
-                { label: 'Ready to run live try-ons', done: Boolean(apiKey) && Boolean(usage.storeConnected) && garments.length > 0 },
+                { label: 'Ready to run live try-ons', done: Boolean(apiKey) && Boolean(usage.storeVerified) && garments.length > 0 },
               ].map((item) => (
                 <div key={item.label} className={`flex items-center gap-3 px-4 py-3 ${panelClass}`}>
                   <CheckCircle2 className={`w-5 h-5 ${item.done ? 'text-emerald-400' : 'text-gray-600'}`} />
@@ -515,6 +520,10 @@ export default function Dashboard() {
               <Link href="/settings" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <Store className="w-4 h-4" />
                 Manage Store Settings
+              </Link>
+              <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
+                <ExternalLink className="w-4 h-4" />
+                Integration Guide
               </Link>
               <Link href="/subscription" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <ExternalLink className="w-4 h-4" />
@@ -599,7 +608,7 @@ export default function Dashboard() {
 
         <div className={`${cardClass} mb-8`}>
           <h2 className="text-xl font-bold mb-4">Authorized Domain</h2>
-          <p className={`mb-4 ${mutedTextClass}`}>Each subscriber can use the SDK on a single domain. Set it once.</p>
+          <p className={`mb-4 ${mutedTextClass}`}>Each subscriber can use the SDK on a single domain. Save it here, then finish verification in settings before live rollout.</p>
           <div className="flex gap-4">
             <input
               type="text"
@@ -914,15 +923,21 @@ export default function Dashboard() {
         </div>
 
         <div id="plugin-demo" className={`${cardClass} mb-8`}>
-          <h2 className="text-xl font-bold mb-4">Plugin Demo</h2>
-          <p className={`mb-4 ${mutedTextClass}`}>Preview the customer-facing plugin experience.</p>
+          <h2 className="text-xl font-bold mb-4">Try-On Modal Preview</h2>
+          <p className={`mb-4 ${mutedTextClass}`}>Preview the customer-facing try-on experience before you install it on a live storefront.</p>
           <div className={panelClass}>
             <div id="drapixai-dashboard-demo"></div>
           </div>
         </div>
 
         <div className={cardClass}>
-          <h2 className="text-xl font-bold mb-4">Quick Start</h2>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <h2 className="text-xl font-bold">Storefront Install Snippet</h2>
+            <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
+              <ExternalLink className="w-4 h-4" />
+              Open Full Integration Guide
+            </Link>
+          </div>
           <p className={`mb-4 ${mutedTextClass}`}>
             Upper-body garments only. You can embed the launcher on a single product page or auto-attach it across eligible product cards in your storefront.
           </p>

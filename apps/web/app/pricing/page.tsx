@@ -78,9 +78,9 @@ export default function PricingPage() {
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="max-w-4xl mb-14">
           <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Pricing</p>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Simple plans, stronger value as usage scales.</h1>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Start with a low-risk trial. Scale only after the workflow proves itself.</h1>
           <p className="text-lg text-gray-300 leading-8 max-w-3xl">
-            Every public plan starts with the same free evaluation path: activate your account, use up to {TRIAL_TRYONS} trial try-ons, validate quality on your own products, then continue on the plan that matches your monthly volume.
+            Every public plan starts with the same evaluation path: activate your account, use up to {TRIAL_TRYONS} trial try-ons, validate output quality on your own products, then move into paid volume only when your team is comfortable with the rollout.
           </p>
         </div>
 
@@ -92,7 +92,7 @@ export default function PricingPage() {
                 <p className="font-semibold text-emerald-200">Free Trial Included On Every Plan</p>
               </div>
               <p className="text-gray-100 leading-7">
-                Use the same trial regardless of plan choice, evaluate output quality with your own catalog, and upgrade only once the workflow is proven for your team.
+                Use the same trial regardless of plan choice, evaluate output quality with your own catalog, and upgrade only once the workflow is proven for your team. Billing questions, trial extensions, and launch support can all be handled through the account center or support.
               </p>
             </div>
             <Link
@@ -219,14 +219,14 @@ export default function PricingPage() {
           </div>
 
           <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
-            <h3 className="text-xl font-semibold mb-3">Built around upper-body rollout</h3>
+            <h3 className="text-xl font-semibold mb-3">Commercial terms stay simple</h3>
             <p className="text-gray-300 leading-7">
-              Public plans are intentionally focused on upper-body try-on so quality, speed, and rollout discipline stay cleaner from day one.
+              Public plans are monthly, upper-body focused, and designed for controlled rollout. Cancellation, refunds, and trial rules are documented clearly so brands know what to expect before launch.
             </p>
           </div>
 
           <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
-            <h3 className="text-xl font-semibold mb-3">Upgrade when volume is real</h3>
+            <h3 className="text-xl font-semibold mb-3">Upgrade when rollout is real</h3>
             <p className="text-gray-300 leading-7">
               Start smaller, prove demand, then move into higher monthly volume once DrapixAI becomes part of your live conversion workflow.
             </p>

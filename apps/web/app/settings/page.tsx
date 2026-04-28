@@ -740,7 +740,7 @@ export default function SettingsPage() {
           <div className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
               <Store className={`w-6 h-6 ${usage.storeConnected ? 'text-emerald-400' : 'text-amber-300'}`} />
-              <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Store Connection and Access</h2>
+              <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Store Setup and Access</h2>
             </div>
             <div className={panelClass}>
               <p className={`text-sm mb-2 ${mutedTextClass}`}>Store connection</p>
@@ -788,16 +788,24 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <p className={`text-sm ${mutedTextClass}`}>
-                  Manual catalog import is already available in the dashboard. Platform connectors will sit here once we wire direct store apps.
+                  Use manual dashboard import today if you want the fastest launch path. Feed URL import also works now. Native Shopify and WooCommerce apps are planned, but they are not the current public onboarding path.
                 </p>
               )}
+              <div className={`${themePreference === 'light' ? 'border-sky-100 bg-sky-50/70' : 'border-cyan-400/20 bg-cyan-400/10'} rounded-2xl border p-4`}>
+                <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>Recommended onboarding order</p>
+                <ol className={`space-y-2 text-sm list-decimal pl-5 ${mutedTextClass}`}>
+                  <li>Save the storefront domain and choose how your catalog will be synced.</li>
+                  <li>Add the verification meta tag to your homepage and verify the domain.</li>
+                  <li>Sync upper-body product IDs, then upload garments that match those IDs exactly.</li>
+                </ol>
+              </div>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={handleSaveStoreConnection}
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
                 >
-                  Save Store Settings
+                  Save Store Setup
                 </button>
                 <button
                   type="button"
@@ -820,7 +828,7 @@ export default function SettingsPage() {
             <div className={`${panelClass} mt-4`}>
               <p className={`text-sm mb-2 ${mutedTextClass}`}>Verification meta tag</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Add this meta tag to your storefront homepage so DrapixAI can verify that you control the domain before syncing product data.
+                Add this meta tag to your storefront homepage so DrapixAI can verify that you control the domain before syncing product data or exposing the SDK publicly.
               </p>
               <p className={`font-mono text-xs break-all ${strongTextClass}`}>{verificationMetaTag || 'Save store settings to generate the verification tag.'}</p>
               <div className="flex flex-wrap gap-3 mt-3">
@@ -872,6 +880,9 @@ export default function SettingsPage() {
                 <Store className="w-4 h-4" />
                 Open Dashboard Uploads
               </Link>
+              <Link href="/docs" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                Integration Guide
+              </Link>
             </div>
           </div>
 
@@ -887,6 +898,11 @@ export default function SettingsPage() {
                 <p className={`text-sm ${mutedTextClass}`}>Selected plan after trial: {usage.selectedPlanName}</p>
               ) : null}
               <p className={`text-sm ${mutedTextClass}`}>Quota remaining this period: {usage.quotaRemaining}</p>
+            </div>
+            <div className={`${panelClass} mt-4 space-y-2`}>
+              <p className={`text-sm ${mutedTextClass}`}>Launch-safe commercial posture</p>
+              <p className={`text-sm ${strongTextClass}`}>Use the trial or current plan to validate real products first, then move into higher volume only after your onboarding flow is stable.</p>
+              <p className={`text-sm ${mutedTextClass}`}>If you need guided rollout help, billing clarification, or custom volume, use pricing or contact sales before switching public traffic on.</p>
             </div>
             <div className="flex flex-wrap gap-3 mt-4">
               <Link href="/subscription" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">

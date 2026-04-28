@@ -3,7 +3,7 @@ import LegalPage from '@/app/components/LegalPage';
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: 'Basic terms governing the use of DrapixAI.',
+  description: 'Terms governing access to and use of DrapixAI.',
 };
 
 export default function TermsPage() {
@@ -11,7 +11,7 @@ export default function TermsPage() {
     <LegalPage
       eyebrow="Terms of Service"
       title="Terms of Service"
-      summary="These terms govern access to and use of DrapixAI. They are a basic launch-ready starting point and should be reviewed and refined before public commercial deployment."
+      summary="These terms govern access to and use of DrapixAI, including account access, content handling, billing expectations, and service limitations."
       sections={[
         {
           heading: 'Use of the Service',
@@ -38,6 +38,7 @@ export default function TermsPage() {
           heading: 'Billing and Service Changes',
           body: [
             'Paid plans, limits, and billing terms are described on the pricing page or in a separate commercial agreement. Charges, feature availability, and usage limits may change with notice as permitted by law or contract.',
+            'Recurring subscriptions should be cancelled before the next billing cycle to avoid future charges. Unless required by law or stated in a written agreement, fees already paid are generally non-refundable, though verified duplicate billing or platform-caused service failures may be reviewed case by case.',
             'Trial access, promotional offers, and discounts may be limited, revoked for misuse, or modified when the promotional period ends.',
           ],
         },

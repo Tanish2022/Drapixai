@@ -108,7 +108,7 @@ export default function SubscriptionPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
           <div>
             <p className="text-sm uppercase tracking-[0.25em] text-cyan-400/80 mb-3">Subscription</p>
-            <h1 className="text-4xl font-bold">Manage your plan and rollout status</h1>
+            <h1 className="text-4xl font-bold">Manage rollout, usage, and commercial access</h1>
           </div>
           <div className="flex gap-3">
             <Link href="/dashboard" className="inline-flex items-center justify-center rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
@@ -188,21 +188,28 @@ export default function SubscriptionPage() {
             <h2 className="text-2xl font-semibold mb-4">Next Best Actions</h2>
             <div className="space-y-3 text-sm">
               <div className={panelClass}>
-                <p className={`font-medium mb-2 ${strongTextClass}`}>1. Connect your store domain</p>
-                <p className={mutedTextClass}>{usage.storeConnected ? 'Your store is already linked to DrapixAI.' : 'Set the authorized domain in the dashboard so your storefront can call the SDK cleanly.'}</p>
+                <p className={`font-medium mb-2 ${strongTextClass}`}>1. Finish storefront verification</p>
+                <p className={mutedTextClass}>
+                  {usage.storeConnected
+                    ? 'Your storefront is already linked and ready for SDK rollout.'
+                    : 'Save the domain in settings, add the verification tag, and confirm that DrapixAI can trust the storefront before launch.'}
+                </p>
               </div>
               <div className={panelClass}>
-                <p className={`font-medium mb-2 ${strongTextClass}`}>2. Validate usage before upgrading</p>
-                <p className={mutedTextClass}>Use the trial or current plan to confirm quality, catalog readiness, and traffic fit before increasing monthly volume.</p>
+                <p className={`font-medium mb-2 ${strongTextClass}`}>2. Validate products and onboarding flow</p>
+                <p className={mutedTextClass}>Sync your upper-body catalog, upload matching garments, and run internal try-ons before you send live traffic to the widget.</p>
               </div>
               <div className={panelClass}>
-                <p className={`font-medium mb-2 ${strongTextClass}`}>3. Manage commercial changes</p>
-                <p className={mutedTextClass}>When you need more volume or custom support, move through the pricing path or contact sales for enterprise requests.</p>
+                <p className={`font-medium mb-2 ${strongTextClass}`}>3. Increase volume only after validation</p>
+                <p className={mutedTextClass}>Use the trial or current plan to confirm quality, catalog readiness, and traffic fit before increasing monthly volume or moving into a sales-led rollout.</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-3 mt-6">
               <Link href="/settings" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                 Open Settings
+              </Link>
+              <Link href="/docs" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                Integration Guide
               </Link>
               <Link href="/pricing" className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                 Upgrade Plan
