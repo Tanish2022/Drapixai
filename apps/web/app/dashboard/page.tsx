@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { Building2, CheckCircle2, Copy, ExternalLink, KeyRound, Mail, Store, UploadCloud } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Copy, ExternalLink, KeyRound, Sparkles, Store, UploadCloud, Wand2 } from 'lucide-react';
 import { PUBLIC_API_BASE_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 import { useThemePreference } from '@/app/lib/theme-client';
 
@@ -389,6 +389,63 @@ export default function Dashboard() {
     );
   }
 
+  const hasDomain = Boolean(usage.domain && usage.domain !== '*');
+  const hasVerifiedStore = Boolean(usage.storeVerified);
+  const hasCatalogSynced = Boolean(usage.catalogLastSyncedAt || usage.catalogLastSyncStatus);
+  const hasGarments = garments.length > 0;
+  const hasSuggestedMatches = hasCatalogSynced && hasGarments;
+  const hasConfirmedMappings = hasSuggestedMatches;
+  const readyForPreview = hasConfirmedMappings;
+  const readyForGoLive = hasVerifiedStore && hasCatalogSynced && hasGarments;
+
+  const nextBestAction = !hasGarments
+    ? 'Upload a few clean garment-only assets first. That gives DrapixAI something real to validate before any storefront work.'
+    : !hasCatalogSynced
+      ? 'Connect product discovery next, so DrapixAI can understand which storefront products these garments might belong to.'
+      : !hasSuggestedMatches
+        ? 'Review the first suggested matches and make sure the right garments are linked to the right products.'
+        : !hasVerifiedStore
+          ? 'Save and verify your store when you are happy with the preview path. Live verification can wait until after internal testing.'
+          : 'Install the SDK only after the confirmed mappings and preview experience look right.';
+
+  const onboardingSteps = [
+    {
+      title: '1. Garment upload and validation',
+      summary: 'Upload a few clean upper-body assets first. DrapixAI validates the files so weak inputs get blocked early.',
+      done: hasGarments,
+      actionLabel: 'Upload Garments',
+      actionHref: '#garment-onboarding',
+    },
+    {
+      title: '2. Catalog discovery',
+      summary: 'Bring in a small product list so DrapixAI can discover what exists on the brand side before any live install.',
+      done: hasCatalogSynced,
+      actionLabel: 'Discover Products',
+      actionHref: '#garment-onboarding',
+    },
+    {
+      title: '3. Suggested matches',
+      summary: 'Use discovery plus garment context to propose likely product links instead of forcing brands to manage exact IDs up front.',
+      done: hasSuggestedMatches,
+      actionLabel: 'Review Flow',
+      actionHref: '#garment-onboarding',
+    },
+    {
+      title: '4. Manual confirmation',
+      summary: 'A human still approves the final garment-to-product pairings. That keeps the workflow safe for non-technical teams.',
+      done: hasConfirmedMappings,
+      actionLabel: 'See Confirmation Path',
+      actionHref: '#mapping-flow',
+    },
+    {
+      title: '5. SDK uses confirmed mappings',
+      summary: 'Only after the matches feel right should the storefront install use those confirmed links for live shoppers.',
+      done: readyForGoLive,
+      actionLabel: readyForPreview ? 'Preview Try-On' : 'Read Guide',
+      actionHref: readyForPreview ? '#plugin-demo' : '/docs',
+    },
+  ];
+
   return (
     <div className={pageClass}>
       {themePreference === 'light' ? (
@@ -424,7 +481,13 @@ export default function Dashboard() {
       </header>
 
       <main className="relative z-10 max-w-7xl mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+        <div className="mb-8">
+          <p className={`text-sm uppercase tracking-[0.25em] mb-3 ${themePreference === 'light' ? 'text-cyan-700/80' : 'text-cyan-400/80'}`}>Guided Onboarding</p>
+          <h1 className="text-3xl font-bold mb-3">Give brands a clean path from garment upload to confirmed live mappings.</h1>
+          <p className={`max-w-3xl text-base ${mutedTextClass}`}>
+            The launch story is now: upload garments, discover products, review suggested matches, confirm the right pairings, then let the SDK use only those confirmed mappings on the storefront.
+          </p>
+        </div>
 
         {usage.planType === 'trial' ? (
           <div className="p-4 mb-8 border border-cyan-500/30 bg-cyan-500/10 rounded-xl">
@@ -439,67 +502,91 @@ export default function Dashboard() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 mb-8">
-          <div className={cardClass}>
+        <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 mb-8">
+          <section className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <Building2 className="w-6 h-6 text-cyan-400" />
-              <h2 className="text-xl font-bold">Workspace Ownership</h2>
+              <Sparkles className="w-6 h-6 text-cyan-400" />
+              <h2 className="text-xl font-bold">Start here</h2>
             </div>
             <p className={`text-sm mb-5 ${mutedTextClass}`}>
-              This dashboard is tied to the current DrapixAI workspace owner identity. These are the ownership details currently active in this account.
+              Ignore full rollout for a moment. The fastest path is: save your store, add a few products, upload clean garment assets, then preview internally.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className={panelClass}>
-                <p className={`text-xs uppercase tracking-[0.2em] mb-2 ${mutedTextClass}`}>Workspace Owner</p>
-                <p className={`text-lg font-semibold ${strongTextClass}`}>{usage.companyName || usage.email?.split('@')[0] || 'Account owner'}</p>
-              </div>
-              <div className={panelClass}>
-                <div className={`flex items-center gap-2 mb-2 ${mutedTextClass}`}>
-                  <Mail className="w-4 h-4" />
-                  <p className={`text-xs uppercase tracking-[0.2em] ${mutedTextClass}`}>Owner Email</p>
+              {onboardingSteps.map((step) => (
+                <div key={step.title} className={panelClass}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className={`font-semibold ${strongTextClass}`}>{step.title}</p>
+                      <p className={`text-sm mt-2 ${mutedTextClass}`}>{step.summary}</p>
+                    </div>
+                    <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${step.done ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  </div>
+                  <Link href={step.actionHref} className={`mt-4 inline-flex items-center gap-2 text-sm ${themePreference === 'light' ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-300 hover:text-cyan-200'}`}>
+                    {step.actionLabel}
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
                 </div>
-                <p className={`text-sm font-medium break-all ${strongTextClass}`}>{usage.email || 'Not available'}</p>
-              </div>
+              ))}
             </div>
-          </div>
+          </section>
 
-          <div className={cardClass}>
+          <section className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-              <h2 className="text-xl font-bold">Account Status</h2>
+              <Wand2 className="w-6 h-6 text-emerald-400" />
+              <h2 className="text-xl font-bold">What should you do next?</h2>
             </div>
-            <div className="space-y-3">
-              <div className={panelClass}>
-                <p className={`text-sm ${mutedTextClass}`}>Current plan path</p>
-                <p className={`text-lg font-semibold ${strongTextClass}`}>{usage.subscriptionPlanName || usage.selectedPlanName || usage.planName}</p>
-              </div>
             <div className={panelClass}>
-              <p className={`text-sm ${mutedTextClass}`}>Store status</p>
-              <p className={`text-lg font-semibold ${strongTextClass}`}>
-                {usage.storeConnected ? 'Verified and connected' : usage.domain && usage.domain !== '*' ? 'Domain saved, verification pending' : 'Store not connected yet'}
-              </p>
+              <p className={`text-sm ${mutedTextClass}`}>Recommended next action</p>
+              <p className={`text-lg font-semibold mt-2 ${strongTextClass}`}>{nextBestAction}</p>
             </div>
-          </div>
-        </div>
+            <div className="grid grid-cols-1 gap-3 mt-4">
+              <div className={panelClass}>
+                <p className={`text-sm ${mutedTextClass}`}>Current setup status</p>
+                <p className={`text-2xl font-bold mt-1 ${strongTextClass}`}>{readyForGoLive ? 'Launch path ready' : readyForPreview ? 'Ready for internal preview' : 'Still in setup'}</p>
+                <p className={`text-sm mt-3 ${mutedTextClass}`}>
+                  {hasVerifiedStore
+                    ? 'Your store is verified.'
+                    : hasDomain
+                      ? 'Your store URL is saved, but verification is still pending.'
+                      : 'You have not saved a store URL yet.'}
+                </p>
+              </div>
+              <div className={panelClass}>
+                <p className={`text-sm ${mutedTextClass}`}>Workspace owner</p>
+                <p className={`text-lg font-semibold mt-1 ${strongTextClass}`}>{usage.companyName || usage.email?.split('@')[0] || 'Account owner'}</p>
+                <p className={`text-xs mt-2 break-all ${mutedTextClass}`}>{usage.email || 'Not available'}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-4">
+              <Link href="/settings" className={`inline-flex items-center gap-2 ${actionClass}`}>
+                <Store className="w-4 h-4" />
+                Store Settings
+              </Link>
+              <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
+                <ExternalLink className="w-4 h-4" />
+                Full Guide
+              </Link>
+            </div>
+          </section>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 mb-8">
           <div className={subtleCardClass}>
             <div className="flex items-center gap-3 mb-4">
               <CheckCircle2 className="w-6 h-6 text-cyan-400" />
-              <h2 className="text-xl font-bold">Onboarding Checklist</h2>
+              <h2 className="text-xl font-bold">What success looks like</h2>
             </div>
             <p className={`text-sm mb-4 ${mutedTextClass}`}>
-              Treat this as the launch sequence for a brand: verify the store, sync product IDs, upload matching garments, then test the widget internally before sending live traffic.
+              Keep the early goal simple: get one believable internal preview first. Full storefront setup should happen only after this checklist feels solid.
             </p>
             <div className="space-y-3">
               {[
-                { label: 'Account session active', done: Boolean(apiKey) },
-                { label: 'Store domain saved', done: Boolean(usage.domain && usage.domain !== '*') },
-                { label: 'Store verified', done: Boolean(usage.storeVerified) },
-                { label: 'Catalog synced', done: Boolean(usage.catalogLastSyncedAt || usage.catalogLastSyncStatus) },
-                { label: 'At least one garment uploaded', done: garments.length > 0 },
-                { label: 'Ready to run live try-ons', done: Boolean(apiKey) && Boolean(usage.storeVerified) && garments.length > 0 },
+                { label: 'Clean garments validated', done: hasGarments },
+                { label: 'Catalog discovery connected', done: hasCatalogSynced },
+                { label: 'Suggested matches available', done: hasSuggestedMatches },
+                { label: 'Confirmed pairings ready', done: hasConfirmedMappings },
+                { label: 'Internal preview trusted', done: readyForPreview },
+                { label: 'Safe to install live mappings', done: readyForGoLive },
               ].map((item) => (
                 <div key={item.label} className={`flex items-center gap-3 px-4 py-3 ${panelClass}`}>
                   <CheckCircle2 className={`w-5 h-5 ${item.done ? 'text-emerald-400' : 'text-gray-600'}`} />
@@ -512,12 +599,14 @@ export default function Dashboard() {
           <div className={subtleCardClass}>
             <div className="flex items-center gap-3 mb-4">
               <Store className={`w-6 h-6 ${usage.storeConnected ? 'text-emerald-400' : 'text-amber-300'}`} />
-              <h2 className="text-xl font-bold">Store Connection Status</h2>
+              <h2 className="text-xl font-bold">Go live later, not first</h2>
             </div>
             <div className={panelClass}>
-              <p className={`text-sm ${mutedTextClass}`}>Current status</p>
-              <p className={`text-2xl font-bold mt-1 ${strongTextClass}`}>{usage.storeConnected ? 'Connected' : usage.domain && usage.domain !== '*' ? 'Verification pending' : 'Not connected'}</p>
-              <p className={`text-sm mt-3 ${mutedTextClass}`}>{usage.domain && usage.domain !== '*' ? usage.domain : 'No authorized domain has been set yet.'}</p>
+              <p className={`text-sm ${mutedTextClass}`}>What belongs in this stage</p>
+              <p className={`text-2xl font-bold mt-1 ${strongTextClass}`}>Preview first. Install second.</p>
+              <p className={`text-sm mt-3 ${mutedTextClass}`}>
+                Save your store URL now if you want, but keep domain verification, API key sharing, and storefront installation for after your internal try-on preview looks believable.
+              </p>
               {usage.catalogLastSyncStatus ? (
                 <p className={`text-xs mt-3 ${mutedTextClass}`}>
                   Catalog sync: {usage.catalogLastSyncStatus}
@@ -525,18 +614,29 @@ export default function Dashboard() {
                 </p>
               ) : null}
             </div>
+            <div className={`${panelClass} mt-4`}>
+              <p className={`text-sm ${mutedTextClass}`}>Current rollout state</p>
+              <p className={`text-lg font-semibold mt-1 ${strongTextClass}`}>
+                {usage.storeConnected ? 'Store verified and ready when you are' : usage.domain && usage.domain !== '*' ? 'Store URL saved, live verification can wait' : 'No live store setup yet'}
+              </p>
+              <p className={`text-sm mt-3 ${mutedTextClass}`}>
+                {usage.domain && usage.domain !== '*'
+                  ? usage.domain
+                  : 'That is okay. You can still finish product prep and internal testing before connecting a live storefront.'}
+              </p>
+            </div>
             <div className="flex flex-wrap gap-3 mt-4">
               <Link href="/settings" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <Store className="w-4 h-4" />
-                Manage Store Settings
+                Store Settings
               </Link>
               <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <ExternalLink className="w-4 h-4" />
-                Integration Guide
+                Full Guide
               </Link>
               <Link href="/subscription" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <ExternalLink className="w-4 h-4" />
-                Manage Subscription
+                Plans
               </Link>
             </div>
           </div>
@@ -579,7 +679,8 @@ export default function Dashboard() {
         </div>
 
         <div className={`${cardClass} mb-8`}>
-          <h2 className="text-xl font-bold mb-4">Your API Key</h2>
+          <h2 className="text-xl font-bold mb-2">Technical install details</h2>
+          <p className={`mb-4 ${mutedTextClass}`}>You do not need this for early preview work. Come back here only when you are ready to install DrapixAI on a live storefront or hand setup to a technical teammate.</p>
           <div className="flex gap-4">
             <input type="text" value={apiKey} readOnly className={inputClass} />
             <button
@@ -616,8 +717,8 @@ export default function Dashboard() {
         </div>
 
         <div className={`${cardClass} mb-8`}>
-          <h2 className="text-xl font-bold mb-4">Authorized Domain</h2>
-          <p className={`mb-4 ${mutedTextClass}`}>Each subscriber can use the SDK on a single domain. Save it here, then finish verification in settings before live rollout.</p>
+          <h2 className="text-xl font-bold mb-2">Live storefront domain</h2>
+          <p className={`mb-4 ${mutedTextClass}`}>This matters only when you are close to launch. If you are still testing image quality and product prep, you can leave live domain work inside Settings for later.</p>
           <div className="flex gap-4">
             <input
               type="text"
@@ -694,9 +795,9 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className={`${cardClass} mb-8`}>
+        <div id="garment-onboarding" className={`${cardClass} mb-8`}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">Garment Cache</h2>
+            <h2 className="text-xl font-bold">Product and garment prep</h2>
             {garments.some((g) => g.status === 'missing') ? (
               <span className="text-xs px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30 text-red-200">
                 Missing: {garments.filter((g) => g.status === 'missing').length}
@@ -704,8 +805,40 @@ export default function Dashboard() {
             ) : null}
           </div>
           <p className={`mb-4 ${mutedTextClass}`}>
-            Upper-body only. First sync your catalog product IDs, then upload garment files that match those IDs exactly.
+            Upper-body only. The brand-facing flow is: upload garments, let DrapixAI validate them, discover products, review suggested matches, confirm the right pairings, then preview before launch.
           </p>
+          <div id="mapping-flow" className={`mb-6 ${panelClass}`}>
+            <p className={`text-sm font-medium mb-3 ${strongTextClass}`}>Confirmed mapping flow for brands</p>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+              {[
+                {
+                  title: '1. Garment upload and validation',
+                  body: 'Brands upload garment-only assets. DrapixAI rejects weak inputs before they can degrade try-on quality.',
+                },
+                {
+                  title: '2. Catalog discovery',
+                  body: 'A small product import, feed, or storefront scan gives DrapixAI product context without forcing hard ID work on day one.',
+                },
+                {
+                  title: '3. Suggested matches',
+                  body: 'DrapixAI proposes likely links between garments and discovered products based on the product context it sees.',
+                },
+                {
+                  title: '4. Manual confirmation',
+                  body: 'A human approves or corrects those suggestions so the final mapping stays trustworthy.',
+                },
+                {
+                  title: '5. SDK uses confirmed mappings',
+                  body: 'The storefront layer should only use confirmed pairings when you are ready for a live shopper experience.',
+                },
+              ].map((item) => (
+                <div key={item.title} className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                  <p className={`font-medium mb-2 ${strongTextClass}`}>{item.title}</p>
+                  <p className={mutedTextClass}>{item.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className={`mb-6 ${panelClass}`}>
             <p className={`text-sm font-medium mb-3 ${strongTextClass}`}>Launch garment standard</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -733,9 +866,9 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
             <div className={panelClass}>
-              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>1. CSV catalog sync</p>
+              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>1. Catalog discovery input</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Upload a CSV with <span className="font-mono">productId</span> and optional <span className="font-mono">productName</span>, <span className="font-mono">category</span>, or <span className="font-mono">garmentType</span>. We only sync rows identified as upper-body.
+                Upload a CSV with <span className="font-mono">productId</span> and optional <span className="font-mono">productName</span>, <span className="font-mono">category</span>, or <span className="font-mono">garmentType</span>. This is the small discovery layer that helps DrapixAI understand which products exist before matching garments.
               </p>
               <input
                 type="file"
@@ -745,7 +878,7 @@ export default function Dashboard() {
               />
               <div className="flex flex-wrap gap-3 mt-3">
                 <button onClick={handleCatalogSync} className={actionClass}>
-                  Sync Upper-Body Catalog
+                  Run Catalog Discovery
                 </button>
                 <button
                   onClick={() => {
@@ -771,9 +904,9 @@ export default function Dashboard() {
             </div>
 
             <div className={panelClass}>
-              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>2. Bulk garment upload</p>
+              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>2. Garment upload and validation</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Upload multiple upper-body garment files at once. Each filename must match a synced product ID, for example <span className="font-mono">shirt-001.png</span>. We now reject model-worn uploads and overlong upper-body assets because they lower try-on realism.
+                Upload multiple upper-body garment files at once. DrapixAI validates the assets first, then uses discovery context to move toward suggested matches and later manual confirmation. Clean filenames still help the current operator tools underneath.
               </p>
               <input
                 type="file"
@@ -790,7 +923,7 @@ export default function Dashboard() {
               ) : null}
               <div className="flex flex-wrap gap-3 mt-3">
                 <button onClick={handleBulkGarmentUpload} className={actionClass}>
-                  Upload Bulk Garments
+                  Validate and Upload Garments
                 </button>
               </div>
               {bulkGarmentStatus ? <p className={`text-xs mt-3 ${mutedTextClass}`}>{bulkGarmentStatus}</p> : null}
@@ -798,7 +931,7 @@ export default function Dashboard() {
           </div>
           <div className={`mb-6 ${panelClass}`}>
             <p className={`text-sm mb-3 ${mutedTextClass}`}>
-              3. Single garment upload. Use this when you want to update one synced upper-body product manually. The best source is a garment-only product asset, not a lifestyle image.
+              3. Manual operator upload. Use this only when you need to replace or fix one upper-body item behind the scenes. The brand-facing onboarding should still feel like upload, discover, suggest, confirm, then preview.
             </p>
             <div className="flex flex-col md:flex-row gap-3">
               <input
@@ -852,29 +985,69 @@ export default function Dashboard() {
           {garments.length === 0 ? (
             <p className={`text-sm ${mutedTextClass}`}>No garments uploaded yet.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {garments.slice(0, 6).map((g) => (
-                <div key={g.garmentId} className={panelClass}>
-                  <div className="mb-3">
-                    <img
-                      src={thumbs[g.garmentId] || ''}
-                      alt={g.garmentId}
-                      className={`w-full h-40 object-contain rounded-md ${themePreference === 'light' ? 'bg-slate-50 border border-sky-100' : 'bg-white/5 border border-white/10'}`}
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                  <p className={`text-sm ${mutedTextClass}`}>Garment ID</p>
-                  <p className={`text-base font-mono ${strongTextClass}`}>{g.garmentId}</p>
-                  {g.productName ? <p className={`text-sm mt-2 ${mutedTextClass}`}>{g.productName}</p> : null}
-                  {g.category ? <p className={`text-xs mt-1 ${mutedTextClass}`}>Category: {g.category}</p> : null}
-                  <p className={`text-sm mt-2 ${mutedTextClass}`}>Cache Key</p>
-                  <p className={`text-xs font-mono break-all ${strongTextClass}`}>{g.cacheKey}</p>
-                  <p className={`text-xs mt-2 ${mutedTextClass}`}>Status: {g.status}</p>
+            <>
+              <div className={`mb-6 ${panelClass}`}>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <p className={`text-sm font-medium ${strongTextClass}`}>Suggested matches and manual confirmation</p>
+                  <span className={`text-xs px-2 py-1 rounded-full ${themePreference === 'light' ? 'bg-sky-50 text-slate-900 border border-sky-100' : 'bg-white/10 text-gray-200 border border-white/10'}`}>
+                    {hasSuggestedMatches ? 'Discovery context available' : 'Waiting for garments and discovery'}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <p className={`text-sm ${mutedTextClass}`}>
+                  This is the onboarding model brands should understand: DrapixAI suggests likely matches after product discovery, then a human confirms what should go live. The current operator tools still use synced IDs underneath, but the public workflow should feel guided instead of technical.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-sm">
+                  <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                    <p className={`font-medium mb-2 ${strongTextClass}`}>Suggested matches</p>
+                    <p className={mutedTextClass}>
+                      {hasSuggestedMatches
+                        ? 'Use the discovered catalog plus garment context to propose likely links.'
+                        : 'Suggested matches appear after at least one garment is validated and catalog discovery has run.'}
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                    <p className={`font-medium mb-2 ${strongTextClass}`}>Manual confirmation</p>
+                    <p className={mutedTextClass}>
+                      {hasConfirmedMappings
+                        ? 'Treat the current preview path as the confirmation checkpoint before installing live mappings.'
+                        : 'A human should still approve the final pairings before the storefront depends on them.'}
+                    </p>
+                  </div>
+                  <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                    <p className={`font-medium mb-2 ${strongTextClass}`}>SDK live behavior</p>
+                    <p className={mutedTextClass}>
+                      {readyForGoLive
+                        ? 'Your current setup is close to a confirmed-mapping launch path.'
+                        : 'Keep the SDK in preview mode until these confirmations are trusted.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {garments.slice(0, 6).map((g) => (
+                  <div key={g.garmentId} className={panelClass}>
+                    <div className="mb-3">
+                      <img
+                        src={thumbs[g.garmentId] || ''}
+                        alt={g.garmentId}
+                        className={`w-full h-40 object-contain rounded-md ${themePreference === 'light' ? 'bg-slate-50 border border-sky-100' : 'bg-white/5 border border-white/10'}`}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <p className={`text-sm ${mutedTextClass}`}>Garment asset</p>
+                    <p className={`text-base font-mono ${strongTextClass}`}>{g.garmentId}</p>
+                    {g.productName ? <p className={`text-sm mt-2 ${mutedTextClass}`}>{g.productName}</p> : null}
+                    {g.category ? <p className={`text-xs mt-1 ${mutedTextClass}`}>Category: {g.category}</p> : null}
+                    <p className={`text-sm mt-2 ${mutedTextClass}`}>Processing record</p>
+                    <p className={`text-xs font-mono break-all ${strongTextClass}`}>{g.cacheKey}</p>
+                    <p className={`text-xs mt-2 ${mutedTextClass}`}>Validation status: {g.status}</p>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           {garments.some((g) => g.status === 'missing') ? (
@@ -960,7 +1133,7 @@ export default function Dashboard() {
 
         <div id="plugin-demo" className={`${cardClass} mb-8`}>
           <h2 className="text-xl font-bold mb-4">Try-On Modal Preview</h2>
-          <p className={`mb-4 ${mutedTextClass}`}>Preview the customer-facing try-on experience before you install it on a live storefront.</p>
+          <p className={`mb-4 ${mutedTextClass}`}>This is the milestone to aim for first: one believable internal preview before anything goes live on your store.</p>
           <div className={panelClass}>
             <div id="drapixai-dashboard-demo"></div>
           </div>

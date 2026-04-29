@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import BackButton from './components/BackButton';
 import Providers from './providers';
+import SupportAssistant from './components/SupportAssistant';
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -80,6 +81,7 @@ export default function RootLayout({
       <body className="bg-background text-white antialiased">
         <Providers>
           <BackButton />
+          <SupportAssistant />
           {children}
         </Providers>
       </body>

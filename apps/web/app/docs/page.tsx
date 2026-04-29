@@ -1,11 +1,23 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowRight, CheckCircle2, Code2, ExternalLink, Layers3, PlugZap, ShieldCheck, Store, Upload } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Code2,
+  ExternalLink,
+  Layers3,
+  PlugZap,
+  SearchCheck,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  Upload,
+} from 'lucide-react';
 import { getSdkScriptUrl, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
 export const metadata: Metadata = {
   title: 'Docs',
-  description: 'SDK installation, product ID mapping, and launch guidance for DrapixAI storefront integrations.',
+  description: 'Brand onboarding, confirmed mapping flow, and storefront SDK guidance for DrapixAI.',
 };
 
 const singleProductSnippet = `<script src="${getSdkScriptUrl()}"></script>
@@ -50,31 +62,54 @@ const apiTryOnSnippet = `curl -X POST "${PUBLIC_API_BASE_URL}/sdk/tryon" \\
   -F "person_image=@./person.jpg" \\
   --output tryon-result.png`;
 
+const onboardingSteps = [
+  {
+    title: 'Garment upload and validation',
+    body: 'Brands start by uploading a few clean upper-body assets. DrapixAI validates those files before they ever affect shopper-facing try-on quality.',
+  },
+  {
+    title: 'Catalog discovery',
+    body: 'Next, bring in product context through a feed, import, or product list. The goal is discovery first, not hard integration work on day one.',
+  },
+  {
+    title: 'Suggested matches',
+    body: 'DrapixAI uses the discovered catalog plus garment context to propose likely garment-to-product links.',
+  },
+  {
+    title: 'Manual confirmation',
+    body: 'A human still confirms what should go live. This is the safety layer that keeps brand onboarding trustworthy.',
+  },
+  {
+    title: 'SDK uses confirmed mappings',
+    body: 'Only the confirmed pairings should power the live storefront experience. Install comes after trust, not before.',
+  },
+];
+
 const installChecks = [
-  'Create an account, complete email verification, and copy the API key from the dashboard.',
-  'Open Settings and save the storefront domain that will host the try-on button.',
-  'Add the verification meta tag to the storefront homepage and verify the store before production traffic.',
-  'Sync the upper-body catalog before uploading garment images.',
-  'Upload garment-only files only after product IDs exist in the synced catalog.',
-  'Keep one stable product ID across catalog sync, garment upload, and storefront rendering.',
+  'Create an account and copy the API key from the dashboard.',
+  'Save the storefront domain in Settings so DrapixAI knows which brand site you are preparing.',
+  'Upload a few garment-only upper-body assets first to validate the visual input quality.',
+  'Run catalog discovery through a feed, import, or product list before expecting product suggestions.',
+  'Review and confirm product pairings before you expose the storefront SDK publicly.',
+  'Use domain verification and SDK install only after internal preview quality is trusted.',
 ];
 
 const troubleshooting = [
   {
     title: 'Button does not appear',
-    body: 'Check that the SDK script is loading, the product node actually has a product ID attribute, and your selector configuration matches the storefront markup.',
+    body: 'Check that the SDK script is loading, your product node has a stable product identifier, and the page belongs to the verified storefront you expect.',
   },
   {
-    title: 'Domain validation fails',
-    body: 'The SDK calls /sdk/validate before it renders the flow. Make sure the API key belongs to the same account that verified the domain, and that the verified hostname matches the live page.',
+    title: 'Discovery finds products but matching still feels weak',
+    body: 'This usually means the garment assets are not clean enough, the product titles are ambiguous, or the catalog context is too broad. Start with a tiny, high-confidence product set first.',
   },
   {
     title: 'Try-on request returns an error',
-    body: 'The most common causes are: unsynced product ID, missing garment cache, unauthorized domain, expired subscription state, or AI service not being ready.',
+    body: 'The most common causes are missing garment validation, unconfirmed product pairings, unauthorized domain, expired plan/quota, or an AI service that is not ready.',
   },
   {
     title: 'Result quality is weak',
-    body: 'Use a front-facing person image with visible upper body, good lighting, and minimal cropping. The garment image should be a garment-only upper-body item on a simple background, not a photo of a person already wearing it.',
+    body: 'Use a front-facing person image with visible upper body and a garment-only upper-body asset. Avoid photos of a human already wearing the source garment.',
   },
 ];
 
@@ -89,17 +124,18 @@ export default function DocsPage() {
       <div className="relative z-10 mx-auto max-w-7xl px-6 py-16 lg:py-20">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="self-start rounded-3xl border border-white/[0.08] bg-[#0b1120]/85 p-5 backdrop-blur-xl lg:sticky lg:top-24">
-            <p className="mb-2 text-xl font-semibold text-white">SDK Docs</p>
+            <p className="mb-2 text-xl font-semibold text-white">Brand Docs</p>
             <p className="mb-6 text-sm text-gray-400">
-              Installation, product ID mapping, and launch guidance for storefront teams.
+              The onboarding, matching, and SDK contract brands should actually understand.
             </p>
             <nav className="space-y-2">
               {[
                 ['overview', 'Overview'],
+                ['onboarding-flow', 'Onboarding Flow'],
                 ['before-install', 'Before Install'],
+                ['confirmed-mappings', 'Confirmed Mappings'],
                 ['single-product', 'Single Product'],
                 ['auto-attach', 'Auto Attach'],
-                ['product-id', 'Product IDs'],
                 ['api', 'API Flow'],
                 ['troubleshooting', 'Troubleshooting'],
                 ['launch-checklist', 'Launch Checklist'],
@@ -118,27 +154,42 @@ export default function DocsPage() {
           <div className="space-y-8">
             <section id="overview" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
               <p className="mb-4 text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80">DrapixAI Docs</p>
-              <h1 className="mb-5 text-4xl font-bold tracking-tight md:text-5xl">Install DrapixAI on a storefront without guessing the integration contract.</h1>
+              <h1 className="mb-5 text-4xl font-bold tracking-tight md:text-5xl">Onboard a brand without making them think like an integration engineer.</h1>
               <p className="max-w-4xl text-lg leading-8 text-gray-300">
-                DrapixAI currently supports upper-body garment try-on. The storefront SDK validates the domain, checks the API key, opens the customer try-on modal, and sends the try-on request using the same stable product ID you synced and uploaded in the dashboard.
+                DrapixAI should feel simple for brands: upload garments, discover products, review suggested matches, confirm the right pairings, then let the storefront SDK use only those confirmed mappings.
               </p>
 
               <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
-                  <Store className="mb-3 h-6 w-6 text-cyan-400" />
-                  <p className="font-semibold text-white">Store verification first</p>
-                  <p className="mt-2 text-sm leading-7 text-gray-300">Use the Settings meta tag to verify domain ownership before you expose the SDK publicly.</p>
+                  <Upload className="mb-3 h-6 w-6 text-cyan-400" />
+                  <p className="font-semibold text-white">Validation first</p>
+                  <p className="mt-2 text-sm leading-7 text-gray-300">Weak garment inputs should be blocked early so brands never build on bad assets.</p>
                 </div>
                 <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
-                  <Upload className="mb-3 h-6 w-6 text-cyan-400" />
-                  <p className="font-semibold text-white">Catalog before garments</p>
-                  <p className="mt-2 text-sm leading-7 text-gray-300">Sync upper-body product IDs first, then upload garment-only assets whose filenames or IDs match exactly.</p>
+                  <SearchCheck className="mb-3 h-6 w-6 text-cyan-400" />
+                  <p className="font-semibold text-white">Discovery before install</p>
+                  <p className="mt-2 text-sm leading-7 text-gray-300">Product discovery and suggested matches should happen before brands touch live storefront install.</p>
                 </div>
                 <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
                   <PlugZap className="mb-3 h-6 w-6 text-cyan-400" />
-                  <p className="font-semibold text-white">Two integration modes</p>
-                  <p className="mt-2 text-sm leading-7 text-gray-300">Use single-product mode for one product detail page or auto-attach mode for product grids and dynamic storefront markup.</p>
+                  <p className="font-semibold text-white">SDK after confirmation</p>
+                  <p className="mt-2 text-sm leading-7 text-gray-300">The SDK should rely only on confirmed mappings once the brand trusts the preview path.</p>
                 </div>
+              </div>
+            </section>
+
+            <section id="onboarding-flow" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
+              <div className="mb-5 flex items-center gap-3">
+                <Sparkles className="h-6 w-6 text-cyan-400" />
+                <h2 className="text-3xl font-semibold">Onboarding Flow</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                {onboardingSteps.map((step) => (
+                  <div key={step.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                    <p className="font-semibold text-white">{step.title}</p>
+                    <p className="mt-3 text-sm leading-7 text-gray-300">{step.body}</p>
+                  </div>
+                ))}
               </div>
             </section>
 
@@ -163,13 +214,37 @@ export default function DocsPage() {
               </div>
             </section>
 
-            <section id="single-product" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
+            <section id="confirmed-mappings" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
               <div className="mb-5 flex items-center gap-3">
                 <Layers3 className="h-6 w-6 text-cyan-400" />
+                <h2 className="text-3xl font-semibold">Confirmed Mappings</h2>
+              </div>
+              <p className="mb-4 leading-7 text-gray-300">
+                Brands should think in terms of confirmed pairings, not raw IDs. Underneath, DrapixAI still needs a stable product identifier, but the storefront experience should be explained as a confirmed mapping between a garment asset and a discovered product.
+              </p>
+              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 text-gray-300">
+                <p className="leading-7">
+                  <span className="font-semibold text-white">Discovery layer:</span> DrapixAI sees a product like <code className="font-mono text-cyan-300">shirt-001</code>.
+                </p>
+                <p className="leading-7">
+                  <span className="font-semibold text-white">Garment layer:</span> DrapixAI validates an uploaded garment asset that represents that shirt.
+                </p>
+                <p className="leading-7">
+                  <span className="font-semibold text-white">Confirmation layer:</span> A human approves that this garment should power that product.
+                </p>
+                <p className="leading-7">
+                  <span className="font-semibold text-white">Storefront layer:</span> The SDK uses the confirmed product identifier on the live page.
+                </p>
+              </div>
+            </section>
+
+            <section id="single-product" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
+              <div className="mb-5 flex items-center gap-3">
+                <Store className="h-6 w-6 text-cyan-400" />
                 <h2 className="text-3xl font-semibold">Single Product Install</h2>
               </div>
               <p className="mb-4 leading-7 text-gray-300">
-                Use single-product mode when you want to place one DrapixAI launcher on a specific product detail page or inside a single reserved container.
+                Use single-product mode when the storefront is ready to rely on one confirmed product mapping on a specific product detail page.
               </p>
               <pre className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-black/30 p-5 text-sm text-gray-200">
 {singleProductSnippet}
@@ -182,30 +257,17 @@ export default function DocsPage() {
                 <h2 className="text-3xl font-semibold">Auto Attach Install</h2>
               </div>
               <p className="mb-4 leading-7 text-gray-300">
-                Use auto-attach mode when product cards or product detail blocks already render a stable product ID in the DOM. The SDK watches for new nodes and attaches buttons as content loads.
+                Use auto-attach mode when product cards or detail blocks already render stable product IDs and you want DrapixAI to attach the launcher only for those confirmed products.
               </p>
               <pre className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-black/30 p-5 text-sm text-gray-200">
 {autoAttachSnippet}
               </pre>
             </section>
 
-            <section id="product-id" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
-              <h2 className="mb-5 text-3xl font-semibold">Product ID Mapping</h2>
-              <p className="mb-4 leading-7 text-gray-300">
-                The same product ID must be used across the entire DrapixAI workflow. This is the most important rule in the integration.
-              </p>
-              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 text-gray-300">
-                <p className="leading-7"><span className="font-semibold text-white">Catalog sync:</span> <code className="font-mono text-cyan-300">shirt-001</code></p>
-                <p className="leading-7"><span className="font-semibold text-white">Garment upload filename or garment ID:</span> <code className="font-mono text-cyan-300">shirt-001.png</code></p>
-                <p className="leading-7"><span className="font-semibold text-white">Storefront attribute:</span> <code className="font-mono text-cyan-300">data-drapix-product-id="shirt-001"</code></p>
-                <p className="leading-7"><span className="font-semibold text-white">Try-on request:</span> <code className="font-mono text-cyan-300">productId=shirt-001</code> or <code className="font-mono text-cyan-300">garment_id=shirt-001</code></p>
-              </div>
-            </section>
-
             <section id="api" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 md:p-10 backdrop-blur-xl">
               <h2 className="mb-5 text-3xl font-semibold">Direct API Flow</h2>
               <p className="mb-4 leading-7 text-gray-300">
-                The SDK uses the same API route your backend or technical team can call directly. This is useful for custom storefronts or server-to-server integration testing.
+                The REST API remains useful for custom storefronts and backend testing. The same rule still applies: send only identifiers that belong to confirmed product pairings.
               </p>
               <pre className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-black/30 p-5 text-sm text-gray-200 whitespace-pre-wrap">
 {apiTryOnSnippet}
@@ -228,11 +290,11 @@ export default function DocsPage() {
               <h2 className="mb-5 text-3xl font-semibold">Launch Checklist</h2>
               <div className="space-y-3 text-gray-200">
                 {[
+                  'Validated upper-body garment assets uploaded successfully',
+                  'Catalog discovery completed for the products you actually want to launch first',
+                  'Suggested matches reviewed and final pairings confirmed by a human',
                   'Verified storefront domain saved in Settings',
-                  'Upper-body catalog synced successfully',
-                  'Garment cache populated for live product IDs',
                   'At least one real staging try-on completed successfully',
-                  'AI service, Redis, and storage all reachable on production infrastructure',
                   'Support inbox and escalation path ready before public traffic',
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">

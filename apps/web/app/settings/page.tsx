@@ -517,7 +517,10 @@ export default function SettingsPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
           <div>
             <p className="text-sm uppercase tracking-[0.25em] text-cyan-400/80 mb-3">Account Settings</p>
-            <h1 className={`text-4xl font-bold ${sectionTitleClass}`}>Manage your DrapixAI account</h1>
+            <h1 className={`text-4xl font-bold ${sectionTitleClass}`}>Keep your DrapixAI setup simple and launch-ready</h1>
+            <p className={`mt-3 max-w-3xl text-sm ${mutedTextClass}`}>
+              Use this page for account details and store basics. Product uploads and internal previews still belong in the dashboard, where non-technical teams can validate value before technical rollout.
+            </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard" className="inline-flex items-center justify-center rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
@@ -526,6 +529,41 @@ export default function SettingsPage() {
             <Link href="/" className="inline-flex items-center justify-center rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
               Back to Home
             </Link>
+          </div>
+        </div>
+
+        <div className={`${cardClass} mb-8`}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
+            <div>
+              <p className="text-sm uppercase tracking-[0.25em] text-cyan-400/80 mb-3">Fastest Setup Path</p>
+              <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Keep the first pass lightweight</h2>
+              <p className={`mt-3 text-sm ${mutedTextClass}`}>
+                Non-technical founders do not need to finish verification, feeds, and SDK setup on day one. The easiest sequence is: save your store URL here, go back to the dashboard to add a few products and garment files, then return to verification only when the preview looks right.
+              </p>
+            </div>
+            <div className={`${panelClass} space-y-3`}>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-cyan-400" />
+                <div>
+                  <p className={`font-medium ${strongTextClass}`}>Step 1</p>
+                  <p className={`text-sm ${mutedTextClass}`}>Save your store URL and preferred product import method.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-cyan-400" />
+                <div>
+                  <p className={`font-medium ${strongTextClass}`}>Step 2</p>
+                  <p className={`text-sm ${mutedTextClass}`}>Use the dashboard to upload a few product IDs and garment-only images.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-cyan-400" />
+                <div>
+                  <p className={`font-medium ${strongTextClass}`}>Step 3</p>
+                  <p className={`text-sm ${mutedTextClass}`}>Come back here for verification and live install only after you trust the preview quality.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -740,20 +778,20 @@ export default function SettingsPage() {
           <div className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
               <Store className={`w-6 h-6 ${usage.storeConnected ? 'text-emerald-400' : 'text-amber-300'}`} />
-              <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Store Setup and Access</h2>
+              <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Store basics</h2>
             </div>
             <div className={panelClass}>
-              <p className={`text-sm mb-2 ${mutedTextClass}`}>Store connection</p>
+              <p className={`text-sm mb-2 ${mutedTextClass}`}>Current progress</p>
               <p className={`font-medium ${strongTextClass}`}>
                 {profile.storeVerified ? 'Verified and connected' : profile.domain && profile.domain !== '*' ? 'Domain saved, verification pending' : 'Not connected yet'}
               </p>
               <p className={`text-sm mt-2 ${mutedTextClass}`}>
-                {profile.domain && profile.domain !== '*' ? profile.domain : 'No authorized domain has been saved yet.'}
+                {profile.domain && profile.domain !== '*' ? profile.domain : 'No store URL has been saved yet.'}
               </p>
             </div>
             <div className={`${panelClass} mt-4 space-y-4`}>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Store domain</label>
+                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Store URL or domain</label>
                 <input
                   type="text"
                   value={storeDomain}
@@ -763,21 +801,21 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Catalog sync source</label>
+                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>How do you want to add products first?</label>
                 <select
                   value={storeSyncSource}
                   onChange={(event) => setStoreSyncSource(event.target.value as 'manual' | 'feed_url' | 'shopify' | 'woocommerce')}
                   className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 >
-                  <option value="manual">Manual dashboard import</option>
-                  <option value="feed_url">Product feed URL</option>
-                  <option value="shopify">Shopify connection (next)</option>
-                  <option value="woocommerce">WooCommerce connection (next)</option>
+                  <option value="manual">I will add a few products in the dashboard</option>
+                  <option value="feed_url">I already have a product feed URL</option>
+                  <option value="shopify">I want Shopify later</option>
+                  <option value="woocommerce">I want WooCommerce later</option>
                 </select>
               </div>
               {storeSyncSource === 'feed_url' ? (
                 <div>
-                  <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Feed URL</label>
+                  <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Product feed URL</label>
                   <input
                     type="url"
                     value={storeFeedUrl}
@@ -788,15 +826,15 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <p className={`text-sm ${mutedTextClass}`}>
-                  Use manual dashboard import today if you want the fastest launch path. Feed URL import also works now. Native Shopify and WooCommerce apps are planned, but they are not the current public onboarding path.
+                  For most teams, the easiest start is manual dashboard import. Feed URL import also works now. Native Shopify and WooCommerce apps are future-friendly options, but they are not required for your first preview.
                 </p>
               )}
               <div className={`${themePreference === 'light' ? 'border-sky-100 bg-sky-50/70' : 'border-cyan-400/20 bg-cyan-400/10'} rounded-2xl border p-4`}>
-                <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>Recommended onboarding order</p>
+                <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>Recommended order</p>
                 <ol className={`space-y-2 text-sm list-decimal pl-5 ${mutedTextClass}`}>
-                  <li>Save the storefront domain and choose how your catalog will be synced.</li>
-                  <li>Add the verification meta tag to your homepage and verify the domain.</li>
-                  <li>Sync upper-body product IDs, then upload garments that match those IDs exactly.</li>
+                  <li>Save the storefront domain and choose the easiest product import path.</li>
+                  <li>Go back to the dashboard and test a few product IDs plus clean garment images.</li>
+                  <li>Only after the preview looks right, return here to verify the domain and complete live setup.</li>
                 </ol>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -805,14 +843,14 @@ export default function SettingsPage() {
                   onClick={handleSaveStoreConnection}
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
                 >
-                  Save Store Setup
+                  Save Basics
                 </button>
                 <button
                   type="button"
                   onClick={handleVerifyStore}
                   className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
                 >
-                  Verify Meta Tag
+                  Verify Store
                 </button>
                 {storeSyncSource === 'feed_url' ? (
                   <button
@@ -820,7 +858,7 @@ export default function SettingsPage() {
                     onClick={handleResyncCatalog}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
                   >
-                    Re-sync Upper-Body Catalog
+                    Refresh Product List
                   </button>
                 ) : null}
               </div>
@@ -828,7 +866,7 @@ export default function SettingsPage() {
             <div className={`${panelClass} mt-4`}>
               <p className={`text-sm mb-2 ${mutedTextClass}`}>Verification meta tag</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Add this meta tag to your storefront homepage so DrapixAI can verify that you control the domain before syncing product data or exposing the SDK publicly.
+                Add this to your storefront homepage only when you are ready to prove you control the live domain. It is not required to start testing garments in the dashboard.
               </p>
               <p className={`font-mono text-xs break-all ${strongTextClass}`}>{verificationMetaTag || 'Save store settings to generate the verification tag.'}</p>
               <div className="flex flex-wrap gap-3 mt-3">
@@ -852,11 +890,11 @@ export default function SettingsPage() {
               <p className={`text-sm mb-2 ${mutedTextClass}`}>Catalog sync status</p>
               <p className={`font-medium ${strongTextClass}`}>{profile.catalogLastSyncStatus || 'No catalog sync has run yet.'}</p>
               <p className={`text-sm mt-2 ${mutedTextClass}`}>
-                {profile.catalogLastSyncedAt ? `Last synced on ${new Date(profile.catalogLastSyncedAt).toLocaleString()}` : 'Once your feed is connected, a one-click re-sync will refresh only upper-body products.'}
+                {profile.catalogLastSyncedAt ? `Last synced on ${new Date(profile.catalogLastSyncedAt).toLocaleString()}` : 'If you use a feed, one click will refresh only upper-body products. If you start manually, do that work in the dashboard.'}
               </p>
             </div>
             <div className={`${panelClass} mt-4`}>
-              <p className={`text-sm mb-2 ${mutedTextClass}`}>Current API key</p>
+              <p className={`text-sm mb-2 ${mutedTextClass}`}>Technical install key</p>
               <p className={`font-mono text-sm break-all ${strongTextClass}`}>{apiKey}</p>
             </div>
             <div className="flex flex-wrap gap-3 mt-4">
@@ -878,10 +916,10 @@ export default function SettingsPage() {
               </button>
               <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                 <Store className="w-4 h-4" />
-                Open Dashboard Uploads
+                Back to Dashboard
               </Link>
               <Link href="/docs" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
-                Integration Guide
+                Full Guide
               </Link>
             </div>
           </div>

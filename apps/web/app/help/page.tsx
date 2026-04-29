@@ -1,6 +1,20 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleHelp, Code2, Info, LifeBuoy, Lock, Search, Settings2, Sparkles, Upload, Wand2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  CircleHelp,
+  Code2,
+  Info,
+  LifeBuoy,
+  Lock,
+  Search,
+  Settings2,
+  Sparkles,
+  Upload,
+  Wand2,
+} from 'lucide-react';
 import { getSdkScriptUrl, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
 export const metadata: Metadata = {
@@ -14,6 +28,7 @@ const sidebarSections = [
   { id: 'before-support', label: 'Before Support' },
   { id: 'account-access', label: 'Account & Access' },
   { id: 'garments-images', label: 'Garments & Images' },
+  { id: 'matches-confirmation', label: 'Matches & Confirmation' },
   { id: 'tryon-results', label: 'Try-On Results' },
   { id: 'integration-help', label: 'Integration Help' },
   { id: 'limits-billing', label: 'Limits & Billing' },
@@ -22,10 +37,10 @@ const sidebarSections = [
 
 const quickChecks = [
   'Confirm you are using the correct API key for the same DrapixAI account.',
-  'Make sure your store domain was saved in Settings and verified with the DrapixAI meta tag before calling the storefront flow production-ready.',
-  'Check that your upper-body catalog was synced before uploading garment images.',
-  'Check that at least one garment was uploaded and cached successfully before running try-on.',
-  'Verify the uploaded person image is front-facing, clear, and not too dark or cropped.',
+  'Check that the garment asset is isolated, upper-body only, and not a model-worn product photo.',
+  'Check that catalog discovery has already run before expecting suggested matches.',
+  'Confirm the final product pairing was manually reviewed before testing the storefront flow.',
+  'Verify the person image is front-facing, clear, and not too dark or cropped.',
   'If results suddenly fail, confirm the AI service, Redis, and storage are all reachable.',
 ];
 
@@ -47,30 +62,45 @@ const accountHelp = [
 const garmentHelp = [
   {
     title: 'Garment upload is rejected',
-    body: 'Use one isolated upper-body garment only, centered in frame, preferably on a clean background. We now reject model-worn product photos, visible body parts, multiple products in one image, and heavy blur.',
+    body: 'Use one isolated upper-body garment only, centered in frame, preferably on a clean background. DrapixAI rejects model-worn product photos, visible body parts, multiple products in one image, and heavy blur.',
   },
   {
-    title: 'Garment stays pending',
-    body: 'If garment approval is enabled, pending means the item is waiting for admin review. Check the admin dashboard for approval status and thumbnail generation.',
+    title: 'Garment validation passes but the brand is still confused',
+    body: 'That usually means the onboarding story is still too technical. Brands should think in terms of garment upload, product discovery, suggested matches, manual confirmation, then preview. They should not have to manage raw identifiers first.',
   },
   {
     title: 'Thumbnail or cached garment is missing',
     body: 'This usually points to AI preprocessing failure, storage misconfiguration, or a stale cache reference. Re-upload the garment after verifying S3 and AI health.',
   },
   {
-    title: 'Bulk upload says the product is not synced',
-    body: 'That means the filename does not match a synced upper-body product ID yet. Sync the catalog first, then upload files named exactly like those product IDs.',
+    title: 'A brand uploaded garments before products were discovered',
+    body: 'That is acceptable for onboarding, but product suggestions and confirmation should only happen after catalog discovery has provided product context.',
+  },
+];
+
+const mappingHelp = [
+  {
+    title: 'What is a suggested match?',
+    body: 'It is DrapixAI proposing which discovered product a validated garment likely belongs to. Suggestions should be assistive, not final.',
+  },
+  {
+    title: 'Why do we still need manual confirmation?',
+    body: 'Because a wrong garment-to-product link breaks trust immediately. A human should approve the final pairing before the storefront uses it.',
+  },
+  {
+    title: 'What should the SDK use?',
+    body: 'The SDK should use only confirmed mappings. Discovery and suggestion help reduce manual work, but live shopper traffic should depend on approved pairings only.',
   },
 ];
 
 const tryOnHelp = [
   {
     title: 'Try-on result looks weak or unrealistic',
-    body: 'Use a clean, front-facing person image with visible upper body and better lighting. Also confirm the garment image is garment-only, color-accurate, and belongs to the same upper-body category. Photos of someone already wearing the garment usually degrade the result.',
+    body: 'Use a clean, front-facing person image with visible upper body and better lighting. Also confirm the garment image is garment-only, color-accurate, and belongs to the same upper-body category.',
   },
   {
     title: 'Try-on fails immediately',
-    body: 'Immediate failure usually means one of these: invalid API key, unauthorized domain, missing garment cache, unsupported image, or AI service not reachable.',
+    body: 'Immediate failure usually means one of these: invalid API key, unauthorized domain, missing garment validation, unconfirmed mapping, unsupported image, or AI service not reachable.',
   },
   {
     title: 'Try-on starts but times out',
@@ -81,9 +111,9 @@ const tryOnHelp = [
 const integrationTips = [
   'The browser SDK is the fastest way to embed DrapixAI into a product page.',
   'The REST API is language-agnostic and can be called from JavaScript, Python, PHP, Laravel, Django, Node, Go, Java, or any stack that supports HTTP and multipart uploads.',
-  'Use stable `productId` or `garment_id` values. If these identifiers keep changing, your garment cache reuse will break.',
-  'For store verification, use the meta tag from Settings only as proof of domain ownership. Use a product feed URL or platform connector to sync catalog data.',
-  'CSV, JSON, or XML feed sync should always map `productId` to the same value you use later for garment upload filenames and storefront SDK product IDs.',
+  'Brands should understand the public workflow as confirmed mappings, even if stable product IDs still exist behind the scenes.',
+  'Use the Settings meta tag only as proof of domain ownership, not as the first onboarding step.',
+  'Run product discovery before asking a team to review suggested matches.',
   'Keep the public web app pointed at the API service, and keep the API pointed at the live AI service only after A100 staging succeeds.',
 ];
 
@@ -165,9 +195,9 @@ export default function HelpPage() {
           <div className="space-y-8">
             <section id="overview" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
               <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Help Center</p>
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Everything customers should check before asking for support.</h1>
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Support should follow the same onboarding story brands see in the product.</h1>
               <p className="text-lg text-gray-300 leading-8 max-w-4xl">
-                This help page is written for storefront teams, operators, and evaluators using DrapixAI. It covers setup, self-serve troubleshooting, image quality guidance, API usage, and the most common issues customers can resolve themselves.
+                DrapixAI support is now organized around the confirmed mapping flow: garment upload and validation, catalog discovery, suggested matches, manual confirmation, then SDK install on confirmed pairings only.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
@@ -177,7 +207,7 @@ export default function HelpPage() {
                     <p className="font-semibold text-amber-200">Warning</p>
                   </div>
                   <p className="text-gray-200 leading-7">
-                    Most failed try-ons are caused by missing garment cache, wrong API/domain setup, weak source images, or an AI environment that is not actually ready.
+                    Most failed try-ons are still caused by weak garment inputs, missing product context, or storefront logic being turned on before the preview path is trustworthy.
                   </p>
                 </div>
 
@@ -203,12 +233,12 @@ export default function HelpPage() {
                 <p>Use this order for the cleanest setup:</p>
                 {[
                   'Create an account and copy your API key from the dashboard.',
-                  'Open Settings and save your store domain, sync source, and verification meta tag.',
-                  'Add the verification meta tag to your storefront homepage, then run Store Verification.',
-                  'Sync your upper-body catalog by feed URL or manual dashboard import.',
-                  'Upload garment-only images only after those product IDs exist in the synced catalog.',
-                  'Embed the browser SDK or call the REST API directly.',
-                  'Run one real try-on on staging before pushing traffic to production.',
+                  'Open Settings and save your store domain, but do not rush live verification yet.',
+                  'Upload a few garment-only upper-body assets and let DrapixAI validate them first.',
+                  'Run product discovery with a feed, import, or product list to create product context.',
+                  'Review the suggested matches and confirm the correct pairings manually.',
+                  'Run one internal try-on preview before you expose the SDK publicly.',
+                  'Install the browser SDK or call the REST API only after those pairings feel trusted.',
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
                     <CheckCircle2 className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
@@ -274,13 +304,28 @@ export default function HelpPage() {
                 ))}
               </div>
               <div className="mt-8 rounded-2xl border border-white/[0.08] bg-black/20 p-5">
-                <h3 className="text-lg font-semibold mb-3">Upper-body catalog workflow</h3>
+                <h3 className="text-lg font-semibold mb-3">Brand onboarding language to use</h3>
                 <div className="space-y-2 text-gray-300">
-                  <p>1. Sync product IDs first from CSV, JSON, XML, or manual import.</p>
-                  <p>2. DrapixAI filters only upper-body rows server-side.</p>
-                  <p>3. Upload garment files after sync, using filenames that exactly match those product IDs.</p>
-                  <p>4. The storefront SDK should use the same product ID when it renders the try-on entry point.</p>
+                  <p>1. Upload garments first and let DrapixAI validate the image quality.</p>
+                  <p>2. Discover products next so the system has catalog context.</p>
+                  <p>3. Review suggested matches instead of forcing the brand to manage IDs manually.</p>
+                  <p>4. Confirm the right pairings before the storefront goes live.</p>
                 </div>
+              </div>
+            </section>
+
+            <section id="matches-confirmation" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+              <div className="flex items-center gap-3 mb-5">
+                <Code2 className="w-6 h-6 text-cyan-400" />
+                <h2 className="text-3xl font-semibold">Matches &amp; Confirmation</h2>
+              </div>
+              <div className="space-y-4">
+                {mappingHelp.map((item) => (
+                  <div key={item.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                    <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                    <p className="text-gray-300 leading-7">{item.body}</p>
+                  </div>
+                ))}
               </div>
             </section>
 
@@ -324,9 +369,9 @@ export default function HelpPage() {
                 <h3 className="text-lg font-semibold mb-3">Store connection order</h3>
                 <div className="space-y-2 text-gray-300">
                   <p>1. Save the store domain and generate the verification meta tag in Settings.</p>
-                  <p>2. Add the meta tag to the storefront homepage.</p>
-                  <p>3. Run verification from Settings.</p>
-                  <p>4. Choose a sync source: manual import or feed URL today, platform connector later.</p>
+                  <p>2. Upload garments and run product discovery before you worry about live storefront behavior.</p>
+                  <p>3. Review the suggested matches and confirm the right pairings.</p>
+                  <p>4. Verify the live domain and install the SDK only after preview quality is trusted.</p>
                   <p>5. Re-sync upper-body catalog items whenever the store assortment changes.</p>
                 </div>
               </div>
@@ -357,13 +402,14 @@ export default function HelpPage() {
                 <h2 className="text-3xl font-semibold">When To Contact Support</h2>
               </div>
               <div className="space-y-4 text-gray-200">
-                <p>Contact support only after you have already checked domain validation, garment cache status, source image quality, AI readiness, and plan/quota status.</p>
+                <p>Contact support only after you have already checked garment validation, catalog discovery, suggested matches, confirmation status, domain validation, AI readiness, and plan/quota status.</p>
                 <p>When opening a support request, include:</p>
                 <div className="space-y-2">
                   {[
                     'the account email or brand name',
                     'the affected domain',
-                    'the garment ID or product ID',
+                    'the garment asset or product identifier',
+                    'whether discovery and confirmation already happened',
                     'the exact endpoint that failed',
                     'the error message or screenshot',
                     'whether the issue happened on demo, staging, or production',
