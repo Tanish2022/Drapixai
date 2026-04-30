@@ -32,8 +32,10 @@ model User {
   trialExpiresAt               DateTime?
   createdAt                    DateTime @default(now())
   apiKeys                      ApiKey[]
+  catalogProducts              CatalogProduct[]
   emailLogs                    EmailLog[]
   garments                     Garment[]
+  garmentMatches               GarmentMatch[]
   verificationCodes            VerificationCode[]
 }
 
@@ -97,6 +99,7 @@ model Garment {
   id          Int      @id @default(autoincrement())
   userId      Int
   garmentId   String
+  displayName String?
   cacheKey    String?
   originalHash String
   originalUrl String?
@@ -112,6 +115,41 @@ model Garment {
   user        User     @relation(fields: [userId], references: [id])
   @@unique([userId, garmentId])
   @@index([userId])
+}
+
+model CatalogProduct {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  productId   String
+  productName String?
+  category    String?
+  garmentType String?
+  imageUrl    String?
+  source      String?
+  status      String   @default("discovered")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+model GarmentMatch {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  garmentId          String
+  suggestedProductId String?
+  confirmedProductId String?
+  status             String   @default("unmatched")
+  confidence         Float?
+  matchReason        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, garmentId])
+  @@index([userId, status])
 }
 
 model WebsiteEvent {

@@ -30,18 +30,30 @@ interface UsageData {
   catalogFeedUrl?: string | null;
   catalogLastSyncedAt?: string | null;
   catalogLastSyncStatus?: string | null;
+  uploadedGarmentCount?: number;
+  discoveredProductCount?: number;
+  suggestedMatchCount?: number;
+  confirmedMatchCount?: number;
   dailyUsage?: { date: string; count: number }[];
   recentRenders?: { id: number; status: string; productId?: string | null; error?: string | null; outputUrl?: string | null; createdAt: string }[];
 }
 
 interface GarmentItem {
   garmentId: string;
-  cacheKey: string;
+  displayName?: string | null;
+  cacheKey?: string | null;
   status: string;
   productName?: string | null;
   category?: string | null;
   garmentType?: string | null;
   sourceImageUrl?: string | null;
+  matchStatus?: string;
+  suggestedProductId?: string | null;
+  suggestedProductName?: string | null;
+  confirmedProductId?: string | null;
+  confirmedProductName?: string | null;
+  matchConfidence?: number | null;
+  matchReason?: string | null;
   updatedAt: string;
 }
 
@@ -50,6 +62,16 @@ interface GarmentSyncRow {
   productName?: string;
   category?: string;
   garmentType?: string;
+}
+
+interface CatalogProductItem {
+  productId: string;
+  productName?: string | null;
+  category?: string | null;
+  garmentType?: string | null;
+  imageUrl?: string | null;
+  status?: string;
+  updatedAt: string;
 }
 
 const splitCsvLine = (line: string) =>
@@ -95,11 +117,19 @@ const parseCatalogCsv = (csvText: string): GarmentSyncRow[] => {
 const getApiErrorMessage = (payload: { message?: string; error?: string } | null | undefined, fallback: string) =>
   payload?.message || payload?.error || fallback;
 
+const humanizeGarmentId = (value: string) =>
+  value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function Dashboard() {
   const themePreference = useThemePreference();
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [garments, setGarments] = useState<GarmentItem[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProductItem[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [garmentUploadId, setGarmentUploadId] = useState('');
   const [garmentFile, setGarmentFile] = useState<File | null>(null);
@@ -108,7 +138,9 @@ export default function Dashboard() {
   const [catalogSyncStatus, setCatalogSyncStatus] = useState('');
   const [bulkGarmentFiles, setBulkGarmentFiles] = useState<File[]>([]);
   const [bulkGarmentStatus, setBulkGarmentStatus] = useState('');
-  const [missingPage, setMissingPage] = useState(0);
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, string>>({});
+  const [matchStatusMessage, setMatchStatusMessage] = useState('');
+  const [activeMatchGarmentId, setActiveMatchGarmentId] = useState('');
   const [toast, setToast] = useState('');
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const router = useRouter();
@@ -150,6 +182,25 @@ export default function Dashboard() {
       .then((res) => res.json())
       .catch(() => ({ items: [] }));
     setGarments(data.items || []);
+  };
+
+  const refreshCatalog = async (activeApiKey: string) => {
+    const data = await fetch(`${PUBLIC_API_BASE_URL}/sdk/catalog`, {
+      headers: { Authorization: `Bearer ${activeApiKey}` },
+    })
+      .then((res) => res.json())
+      .catch(() => ({ items: [] }));
+    setCatalogProducts(data.items || []);
+  };
+
+  const refreshUsage = async (activeApiKey: string) => {
+    const headers = { Authorization: `Bearer ${activeApiKey}` };
+    const res = await fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, { headers });
+    if (res.status === 401) {
+      throw new Error('UNAUTHORIZED');
+    }
+    const data = await res.json();
+    setUsage(data);
   };
 
   useEffect(() => {
@@ -209,28 +260,18 @@ export default function Dashboard() {
   useEffect(() => {
     if (!apiKey) return;
 
-    const headers = { Authorization: `Bearer ${apiKey}` };
-
-    fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, { headers })
-      .then(async (res) => {
-        if (res.status === 401) {
-          throw new Error('UNAUTHORIZED');
-        }
-        return res.json();
-      })
-      .then((data) => setUsage(data))
-      .catch(async (error: Error) => {
-        if (error.message === 'UNAUTHORIZED') {
-          localStorage.removeItem('apiKey');
-          setApiKey('');
-          await fetch('/api/dashboard/session', { method: 'DELETE' }).catch(() => undefined);
-          router.replace('/auth/login?next=/dashboard');
-          return;
-        }
-        console.error(error);
-      });
-
-    refreshGarments(apiKey).catch(() => setGarments([]));
+    Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]).catch(async (error: Error) => {
+      if (error.message === 'UNAUTHORIZED') {
+        localStorage.removeItem('apiKey');
+        setApiKey('');
+        await fetch('/api/dashboard/session', { method: 'DELETE' }).catch(() => undefined);
+        router.replace('/auth/login?next=/dashboard');
+        return;
+      }
+      console.error(error);
+      setGarments([]);
+      setCatalogProducts([]);
+    });
   }, [apiKey, router]);
 
   useEffect(() => {
@@ -259,15 +300,31 @@ export default function Dashboard() {
   }, [apiKey, garments]);
 
   useEffect(() => {
+    setSelectedProducts((current) => {
+      const next = { ...current };
+      for (const garment of garments) {
+        if (!next[garment.garmentId]) {
+          next[garment.garmentId] = garment.confirmedProductId || garment.suggestedProductId || '';
+        }
+      }
+      return next;
+    });
+  }, [garments]);
+
+  useEffect(() => {
     if (!apiKey) return;
     const script = document.createElement('script');
     script.src = getSdkScriptUrl();
     script.async = true;
     script.onload = () => {
       if (window.DrapixAI) {
+        const previewProductId =
+          garments.find((garment) => garment.confirmedProductId)?.confirmedProductId ||
+          catalogProducts[0]?.productId ||
+          'demo-product';
         window.DrapixAI.init({
           apiKey,
-          productId: garments[0]?.garmentId || 'demo-product',
+          productId: previewProductId,
           containerId: 'drapixai-dashboard-demo',
           garmentType: 'upper',
         });
@@ -277,7 +334,7 @@ export default function Dashboard() {
     return () => {
       script.remove();
     };
-  }, [apiKey, garments]);
+  }, [apiKey, garments, catalogProducts]);
 
   useEffect(() => {
     if (!toast) return;
@@ -314,7 +371,7 @@ export default function Dashboard() {
         return;
       }
 
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments/sync`, {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/catalog/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -332,9 +389,9 @@ export default function Dashboard() {
       const syncedCount = Array.isArray(data?.items) ? data.items.length : 0;
       const skippedCount = Array.isArray(data?.skipped) ? data.skipped.length : 0;
       setCatalogSyncStatus(`Synced ${syncedCount} upper-body products.${skippedCount ? ` Skipped ${skippedCount} non-upper-body rows.` : ''}`);
-      setToast(`Catalog sync complete. ${syncedCount} products ready for garment upload.`);
+      setToast(`Catalog discovery complete. ${syncedCount} products are now available for matching.`);
       setCatalogCsvFile(null);
-      await refreshGarments(apiKey);
+      await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
     } catch {
       setCatalogSyncStatus('Catalog sync failed.');
       setToast('Catalog sync failed.');
@@ -374,11 +431,79 @@ export default function Dashboard() {
     setBulkGarmentStatus(
       failedCount && firstFailure
         ? `Uploaded ${successCount} garments. ${failedCount} file(s) failed. ${getApiErrorMessage(firstFailure, 'Review the rejected uploads and use isolated garment-only images.')}`
-        : `Uploaded ${successCount} garments.${failedCount ? ` ${failedCount} files need valid synced IDs or cleaner garment assets.` : ''}`
+        : `Uploaded ${successCount} garments.${failedCount ? ` ${failedCount} files still need cleaner garment assets.` : ''}`
     );
-    setToast(`Bulk upload complete. ${successCount} garments are now try-on ready.`);
+    setToast(`Bulk upload complete. ${successCount} garments are now ready for matching.`);
     setBulkGarmentFiles([]);
-    await refreshGarments(apiKey);
+    await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+  };
+
+  const handleConfirmMatch = async (garmentId: string) => {
+    const productId = selectedProducts[garmentId];
+    if (!apiKey || !productId) {
+      setMatchStatusMessage('Choose a discovered product before confirming the mapping.');
+      return;
+    }
+
+    setActiveMatchGarmentId(garmentId);
+    setMatchStatusMessage('Saving confirmed mapping...');
+
+    try {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/matches/${encodeURIComponent(garmentId)}/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ productId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = getApiErrorMessage(data, 'Unable to confirm the mapping.');
+        setMatchStatusMessage(message);
+        setToast(message);
+        return;
+      }
+
+      setMatchStatusMessage('Confirmed mapping saved.');
+      setToast('Confirmed mapping saved.');
+      await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+    } catch {
+      setMatchStatusMessage('Unable to confirm the mapping.');
+      setToast('Unable to confirm the mapping.');
+    } finally {
+      setActiveMatchGarmentId('');
+    }
+  };
+
+  const handleClearConfirmedMatch = async (garmentId: string) => {
+    if (!apiKey) return;
+
+    setActiveMatchGarmentId(garmentId);
+    setMatchStatusMessage('Clearing confirmed mapping...');
+
+    try {
+      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/matches/${encodeURIComponent(garmentId)}/confirm`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = getApiErrorMessage(data, 'Unable to clear the mapping.');
+        setMatchStatusMessage(message);
+        setToast(message);
+        return;
+      }
+
+      setMatchStatusMessage('Confirmed mapping cleared. DrapixAI recalculated the suggestion.');
+      setToast('Confirmed mapping cleared.');
+      await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+    } catch {
+      setMatchStatusMessage('Unable to clear the mapping.');
+      setToast('Unable to clear the mapping.');
+    } finally {
+      setActiveMatchGarmentId('');
+    }
   };
 
   if (isBootstrapping || !usage) {
@@ -391,14 +516,18 @@ export default function Dashboard() {
 
   const hasDomain = Boolean(usage.domain && usage.domain !== '*');
   const hasVerifiedStore = Boolean(usage.storeVerified);
-  const hasCatalogSynced = Boolean(usage.catalogLastSyncedAt || usage.catalogLastSyncStatus);
-  const hasGarments = garments.length > 0;
-  const hasSuggestedMatches = hasCatalogSynced && hasGarments;
-  const hasConfirmedMappings = hasSuggestedMatches;
+  const hasCatalogSynced = (usage.discoveredProductCount || 0) > 0;
+  const hasGarments = (usage.uploadedGarmentCount || garments.length) > 0;
+  const hasSuggestedMatches = (usage.suggestedMatchCount || 0) > 0;
+  const hasConfirmedMappings = (usage.confirmedMatchCount || 0) > 0;
   const readyForPreview = hasConfirmedMappings;
-  const readyForGoLive = hasVerifiedStore && hasCatalogSynced && hasGarments;
+  const readyForGoLive = hasVerifiedStore && hasConfirmedMappings;
+  const isQuotaExhausted = usage.quotaRemaining <= 0;
+  const isQuotaLow = !isQuotaExhausted && usage.quotaRemaining <= Math.max(50, Math.ceil(usage.quota * 0.1));
 
-  const nextBestAction = !hasGarments
+  const nextBestAction = isQuotaExhausted
+    ? 'Your plan has reached its try-on limit. Upgrade volume or contact sales before continuing previews or storefront rollout.'
+    : !hasGarments
     ? 'Upload a few clean garment-only assets first. That gives DrapixAI something real to validate before any storefront work.'
     : !hasCatalogSynced
       ? 'Connect product discovery next, so DrapixAI can understand which storefront products these garments might belong to.'
@@ -441,8 +570,8 @@ export default function Dashboard() {
       title: '5. SDK uses confirmed mappings',
       summary: 'Only after the matches feel right should the storefront install use those confirmed links for live shoppers.',
       done: readyForGoLive,
-      actionLabel: readyForPreview ? 'Preview Try-On' : 'Read Guide',
-      actionHref: readyForPreview ? '#plugin-demo' : '/docs',
+      actionLabel: readyForPreview ? 'Preview Try-On' : 'Open Help',
+      actionHref: readyForPreview ? '#plugin-demo' : '/help',
     },
   ];
 
@@ -489,7 +618,26 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {usage.planType === 'trial' ? (
+        {isQuotaExhausted ? (
+          <div className={`p-5 mb-8 border rounded-xl ${themePreference === 'light' ? 'border-rose-200 bg-rose-50' : 'border-rose-400/30 bg-rose-500/10'}`}>
+            <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${themePreference === 'light' ? 'text-rose-700' : 'text-rose-200'}`}>Plan limit reached</p>
+            <p className={`text-sm mt-3 leading-7 ${themePreference === 'light' ? 'text-rose-900' : 'text-rose-100'}`}>
+              You have used all {usage.quota} try-ons in the current period. Pause internal preview and live rollout here, then upgrade the plan or contact sales before trying to push more traffic.
+            </p>
+            <div className="flex flex-wrap gap-3 mt-4">
+              <Link href="/subscription" className={`inline-flex items-center gap-2 ${actionClass}`}>
+                <ExternalLink className="w-4 h-4" />
+                Review plan
+              </Link>
+              <Link href="/pricing" className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 transition-colors ${themePreference === 'light' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500 text-white hover:bg-rose-400'}`}>
+                Upgrade now
+              </Link>
+              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center gap-2 ${actionClass}`}>
+                Contact sales
+              </a>
+            </div>
+          </div>
+        ) : usage.planType === 'trial' ? (
           <div className="p-4 mb-8 border border-cyan-500/30 bg-cyan-500/10 rounded-xl">
             <p className={`text-sm ${themePreference === 'light' ? 'text-cyan-900' : 'text-cyan-200'}`}>
               Trial active: {usage.trialDaysLeft} day(s) left. You have {usage.quotaRemaining} try-ons remaining to validate product quality, onboarding, and storefront flow before scaling usage.
@@ -499,6 +647,12 @@ export default function Dashboard() {
                 Selected paid plan after trial: {usage.selectedPlanName}
               </p>
             ) : null}
+          </div>
+        ) : isQuotaLow ? (
+          <div className={`p-4 mb-8 border rounded-xl ${themePreference === 'light' ? 'border-amber-200 bg-amber-50' : 'border-amber-400/30 bg-amber-500/10'}`}>
+            <p className={`text-sm ${themePreference === 'light' ? 'text-amber-900' : 'text-amber-100'}`}>
+              Usage warning: only {usage.quotaRemaining} try-ons remain in this period. If you expect more internal previews or live traffic soon, upgrade before rollout stalls.
+            </p>
           </div>
         ) : null}
 
@@ -562,9 +716,9 @@ export default function Dashboard() {
                 <Store className="w-4 h-4" />
                 Store Settings
               </Link>
-              <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
+              <Link href="/help" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <ExternalLink className="w-4 h-4" />
-                Full Guide
+                Full Help
               </Link>
             </div>
           </section>
@@ -610,7 +764,7 @@ export default function Dashboard() {
               {usage.catalogLastSyncStatus ? (
                 <p className={`text-xs mt-3 ${mutedTextClass}`}>
                   Catalog sync: {usage.catalogLastSyncStatus}
-                  {usage.catalogLastSyncedAt ? ` · ${new Date(usage.catalogLastSyncedAt).toLocaleString()}` : ''}
+                  {usage.catalogLastSyncedAt ? ` | ${new Date(usage.catalogLastSyncedAt).toLocaleString()}` : ''}
                 </p>
               ) : null}
             </div>
@@ -630,9 +784,9 @@ export default function Dashboard() {
                 <Store className="w-4 h-4" />
                 Store Settings
               </Link>
-              <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
+              <Link href="/help" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <ExternalLink className="w-4 h-4" />
-                Full Guide
+                Full Help
               </Link>
               <Link href="/subscription" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 <ExternalLink className="w-4 h-4" />
@@ -658,7 +812,10 @@ export default function Dashboard() {
           </div>
           <div className={subtleCardClass}>
             <p className={`text-sm ${mutedTextClass}`}>Quota Remaining</p>
-            <p className={`text-2xl font-bold ${strongTextClass}`}>{usage.quotaRemaining}</p>
+            <p className={`text-2xl font-bold ${isQuotaExhausted ? (themePreference === 'light' ? 'text-rose-700' : 'text-rose-300') : strongTextClass}`}>{usage.quotaRemaining}</p>
+            <p className={`text-xs mt-2 ${isQuotaExhausted ? (themePreference === 'light' ? 'text-rose-700' : 'text-rose-300') : isQuotaLow ? (themePreference === 'light' ? 'text-amber-700' : 'text-amber-300') : mutedTextClass}`}>
+              {isQuotaExhausted ? 'Upgrade required before more try-ons can run' : isQuotaLow ? 'Plan is close to its limit' : 'Current period remaining'}
+            </p>
           </div>
           <div className={subtleCardClass}>
             <p className={`text-sm ${mutedTextClass}`}>{usage.planType === 'trial' ? 'Trial Days Left' : 'Days Until Renewal'}</p>
@@ -866,9 +1023,35 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
             <div className={panelClass}>
-              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>1. Catalog discovery input</p>
+              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>1. Garment upload and validation</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Upload a CSV with <span className="font-mono">productId</span> and optional <span className="font-mono">productName</span>, <span className="font-mono">category</span>, or <span className="font-mono">garmentType</span>. This is the small discovery layer that helps DrapixAI understand which products exist before matching garments.
+                Upload multiple upper-body garment files at once. DrapixAI validates the assets first, then uses catalog discovery to move toward suggested matches and later manual confirmation.
+              </p>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => setBulkGarmentFiles(Array.from(e.target.files || []))}
+                className={`p-2 text-sm ${mutedTextClass}`}
+              />
+              {bulkGarmentFiles.length ? (
+                <p className={`text-xs mt-2 ${mutedTextClass}`}>
+                  Selected files: {bulkGarmentFiles.slice(0, 4).map((file) => file.name).join(', ')}
+                  {bulkGarmentFiles.length > 4 ? ` +${bulkGarmentFiles.length - 4} more` : ''}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-3 mt-3">
+                <button onClick={handleBulkGarmentUpload} className={actionClass}>
+                  Validate and Upload Garments
+                </button>
+              </div>
+              {bulkGarmentStatus ? <p className={`text-xs mt-3 ${mutedTextClass}`}>{bulkGarmentStatus}</p> : null}
+            </div>
+
+            <div className={panelClass}>
+              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>2. Catalog discovery input</p>
+              <p className={`text-sm mb-3 ${mutedTextClass}`}>
+                Upload a CSV with <span className="font-mono">productId</span> and optional <span className="font-mono">productName</span>, <span className="font-mono">category</span>, or <span className="font-mono">garmentType</span>. This is the discovery layer that helps DrapixAI understand which products exist before matching garments.
               </p>
               <input
                 type="file"
@@ -902,43 +1085,17 @@ export default function Dashboard() {
               </div>
               {catalogSyncStatus ? <p className={`text-xs mt-3 ${mutedTextClass}`}>{catalogSyncStatus}</p> : null}
             </div>
-
-            <div className={panelClass}>
-              <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>2. Garment upload and validation</p>
-              <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Upload multiple upper-body garment files at once. DrapixAI validates the assets first, then uses discovery context to move toward suggested matches and later manual confirmation. Clean filenames still help the current operator tools underneath.
-              </p>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => setBulkGarmentFiles(Array.from(e.target.files || []))}
-                className={`p-2 text-sm ${mutedTextClass}`}
-              />
-              {bulkGarmentFiles.length ? (
-                <p className={`text-xs mt-2 ${mutedTextClass}`}>
-                  Selected files: {bulkGarmentFiles.slice(0, 4).map((file) => file.name).join(', ')}
-                  {bulkGarmentFiles.length > 4 ? ` +${bulkGarmentFiles.length - 4} more` : ''}
-                </p>
-              ) : null}
-              <div className="flex flex-wrap gap-3 mt-3">
-                <button onClick={handleBulkGarmentUpload} className={actionClass}>
-                  Validate and Upload Garments
-                </button>
-              </div>
-              {bulkGarmentStatus ? <p className={`text-xs mt-3 ${mutedTextClass}`}>{bulkGarmentStatus}</p> : null}
-            </div>
           </div>
           <div className={`mb-6 ${panelClass}`}>
             <p className={`text-sm mb-3 ${mutedTextClass}`}>
-              3. Manual operator upload. Use this only when you need to replace or fix one upper-body item behind the scenes. The brand-facing onboarding should still feel like upload, discover, suggest, confirm, then preview.
+              Optional operator upload. Use this only when you need to add or replace one asset manually behind the scenes. Brands should still experience the simpler flow: upload, discover, suggest, confirm, then preview.
             </p>
             <div className="flex flex-col md:flex-row gap-3">
               <input
                 type="text"
                 value={garmentUploadId}
                 onChange={(e) => setGarmentUploadId(e.target.value)}
-                placeholder="product-id"
+                placeholder="asset label (optional)"
                 className={inputClass}
               />
               <input
@@ -949,13 +1106,15 @@ export default function Dashboard() {
               />
               <button
                 onClick={async () => {
-                  if (!apiKey || !garmentUploadId || !garmentFile) {
-                    setGarmentStatus('Please provide product ID and image.');
+                  if (!apiKey || !garmentFile) {
+                    setGarmentStatus('Please provide a garment image.');
                     return;
                   }
                   setGarmentStatus('Uploading...');
                   const form = new FormData();
-                  form.append('garment_id', garmentUploadId);
+                  if (garmentUploadId.trim()) {
+                    form.append('garment_id', garmentUploadId.trim());
+                  }
                   form.append('cloth_image', garmentFile);
                   const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments`, {
                     method: 'POST',
@@ -969,11 +1128,11 @@ export default function Dashboard() {
                     setToast(message);
                     return;
                   }
-                  setGarmentStatus('Uploaded and cached.');
+                  setGarmentStatus(`Uploaded ${data?.displayName || data?.garmentId || 'garment'} and refreshed suggestions.`);
                   setToast('Garment uploaded successfully.');
                   setGarmentUploadId('');
                   setGarmentFile(null);
-                  await refreshGarments(apiKey);
+                  await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
                 }}
                 className={actionClass}
               >
@@ -988,40 +1147,43 @@ export default function Dashboard() {
             <>
               <div className={`mb-6 ${panelClass}`}>
                 <div className="flex items-center justify-between gap-3 mb-3">
-                  <p className={`text-sm font-medium ${strongTextClass}`}>Suggested matches and manual confirmation</p>
+                  <p className={`text-sm font-medium ${strongTextClass}`}>3. Suggested matches and 4. Manual confirmation</p>
                   <span className={`text-xs px-2 py-1 rounded-full ${themePreference === 'light' ? 'bg-sky-50 text-slate-900 border border-sky-100' : 'bg-white/10 text-gray-200 border border-white/10'}`}>
-                    {hasSuggestedMatches ? 'Discovery context available' : 'Waiting for garments and discovery'}
+                    {catalogProducts.length
+                      ? `${catalogProducts.length} discovered products available`
+                      : 'Run catalog discovery to unlock suggestions'}
                   </span>
                 </div>
                 <p className={`text-sm ${mutedTextClass}`}>
-                  This is the onboarding model brands should understand: DrapixAI suggests likely matches after product discovery, then a human confirms what should go live. The current operator tools still use synced IDs underneath, but the public workflow should feel guided instead of technical.
+                  DrapixAI is now using real product discovery and real confirmation state. Each garment can carry a suggested product, and the storefront should only depend on the rows you explicitly confirm here.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-sm">
                   <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                     <p className={`font-medium mb-2 ${strongTextClass}`}>Suggested matches</p>
                     <p className={mutedTextClass}>
                       {hasSuggestedMatches
-                        ? 'Use the discovered catalog plus garment context to propose likely links.'
-                        : 'Suggested matches appear after at least one garment is validated and catalog discovery has run.'}
+                        ? `${usage.suggestedMatchCount || 0} garment${(usage.suggestedMatchCount || 0) === 1 ? '' : 's'} currently have a product suggestion.`
+                        : 'Suggestions appear after at least one garment is validated and catalog discovery has run.'}
                     </p>
                   </div>
                   <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                     <p className={`font-medium mb-2 ${strongTextClass}`}>Manual confirmation</p>
                     <p className={mutedTextClass}>
                       {hasConfirmedMappings
-                        ? 'Treat the current preview path as the confirmation checkpoint before installing live mappings.'
-                        : 'A human should still approve the final pairings before the storefront depends on them.'}
+                        ? `${usage.confirmedMatchCount || 0} garment${(usage.confirmedMatchCount || 0) === 1 ? '' : 's'} are confirmed for storefront use.`
+                        : 'A human still needs to approve the final pairings before the storefront depends on them.'}
                     </p>
                   </div>
                   <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                     <p className={`font-medium mb-2 ${strongTextClass}`}>SDK live behavior</p>
                     <p className={mutedTextClass}>
                       {readyForGoLive
-                        ? 'Your current setup is close to a confirmed-mapping launch path.'
-                        : 'Keep the SDK in preview mode until these confirmations are trusted.'}
+                        ? 'Your storefront can now resolve product IDs through confirmed garment mappings.'
+                        : 'Keep the SDK in preview mode until at least one garment is confirmed.'}
                     </p>
                   </div>
                 </div>
+                {matchStatusMessage ? <p className={`text-xs mt-4 ${mutedTextClass}`}>{matchStatusMessage}</p> : null}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1038,97 +1200,58 @@ export default function Dashboard() {
                       />
                     </div>
                     <p className={`text-sm ${mutedTextClass}`}>Garment asset</p>
-                    <p className={`text-base font-mono ${strongTextClass}`}>{g.garmentId}</p>
-                    {g.productName ? <p className={`text-sm mt-2 ${mutedTextClass}`}>{g.productName}</p> : null}
+                    <p className={`text-base font-semibold ${strongTextClass}`}>{g.displayName || g.productName || humanizeGarmentId(g.garmentId)}</p>
+                    <p className={`text-xs font-mono mt-1 ${mutedTextClass}`}>{g.garmentId}</p>
                     {g.category ? <p className={`text-xs mt-1 ${mutedTextClass}`}>Category: {g.category}</p> : null}
-                    <p className={`text-sm mt-2 ${mutedTextClass}`}>Processing record</p>
-                    <p className={`text-xs font-mono break-all ${strongTextClass}`}>{g.cacheKey}</p>
                     <p className={`text-xs mt-2 ${mutedTextClass}`}>Validation status: {g.status}</p>
+                    <p className={`text-xs mt-1 ${mutedTextClass}`}>Suggested product: {g.suggestedProductName || g.suggestedProductId || 'No confident suggestion yet'}</p>
+                    <p className={`text-xs mt-1 ${mutedTextClass}`}>Confirmed product: {g.confirmedProductName || g.confirmedProductId || 'Not confirmed yet'}</p>
+                    {g.matchConfidence ? (
+                      <p className={`text-xs mt-1 ${mutedTextClass}`}>Match confidence: {Math.round(g.matchConfidence * 100)}%</p>
+                    ) : null}
+                    {g.matchReason ? <p className={`text-xs mt-2 ${mutedTextClass}`}>{g.matchReason}</p> : null}
+                    <div className="mt-4 flex flex-col gap-3">
+                      <select
+                        value={selectedProducts[g.garmentId] || ''}
+                        onChange={(e) =>
+                          setSelectedProducts((current) => ({
+                            ...current,
+                            [g.garmentId]: e.target.value,
+                          }))
+                        }
+                        className={inputClass}
+                      >
+                        <option value="">Choose discovered product</option>
+                        {catalogProducts.map((product) => (
+                          <option key={product.productId} value={product.productId}>
+                            {product.productName ? `${product.productName} (${product.productId})` : product.productId}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={() => handleConfirmMatch(g.garmentId)}
+                          disabled={!catalogProducts.length || activeMatchGarmentId === g.garmentId}
+                          className={actionClass}
+                        >
+                          {activeMatchGarmentId === g.garmentId ? 'Saving...' : 'Confirm Mapping'}
+                        </button>
+                        {g.confirmedProductId ? (
+                          <button
+                            onClick={() => handleClearConfirmedMatch(g.garmentId)}
+                            disabled={activeMatchGarmentId === g.garmentId}
+                            className={actionClass}
+                          >
+                            Clear Confirmation
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             </>
           )}
-
-          {garments.some((g) => g.status === 'missing') ? (
-            <div className={`mt-6 ${panelClass}`}>
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-sm ${mutedTextClass}`}>Missing garments (from catalog sync)</p>
-                <button
-                  onClick={() => {
-                    const missing = garments.filter((g) => g.status === 'missing');
-                    const rows = ['garmentId,status', ...missing.map((g) => `${g.garmentId},${g.status}`)];
-                    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'drapixai-missing-garments.csv';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className={actionClass}
-                >
-                  Export CSV
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {garments
-                  .filter((g) => g.status === 'missing')
-                  .slice(missingPage * 12, missingPage * 12 + 12)
-                  .map((g) => (
-                    <span key={g.garmentId} className={`text-xs font-mono px-2 py-1 rounded ${themePreference === 'light' ? 'bg-sky-50 text-slate-900 border border-sky-100' : 'bg-white/10'}`}>
-                      {g.garmentId}
-                    </span>
-                  ))}
-              </div>
-              <div className="flex items-center gap-2 mt-3">
-                <button onClick={() => setMissingPage(Math.max(0, missingPage - 1))} className={actionClass}>
-                  Prev
-                </button>
-                <button onClick={() => setMissingPage(missingPage + 1)} className={actionClass}>
-                  Next
-                </button>
-              </div>
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {garments
-                  .filter((g) => g.status === 'missing')
-                  .slice(missingPage * 6, missingPage * 6 + 6)
-                  .map((g) => (
-                    <div key={`${g.garmentId}-upload`} className={`p-3 rounded-lg ${themePreference === 'light' ? 'bg-white border border-sky-100' : 'bg-black/30 border border-white/10'}`}>
-                      <p className={`text-xs mb-2 ${mutedTextClass}`}>Upload for {g.garmentId}</p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file || !apiKey) return;
-                          setGarmentStatus(`Uploading ${g.garmentId}...`);
-                          const form = new FormData();
-                          form.append('garment_id', g.garmentId);
-                          form.append('cloth_image', file);
-                          const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments`, {
-                            method: 'POST',
-                            headers: { Authorization: `Bearer ${apiKey}` },
-                            body: form,
-                          });
-                          if (!res.ok) {
-                            const data = await res.json().catch(() => ({}));
-                            const message = getApiErrorMessage(data, 'Upload failed.');
-                            setGarmentStatus(message);
-                            setToast(message);
-                            return;
-                          }
-                          setGarmentStatus(`Uploaded ${g.garmentId}.`);
-                          setToast(`Uploaded ${g.garmentId}.`);
-                          await refreshGarments(apiKey);
-                        }}
-                        className={`p-2 text-xs ${mutedTextClass}`}
-                      />
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ) : null}
         </div>
 
         <div id="plugin-demo" className={`${cardClass} mb-8`}>
@@ -1142,9 +1265,9 @@ export default function Dashboard() {
         <div className={cardClass}>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
             <h2 className="text-xl font-bold">Storefront Install Snippet</h2>
-            <Link href="/docs" className={`inline-flex items-center gap-2 ${actionClass}`}>
+            <Link href="/help" className={`inline-flex items-center gap-2 ${actionClass}`}>
               <ExternalLink className="w-4 h-4" />
-              Open Full Integration Guide
+              Open Full Help
             </Link>
           </div>
           <p className={`mb-4 ${mutedTextClass}`}>

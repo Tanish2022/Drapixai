@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
-import { isSupportedUpperBodyItem, normalizeCatalogItem, parseCatalogFeed } from '../lib/catalog-feed';
+import { parseCatalogFeed } from '../lib/catalog-feed';
+import { upsertCatalogProductsForUser } from '../lib/catalog-matching';
 import { consumeVerificationCode, issueVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail } from '../services/emailer';
 
@@ -327,56 +328,26 @@ router.post('/store/resync', async (req, res) => {
     const contentType = response.headers.get('content-type') || '';
     const feedText = await response.text();
     const parsedItems = parseCatalogFeed(feedText, contentType, resolved.user.catalogSyncSource || 'feed_url');
-    const normalizedItems = parsedItems
-      .map((item) => normalizeCatalogItem(item))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-    const uniqueItems = Array.from(new Map(normalizedItems.map((item) => [item.productId, item])).values());
-    const synced: Array<{ garmentId: string; status: string }> = [];
-    const skipped: Array<{ productId: string; reason: string }> = [];
-
-    for (const item of uniqueItems) {
-      if (!isSupportedUpperBodyItem(item)) {
-        skipped.push({ productId: item.productId, reason: 'NOT_UPPER_BODY' });
-        continue;
-      }
-
-      const record = await prisma.garment.upsert({
-        where: { userId_garmentId: { userId: resolved.user.id, garmentId: item.productId } },
-        update: {
-          productName: item.productName,
-          category: item.category,
-          garmentType: item.garmentType || 'upper',
-          sourceImageUrl: item.imageUrl,
-        },
-        create: {
-          userId: resolved.user.id,
-          garmentId: item.productId,
-          cacheKey: null,
-          originalHash: '',
-          status: 'missing',
-          productName: item.productName,
-          category: item.category,
-          garmentType: item.garmentType || 'upper',
-          sourceImageUrl: item.imageUrl,
-        },
-      });
-      synced.push({ garmentId: record.garmentId, status: record.status });
-    }
+    const { discovered, skipped } = await upsertCatalogProductsForUser(
+      prisma,
+      resolved.user.id,
+      parsedItems,
+      resolved.user.catalogSyncSource || 'feed_url'
+    );
 
     await prisma.user.update({
       where: { id: resolved.user.id },
       data: {
         catalogLastSyncedAt: new Date(),
-        catalogLastSyncStatus: `SYNCED_${synced.length}_SKIPPED_${skipped.length}`,
+        catalogLastSyncStatus: `SYNCED_${discovered.length}_SKIPPED_${skipped.length}`,
       },
     });
 
     return res.json({
       ok: true,
-      items: synced,
+      items: discovered,
       skipped,
-      syncedCount: synced.length,
+      syncedCount: discovered.length,
       skippedCount: skipped.length,
     });
   } catch (error) {

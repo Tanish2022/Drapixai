@@ -252,7 +252,7 @@ export default function DemoClient() {
                   Start Free Trial
                 </Link>
                 <Link href="/help" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_read_help' } })} className="px-4 py-2 rounded-xl border border-white/[0.12] hover:bg-white/[0.05] transition-colors">
-                  Open Help Center
+                  Open Help
                 </Link>
               </div>
             </div>

@@ -48,6 +48,37 @@ router.get('/summary', async (req, res) => {
     orderBy: { createdAt: 'desc' },
     take: 8,
   });
+  const [
+    uploadedGarmentCount,
+    discoveredProductCount,
+    suggestedMatchCount,
+    confirmedMatchCount,
+  ] = await Promise.all([
+    prisma.garment.count({
+      where: {
+        userId: validKey.userId,
+        OR: [
+          { originalUrl: { not: null } },
+          { cacheKey: { not: null } },
+          { thumbnailUrl: { not: null } },
+        ],
+      },
+    }),
+    prisma.catalogProduct.count({ where: { userId: validKey.userId } }),
+    prisma.garmentMatch.count({
+      where: {
+        userId: validKey.userId,
+        suggestedProductId: { not: null },
+      },
+    }),
+    prisma.garmentMatch.count({
+      where: {
+        userId: validKey.userId,
+        status: 'confirmed',
+        confirmedProductId: { not: null },
+      },
+    }),
+  ]);
 
   const normalizedPlan = normalizePlanKey(user?.planType);
   const quota = getPlanQuota(normalizedPlan);
@@ -78,6 +109,10 @@ router.get('/summary', async (req, res) => {
     catalogFeedUrl: user?.catalogFeedUrl || '',
     catalogLastSyncedAt: user?.catalogLastSyncedAt ? user.catalogLastSyncedAt.toISOString() : null,
     catalogLastSyncStatus: user?.catalogLastSyncStatus || null,
+    uploadedGarmentCount,
+    discoveredProductCount,
+    suggestedMatchCount,
+    confirmedMatchCount,
     dailyUsage: daily.map(d => ({ date: d.date.toISOString().slice(0, 10), count: d.count })),
     recentRenders: recentRenders.map((render) => ({
       id: render.id,

@@ -4,7 +4,7 @@
 **POST** `/sdk/garments`
 
 Form fields:
-- `garment_id` (required, your product ID)
+- `garment_id` (optional, internal asset label)
 - `cloth_image` (required)
 - `admin_bypass` (optional)
 
@@ -21,7 +21,8 @@ Headers:
 Response:
 ```json
 {
-  "garmentId": "sku-123",
+  "garmentId": "black-oxford-shirt-a1b2c3",
+  "displayName": "Black Oxford Shirt",
   "cacheKey": "brand:sku:hash",
   "didProcess": true,
   "reason": "BACKGROUND_REMOVED"
@@ -42,9 +43,13 @@ Common validation errors:
 Response:
 ```json
 {
-  "garmentId": "sku-123",
+  "garmentId": "black-oxford-shirt-a1b2c3",
+  "displayName": "Black Oxford Shirt",
   "cacheKey": "brand:sku:hash",
   "status": "ready",
+  "matchStatus": "suggested",
+  "suggestedProductId": "sku-123",
+  "confirmedProductId": null,
   "updatedAt": "2026-03-16T00:00:00.000Z"
 }
 ```
@@ -56,37 +61,73 @@ Response:
 ```json
 {
   "items": [
-    { "garmentId": "sku-123", "cacheKey": "...", "status": "ready", "updatedAt": "..." }
+    {
+      "garmentId": "black-oxford-shirt-a1b2c3",
+      "displayName": "Black Oxford Shirt",
+      "cacheKey": "...",
+      "status": "ready",
+      "matchStatus": "confirmed",
+      "suggestedProductId": "sku-123",
+      "confirmedProductId": "sku-123",
+      "updatedAt": "..."
+    }
   ]
 }
 ```
 
-## 4. Garment Image Preview
-**GET** `/sdk/garments/:garmentId/image`
-
-Returns PNG image if cached.
-
-## 5. Sync Product Catalog
-**POST** `/sdk/garments/sync`
+## 4. Catalog Discovery
+**POST** `/sdk/catalog/sync`
 
 Body:
 ```json
-{ "productIds": ["sku-1", "sku-2"] }
+{
+  "items": [
+    { "productId": "sku-123", "productName": "Black Oxford Shirt", "category": "Shirts", "garmentType": "upper" }
+  ]
+}
 ```
 
 Response:
 ```json
-{ "items": [{ "garmentId": "sku-1", "status": "missing" }] }
+{
+  "items": [{ "productId": "sku-123", "status": "discovered" }],
+  "skipped": []
+}
 ```
+
+**GET** `/sdk/catalog`
+
+Returns discovered products available for matching.
+
+## 5. Match Confirmation
+**POST** `/sdk/matches/:garmentId/confirm`
+
+Body:
+```json
+{ "productId": "sku-123" }
+```
+
+This sets the live storefront pairing for that garment.
+
+**DELETE** `/sdk/matches/:garmentId/confirm`
+
+Clears a confirmed pairing and lets DrapixAI fall back to suggestion state.
+
+## 6. Garment Image Preview
+**GET** `/sdk/garments/:garmentId/image`
+
+Returns PNG image if cached.
 
 ## Try-On Usage
 **POST** `/sdk/tryon`
 
 Form fields:
 - `person_image`
-- `productId` (maps to garment_id)
+- `productId` (must point to a confirmed product mapping)
 - `quality` (optional)
 - `garment_type=upper`
 
 If garment is not ready:
 - returns `GARMENT_NOT_READY`
+If the storefront product is not confirmed yet:
+- returns `GARMENT_MAPPING_NOT_CONFIRMED`

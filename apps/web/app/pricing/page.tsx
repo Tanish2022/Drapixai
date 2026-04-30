@@ -9,13 +9,13 @@ const plans = [
   {
     name: 'Starter',
     price: 49,
-    tryons: '1,000',
+    tryons: '1,000 upper-body',
     perTryOn: '$0.049',
     badge: 'Entry Plan',
     accent: 'from-slate-200/20 to-white/5',
     border: 'border-white/[0.08]',
     cta: '/auth/register?plan=starter',
-    description: 'For small brands validating demand and testing AI try-on on live product pages.',
+    description: 'For small brands validating demand and testing upper-body AI try-on on live product pages.',
     features: [
       '1,000 try-ons per month',
       'Upper-body garments only',
@@ -28,16 +28,16 @@ const plans = [
   {
     name: 'Growth',
     price: 149,
-    tryons: '7,500',
-    perTryOn: '$0.0199',
+    tryons: '5,000 upper-body',
+    perTryOn: '$0.0298',
     badge: 'Best Value',
     accent: 'from-cyan-400/20 to-blue-500/10',
     border: 'border-cyan-400/30',
     cta: '/auth/register?plan=growth',
-    description: 'For growing stores that need stronger unit economics and regular try-on usage.',
-    highlights: '59% lower cost per try-on than Starter',
+    description: 'For growing stores that need stronger unit economics and regular upper-body try-on usage.',
+    highlights: '39% lower cost per try-on than Starter',
     features: [
-      '7,500 try-ons per month',
+      '5,000 try-ons per month',
       'Upper-body garments only',
       '1 production domain',
       'Priority email support',
@@ -47,22 +47,23 @@ const plans = [
   },
   {
     name: 'Pro',
-    price: 399,
-    tryons: '25,000',
-    perTryOn: '$0.0160',
-    badge: 'Scale Plan',
+    price: null,
+    tryons: 'Full-body try-ons',
+    perTryOn: 'Coming soon',
+    badge: 'Coming Soon',
     accent: 'from-blue-500/20 to-cyan-400/10',
     border: 'border-blue-400/30',
-    cta: '/auth/register?plan=pro',
-    description: 'For serious brands and higher-volume teams running DrapixAI as a real conversion lever.',
-    highlights: 'Best blended value before enterprise support',
+    cta: null,
+    description: 'For future full-body rollout once DrapixAI is ready to support a broader try-on experience beyond upper-body launch scope.',
+    highlights: 'Planned next: full-body try-ons for larger rollout teams',
+    comingSoon: true,
     features: [
-      '25,000 try-ons per month',
-      'Upper-body garments only',
+      'Full-body try-ons',
+      'Higher-volume rollout path',
       'Priority support queue',
       'Admin analytics + ops visibility',
-      'Best public pricing efficiency',
-      'Built for serious staging and launch traffic',
+      'Launches after current upper-body public rollout',
+      'Commercial details will follow when the feature is ready',
     ],
   },
 ];
@@ -126,12 +127,20 @@ export default function PricingPage() {
                 </div>
 
                 <div className="mb-6">
-                  <div className="flex items-end gap-2">
-                    <span className="text-5xl font-bold">${plan.price}</span>
-                    <span className="text-lg text-gray-400 mb-1">/mo</span>
-                  </div>
-                  <p className="mt-2 text-cyan-200 font-medium">{plan.tryons} try-ons per month</p>
-                  <p className="text-sm text-gray-400 mt-1">Effective price: {plan.perTryOn} per try-on</p>
+                  {plan.comingSoon ? (
+                    <div className="flex items-end gap-2">
+                      <span className="text-4xl font-bold text-cyan-100">Coming soon</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-end gap-2">
+                      <span className="text-5xl font-bold">${plan.price}</span>
+                      <span className="text-lg text-gray-400 mb-1">/mo</span>
+                    </div>
+                  )}
+                  <p className="mt-2 text-cyan-200 font-medium">{plan.comingSoon ? plan.tryons : `${plan.tryons} try-ons per month`}</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {plan.comingSoon ? plan.perTryOn : `Effective price: ${plan.perTryOn} per try-on`}
+                  </p>
                 </div>
 
                 <p className="text-gray-300 leading-7 mb-4">{plan.description}</p>
@@ -155,17 +164,23 @@ export default function PricingPage() {
                   ))}
                 </div>
 
-                <Link
-                  href={plan.cta}
-                  className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold transition-colors ${
-                    index === 1
-                      ? 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90'
-                      : 'border border-white/[0.12] hover:bg-white/[0.05]'
-                  }`}
-                >
-                  Start Trial
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
+                {plan.comingSoon ? (
+                  <div className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-5 py-3 font-semibold text-cyan-100">
+                    Coming Soon
+                  </div>
+                ) : (
+                  <Link
+                    href={plan.cta}
+                    className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold transition-colors ${
+                      index === 1
+                        ? 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90'
+                        : 'border border-white/[0.12] hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    Start Trial
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                )}
               </div>
             </section>
           ))}

@@ -499,6 +499,8 @@ export default function SettingsPage() {
     );
   }
 
+  const isQuotaExhausted = usage.quotaRemaining <= 0;
+
   return (
     <main className={pageClass}>
       {themePreference === 'light' ? (
@@ -918,8 +920,8 @@ export default function SettingsPage() {
                 <Store className="w-4 h-4" />
                 Back to Dashboard
               </Link>
-              <Link href="/docs" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
-                Full Guide
+              <Link href="/help" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                Full Help
               </Link>
             </div>
           </div>
@@ -929,6 +931,14 @@ export default function SettingsPage() {
               <CreditCard className="w-6 h-6 text-blue-400" />
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Commercial Access</h2>
             </div>
+            {isQuotaExhausted ? (
+              <div className={`${panelClass} space-y-2 border-rose-400/30 bg-rose-500/10`}>
+                <p className={`text-sm font-semibold ${themePreference === 'light' ? 'text-rose-700' : 'text-rose-200'}`}>Plan limit reached</p>
+                <p className={`text-sm ${themePreference === 'light' ? 'text-rose-900' : 'text-rose-100'}`}>
+                  This account has no try-ons remaining in the current period. Upgrade volume or contact sales before expecting more previews or storefront traffic to succeed.
+                </p>
+              </div>
+            ) : null}
             <div className={`${panelClass} space-y-2`}>
               <p className={`text-sm ${mutedTextClass}`}>Current plan</p>
               <p className={`text-lg font-semibold ${strongTextClass}`}>{usage.planName}</p>
@@ -947,8 +957,17 @@ export default function SettingsPage() {
                 Open Subscription
               </Link>
               <Link href="/pricing" className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
-                Upgrade Plan
+                {isQuotaExhausted ? 'Upgrade Now' : 'Upgrade Plan'}
               </Link>
+              {isQuotaExhausted ? (
+                <a
+                  href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade"
+                  className="inline-flex items-center gap-2 rounded-xl border border-rose-400/30 px-4 py-2 text-sm text-rose-100 hover:bg-rose-400/10 transition-colors"
+                >
+                  <Mail className="w-4 h-4" />
+                  Contact Sales
+                </a>
+              ) : null}
               <button
                 type="button"
                 onClick={handleLogout}

@@ -17,6 +17,15 @@ import { processWithWatermark } from '../services/watermark';
 import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
 import { CatalogSyncInputItem, isSupportedUpperBodyItem, normalizeCatalogItem } from '../lib/catalog-feed';
 import {
+  buildGarmentAssetId,
+  clearConfirmedGarmentMatch,
+  confirmGarmentMatch,
+  humanizeIdentifier,
+  recomputeGarmentMatchesForUser,
+  resolveConfirmedGarmentForProduct,
+  upsertCatalogProductsForUser,
+} from '../lib/catalog-matching';
+import {
   getPlanName,
   getPlanQuality,
   getPlanQuota,
@@ -105,12 +114,6 @@ const getUserPlanContext = (planType: string | null | undefined) => {
   };
 };
 
-const findSyncedGarment = async (userId: number, garmentId: string) => {
-  return prisma.garment.findUnique({
-    where: { userId_garmentId: { userId, garmentId } }
-  });
-};
-
 const uploadOriginalGarment = async (
   userId: number,
   garmentId: string,
@@ -181,6 +184,51 @@ const uploadThumbnail = async (
     fs.writeFileSync(localPath, thumb);
     return `local:${localPath}`;
   }
+};
+
+const listGarmentsWithMatchState = async (userId: number) => {
+  const [garments, matches, products] = await Promise.all([
+    prisma.garment.findMany({
+      where: {
+        userId,
+        OR: [
+          { originalUrl: { not: null } },
+          { cacheKey: { not: null } },
+          { thumbnailUrl: { not: null } },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.garmentMatch.findMany({ where: { userId } }),
+    prisma.catalogProduct.findMany({ where: { userId } }),
+  ]);
+
+  const matchByGarmentId = new Map(matches.map((match) => [match.garmentId, match]));
+  const productById = new Map(products.map((product) => [product.productId, product]));
+
+  return garments.map((garment) => {
+    const match = matchByGarmentId.get(garment.garmentId);
+    const suggestedProduct = match?.suggestedProductId ? productById.get(match.suggestedProductId) : null;
+    const confirmedProduct = match?.confirmedProductId ? productById.get(match.confirmedProductId) : null;
+    return {
+      garmentId: garment.garmentId,
+      displayName: garment.displayName,
+      cacheKey: garment.cacheKey,
+      status: garment.status,
+      productName: garment.productName,
+      category: garment.category,
+      garmentType: garment.garmentType,
+      sourceImageUrl: garment.sourceImageUrl,
+      updatedAt: garment.updatedAt,
+      matchStatus: match?.status || 'unmatched',
+      suggestedProductId: match?.suggestedProductId || null,
+      suggestedProductName: suggestedProduct?.productName || null,
+      confirmedProductId: match?.confirmedProductId || null,
+      confirmedProductName: confirmedProduct?.productName || null,
+      matchConfidence: match?.confidence ?? null,
+      matchReason: match?.matchReason || null,
+    };
+  });
 };
 
 /**
@@ -366,6 +414,16 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       });
     }
 
+    if (productId) {
+      const mappedGarment = await resolveConfirmedGarmentForProduct(prisma, user.id, String(productId));
+      if (!mappedGarment?.cacheKey) {
+        return res.status(409).json({
+          error: 'GARMENT_MAPPING_NOT_CONFIRMED',
+          message: 'This product does not have a confirmed garment mapping yet. Confirm the pairing in the dashboard before using the storefront SDK.'
+        });
+      }
+    }
+
     const plan = getUserPlanContext(user.planType);
     if (!plan.active) {
       return res.status(403).json({ 
@@ -494,7 +552,9 @@ router.post('/tryon', authMiddleware, upload.fields([
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
     const personFile = files?.person_image?.[0];
     const clothFile = files?.cloth_image?.[0];
-    const garmentId = (req.body.garment_id as string | undefined) || (req.body.productId as string | undefined);
+    const explicitGarmentId = req.body.garment_id as string | undefined;
+    const requestedProductId = req.body.productId as string | undefined;
+    const garmentId = explicitGarmentId || requestedProductId;
     const clothCacheKey = req.body.cloth_cache_key as string | undefined;
 
     if (!personFile) {
@@ -549,14 +609,21 @@ router.post('/tryon', authMiddleware, upload.fields([
       let cacheKey = clothCacheKey;
       let garmentRecord: any = null;
       const resolvedGarmentId = garmentId ?? '';
+      let actualGarmentId = resolvedGarmentId;
       if (garmentId) {
-        const garment = await prisma.garment.findUnique({
-          where: { userId_garmentId: { userId: user.id, garmentId: resolvedGarmentId } }
-        });
+        const garment = explicitGarmentId
+          ? await prisma.garment.findUnique({
+              where: { userId_garmentId: { userId: user.id, garmentId: resolvedGarmentId } }
+            })
+          : await resolveConfirmedGarmentForProduct(prisma, user.id, resolvedGarmentId);
         if (!garment) {
-          return res.status(404).json({ error: 'GARMENT_NOT_FOUND' });
+          return res.status(409).json({
+            error: 'GARMENT_MAPPING_NOT_CONFIRMED',
+            message: 'This product does not have a confirmed garment mapping yet. Confirm the product pairing in the dashboard first.'
+          });
         }
         garmentRecord = garment;
+        actualGarmentId = garment.garmentId;
         if (!garment.cacheKey) {
           return res.status(409).json({ error: 'GARMENT_NOT_READY' });
         }
@@ -595,7 +662,7 @@ router.post('/tryon', authMiddleware, upload.fields([
             const regenPayload = {
               cloth_image_base64: originalBytes.toString('base64'),
               brand_id: String(user.id),
-              garment_id: garmentId,
+              garment_id: actualGarmentId,
               admin_bypass: false
             };
             const regenRes = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
@@ -603,11 +670,11 @@ router.post('/tryon', authMiddleware, upload.fields([
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(regenPayload)
             });
-            if (regenRes.ok && resolvedGarmentId) {
+            if (regenRes.ok && actualGarmentId) {
               const regen = await regenRes.json() as GarmentPreprocessResponse;
               finalCacheKey = regen.cache_key as string;
               await prisma.garment.update({
-                where: { userId_garmentId: { userId: user.id, garmentId: resolvedGarmentId } },
+                where: { userId_garmentId: { userId: user.id, garmentId: actualGarmentId } },
                 data: { cacheKey: finalCacheKey, status: 'ready' }
               });
             }
@@ -664,23 +731,16 @@ router.post('/tryon', authMiddleware, upload.fields([
 router.post('/garments', authMiddleware, upload.single('cloth_image'), async (req: any, res: any) => {
   try {
     const user = req.user;
-    const garmentId = String(req.body.garment_id || req.body.productId || '').trim();
+    const requestedGarmentId = String(req.body.garment_id || req.body.productId || '').trim();
     const adminBypass = String(req.body.admin_bypass || '').toLowerCase() === 'true';
 
-    if (!garmentId) {
-      return res.status(400).json({ error: 'GARMENT_ID_REQUIRED' });
-    }
     if (!req.file) {
       return res.status(400).json({ error: 'CLOTH_IMAGE_REQUIRED' });
     }
 
-    const syncedGarment = await findSyncedGarment(user.id, garmentId);
-    if (!syncedGarment) {
-      return res.status(409).json({
-        error: 'GARMENT_NOT_SYNCED',
-        message: 'Sync upper-body product IDs first, then upload matching garment images.'
-      });
-    }
+    const fileLabel = path.parse(req.file.originalname || '').name || 'garment';
+    const garmentId = requestedGarmentId || buildGarmentAssetId(fileLabel);
+    const displayName = humanizeIdentifier(requestedGarmentId || fileLabel);
 
     const clothBytes = fs.readFileSync(req.file.path);
     const originalHash = crypto.createHash('sha256').update(clothBytes).digest('hex');
@@ -718,12 +778,14 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
     const status = GARMENT_APPROVAL_REQUIRED ? 'pending' : 'ready';
     await prisma.garment.upsert({
       where: { userId_garmentId: { userId: user.id, garmentId } },
-      update: { cacheKey, originalHash, originalUrl, thumbnailUrl, status },
-      create: { userId: user.id, garmentId, cacheKey, originalHash, originalUrl, thumbnailUrl, status }
+      update: { cacheKey, displayName, originalHash, originalUrl, thumbnailUrl, status },
+      create: { userId: user.id, garmentId, displayName, cacheKey, originalHash, originalUrl, thumbnailUrl, status }
     });
+    await recomputeGarmentMatchesForUser(prisma, user.id);
 
     res.json({
       garmentId,
+      displayName,
       cacheKey,
       didProcess: result.did_process,
       reason: result.reason,
@@ -739,7 +801,7 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
 
 /**
  * POST /sdk/garments/bulk
- * Bulk upload garments using filename as garmentId
+ * Bulk upload garments as standalone assets
  */
 router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), async (req: any, res: any) => {
   try {
@@ -751,20 +813,13 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
 
     const results: any[] = [];
     for (const file of files) {
-      const garmentId = path.parse(file.originalname).name;
-      if (!garmentId) {
+      const fileLabel = path.parse(file.originalname).name;
+      if (!fileLabel) {
         results.push({ file: file.originalname, error: 'INVALID_FILENAME' });
         continue;
       }
-      const syncedGarment = await findSyncedGarment(user.id, garmentId);
-      if (!syncedGarment) {
-        results.push({
-          garmentId,
-          error: 'GARMENT_NOT_SYNCED',
-          message: 'Sync upper-body product IDs first, then upload files whose filenames match those IDs.'
-        });
-        continue;
-      }
+      const garmentId = buildGarmentAssetId(fileLabel);
+      const displayName = humanizeIdentifier(fileLabel);
       const clothBytes = fs.readFileSync(file.path);
       const originalHash = crypto.createHash('sha256').update(clothBytes).digest('hex');
       const originalUrl = await uploadOriginalGarment(user.id, garmentId, file.path, file.mimetype);
@@ -795,11 +850,13 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
       const status = GARMENT_APPROVAL_REQUIRED ? 'pending' : 'ready';
       await prisma.garment.upsert({
         where: { userId_garmentId: { userId: user.id, garmentId } },
-        update: { cacheKey, originalHash, originalUrl, thumbnailUrl, status },
-        create: { userId: user.id, garmentId, cacheKey, originalHash, originalUrl, thumbnailUrl, status }
+        update: { cacheKey, displayName, originalHash, originalUrl, thumbnailUrl, status },
+        create: { userId: user.id, garmentId, displayName, cacheKey, originalHash, originalUrl, thumbnailUrl, status }
       });
-      results.push({ garmentId, cacheKey, status });
+      results.push({ garmentId, displayName, cacheKey, status });
     }
+
+    await recomputeGarmentMatchesForUser(prisma, user.id);
 
     res.json({ items: results });
   } catch (error) {
@@ -832,14 +889,23 @@ router.get('/garments/:garmentId', authMiddleware, async (req: any, res: any) =>
     if (!garment) {
       return res.status(404).json({ error: 'GARMENT_NOT_FOUND' });
     }
+    const match = await prisma.garmentMatch.findUnique({
+      where: { userId_garmentId: { userId: user.id, garmentId } }
+    });
     res.json({
       garmentId: garment.garmentId,
+      displayName: garment.displayName,
       cacheKey: garment.cacheKey,
       status: garment.status,
       productName: garment.productName,
       category: garment.category,
       garmentType: garment.garmentType,
       sourceImageUrl: garment.sourceImageUrl,
+      matchStatus: match?.status || 'unmatched',
+      suggestedProductId: match?.suggestedProductId || null,
+      confirmedProductId: match?.confirmedProductId || null,
+      matchConfidence: match?.confidence ?? null,
+      matchReason: match?.matchReason || null,
       updatedAt: garment.updatedAt
     });
   } catch (error) {
@@ -855,22 +921,8 @@ router.get('/garments/:garmentId', authMiddleware, async (req: any, res: any) =>
 router.get('/garments', authMiddleware, async (req: any, res: any) => {
   try {
     const user = req.user;
-    const garments = await prisma.garment.findMany({
-      where: { userId: user.id },
-      orderBy: { updatedAt: 'desc' }
-    });
-    res.json({
-      items: garments.map((g) => ({
-        garmentId: g.garmentId,
-        cacheKey: g.cacheKey,
-        status: g.status,
-        productName: g.productName,
-        category: g.category,
-        garmentType: g.garmentType,
-        sourceImageUrl: g.sourceImageUrl,
-        updatedAt: g.updatedAt
-      }))
-    });
+    const items = await listGarmentsWithMatchState(user.id);
+    res.json({ items });
   } catch (error) {
     console.error('Garment list error:', error);
     res.status(500).json({ error: 'Failed to list garments' });
@@ -878,15 +930,38 @@ router.get('/garments', authMiddleware, async (req: any, res: any) => {
 });
 
 /**
- * POST /sdk/garments/sync
- * Create stubs for product catalog IDs
+ * GET /sdk/catalog
+ * List discovered catalog products
  */
-router.post('/garments/sync', authMiddleware, async (req: any, res: any) => {
+router.get('/catalog', authMiddleware, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    const items = await prisma.catalogProduct.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: 'desc' }
+    });
+    res.json({
+      items: items.map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        category: item.category,
+        garmentType: item.garmentType,
+        imageUrl: item.imageUrl,
+        status: item.status,
+        updatedAt: item.updatedAt,
+      }))
+    });
+  } catch (error) {
+    console.error('Catalog list error:', error);
+    res.status(500).json({ error: 'Failed to list catalog products' });
+  }
+});
+
+const syncCatalogHandler = async (req: any, res: any) => {
   try {
     const user = req.user;
     const productIds: string[] = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
     const rawItems: CatalogSyncInputItem[] = Array.isArray(req.body?.items) ? req.body.items : [];
-
     if (productIds.length === 0 && rawItems.length === 0) {
       return res.status(400).json({ error: 'PRODUCT_IDS_REQUIRED' });
     }
@@ -904,46 +979,84 @@ router.post('/garments/sync', authMiddleware, async (req: any, res: any) => {
       new Map(normalizedItems.map((item) => [item.productId, item])).values()
     );
 
-    const synced: Array<{ garmentId: string; status: string }> = [];
-    const skipped: Array<{ productId: string; reason: string }> = [];
+    const { discovered, skipped } = await upsertCatalogProductsForUser(prisma, user.id, uniqueItems, 'manual_csv');
 
-    for (const item of uniqueItems) {
-      if (!productIds.includes(item.productId) && !isSupportedUpperBodyItem(item)) {
-        skipped.push({ productId: item.productId, reason: 'NOT_UPPER_BODY' });
-        continue;
-      }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        catalogLastSyncedAt: new Date(),
+        catalogLastSyncStatus: `SYNCED_${discovered.length}_SKIPPED_${skipped.length}`,
+      },
+    });
 
-      const record = await prisma.garment.upsert({
-        where: { userId_garmentId: { userId: user.id, garmentId: item.productId } },
-        update: {
-          productName: item.productName,
-          category: item.category,
-          garmentType: item.garmentType || 'upper',
-          sourceImageUrl: item.imageUrl,
-        },
-        create: {
-          userId: user.id,
-          garmentId: item.productId,
-          cacheKey: null,
-          originalHash: '',
-          status: 'missing',
-          productName: item.productName,
-          category: item.category,
-          garmentType: item.garmentType || 'upper',
-          sourceImageUrl: item.imageUrl,
-        }
-      });
-
-      synced.push({
-        garmentId: record.garmentId,
-        status: record.status
-      });
-    }
-
-    res.json({ items: synced, skipped });
+    res.json({ items: discovered, skipped });
   } catch (error) {
     console.error('Garment sync error:', error);
     res.status(500).json({ error: 'Garment sync failed' });
+  }
+};
+
+/**
+ * POST /sdk/catalog/sync
+ * Discover catalog products for matching
+ */
+router.post('/catalog/sync', authMiddleware, syncCatalogHandler);
+
+/**
+ * POST /sdk/garments/sync
+ * Backward-compatible alias for catalog discovery
+ */
+router.post('/garments/sync', authMiddleware, syncCatalogHandler);
+
+/**
+ * POST /sdk/matches/:garmentId/confirm
+ * Confirm a garment-to-product pairing
+ */
+router.post('/matches/:garmentId/confirm', authMiddleware, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    const garmentId = String(req.params.garmentId || '').trim();
+    const productId = String(req.body?.productId || '').trim();
+
+    if (!garmentId || !productId) {
+      return res.status(400).json({ error: 'GARMENT_AND_PRODUCT_REQUIRED' });
+    }
+
+    try {
+      const match = await confirmGarmentMatch(prisma, user.id, garmentId, productId);
+      return res.json({
+        ok: true,
+        garmentId,
+        productId,
+        status: match.status,
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : 'MATCH_CONFIRM_FAILED';
+      return res.status(code === 'GARMENT_NOT_FOUND' || code === 'PRODUCT_NOT_FOUND' ? 404 : 400).json({ error: code });
+    }
+  } catch (error) {
+    console.error('Match confirm error:', error);
+    res.status(500).json({ error: 'MATCH_CONFIRM_FAILED' });
+  }
+});
+
+/**
+ * DELETE /sdk/matches/:garmentId/confirm
+ * Clear a confirmed garment-to-product pairing
+ */
+router.delete('/matches/:garmentId/confirm', authMiddleware, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    const garmentId = String(req.params.garmentId || '').trim();
+    if (!garmentId) {
+      return res.status(400).json({ error: 'GARMENT_ID_REQUIRED' });
+    }
+
+    await clearConfirmedGarmentMatch(prisma, user.id, garmentId);
+    res.json({ ok: true, garmentId });
+  } catch (error) {
+    console.error('Match clear error:', error);
+    res.status(500).json({ error: 'MATCH_CLEAR_FAILED' });
   }
 });
 

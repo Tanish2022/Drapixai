@@ -142,7 +142,6 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3 md:gap-6">
               <Link href="/pricing" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Pricing</Link>
-              <Link href="/docs" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Docs</Link>
               <Link href="/help" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Help</Link>
               {hasDashboardAccess ? (
                 <div className="relative" ref={profileMenuRef}>
@@ -198,7 +197,6 @@ export default function Home() {
           <div className="mt-3 flex items-center gap-4 text-sm text-gray-400 md:hidden">
             <Link href="/demo" className="hover:text-white transition-colors">Demo</Link>
             <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             <Link href="/help" className="hover:text-white transition-colors">Help</Link>
             {hasDashboardAccess ? <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link> : null}
           </div>
@@ -347,27 +345,28 @@ export default function Home() {
               {
                 name: 'Starter',
                 price: '$49',
-                tryons: '1,000 try-ons/month',
-                description: 'For smaller brands validating demand on live product pages.',
+                tryons: '1,000 upper-body try-ons/month',
+                description: 'For smaller brands validating demand on live product pages with upper-body try-ons only.',
                 features: ['Standard support', '1 production domain', 'SDK + REST API access'],
                 cta: '/auth/register?plan=starter',
               },
               {
                 name: 'Growth',
                 price: '$149',
-                tryons: '7,500 try-ons/month',
-                description: 'For growing stores that need better unit economics and real usage headroom.',
+                tryons: '5,000 upper-body try-ons/month',
+                description: 'For growing stores that need better unit economics and real usage headroom for upper-body try-ons only.',
                 features: ['Priority email support', 'Advanced analytics', 'Best value per try-on'],
                 cta: '/auth/register?plan=growth',
                 featured: true,
               },
               {
                 name: 'Pro',
-                price: '$399',
-                tryons: '25,000 try-ons/month',
-                description: 'For serious teams treating DrapixAI as a conversion channel, not an experiment.',
-                features: ['Priority support queue', 'Admin analytics + ops visibility', 'Best public pricing efficiency'],
-                cta: '/auth/register?plan=pro',
+                price: 'Coming soon',
+                tryons: 'Full-body try-ons',
+                description: 'Reserved for the future full-body DrapixAI rollout once the broader try-on experience is ready.',
+                features: ['Full-body try-ons', 'Higher-volume rollout path', 'Commercial details announced at launch'],
+                cta: null,
+                comingSoon: true,
               },
             ].map((plan) => (
               <div key={plan.name} className={`p-8 rounded-2xl backdrop-blur-sm transition-all duration-300 ${plan.featured ? 'bg-gradient-to-b from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 md:-translate-y-4' : 'bg-[#0b1120]/50 border border-white/[0.06] hover:border-white/[0.1]'}`}>
@@ -380,7 +379,7 @@ export default function Home() {
                 <p className="text-gray-400 text-sm mb-6">{plan.description}</p>
                 <div className="mb-6">
                   <span className="text-4xl font-bold text-white">{plan.price}</span>
-                  <span className="text-gray-500"> / month</span>
+                  {!plan.comingSoon ? <span className="text-gray-500"> / month</span> : null}
                   <p className="text-cyan-300 text-sm mt-2">{plan.tryons}</p>
                 </div>
                 <ul className="space-y-4 mb-8">
@@ -390,9 +389,15 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <Link href={plan.cta} className={`block w-full py-3 px-4 text-center rounded-xl font-semibold transition-colors ${plan.featured ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white hover:opacity-90' : 'border border-white/[0.1] text-white hover:bg-white/[0.05]'}`}>
-                  Start Trial
-                </Link>
+                {plan.comingSoon ? (
+                  <div className="block w-full py-3 px-4 text-center rounded-xl font-semibold border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+                    Coming Soon
+                  </div>
+                ) : (
+                  <Link href={plan.cta} className={`block w-full py-3 px-4 text-center rounded-xl font-semibold transition-colors ${plan.featured ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white hover:opacity-90' : 'border border-white/[0.1] text-white hover:bg-white/[0.05]'}`}>
+                    Start Trial
+                  </Link>
+                )}
               </div>
             ))}
 

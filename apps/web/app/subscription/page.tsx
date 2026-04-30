@@ -90,6 +90,9 @@ export default function SubscriptionPage() {
     );
   }
 
+  const isQuotaExhausted = usage.quotaRemaining <= 0;
+  const isQuotaLow = !isQuotaExhausted && usage.quotaRemaining <= Math.max(50, Math.ceil(usage.quota * 0.1));
+
   return (
     <main className={pageClass}>
       {themePreference === 'light' ? (
@@ -120,6 +123,31 @@ export default function SubscriptionPage() {
           </div>
         </div>
 
+        {isQuotaExhausted ? (
+          <div className={`mb-8 rounded-[28px] border p-6 ${themePreference === 'light' ? 'border-rose-200 bg-rose-50/90' : 'border-rose-400/30 bg-rose-500/10'}`}>
+            <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${themePreference === 'light' ? 'text-rose-700' : 'text-rose-200'}`}>Usage limit reached</p>
+            <h2 className={`mt-2 text-2xl font-bold ${themePreference === 'light' ? 'text-rose-950' : 'text-white'}`}>This plan has no try-ons remaining for the current period.</h2>
+            <p className={`mt-3 max-w-3xl text-sm leading-7 ${themePreference === 'light' ? 'text-rose-900/80' : 'text-rose-100/80'}`}>
+              Internal previews, storefront rollout, and production traffic should pause here. Move to a higher-volume plan or contact sales if your team needs immediate headroom before renewal.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/pricing" className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500 text-white hover:bg-rose-400'} transition-colors`}>
+                Upgrade plan
+              </Link>
+              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'border-rose-200 text-rose-800 hover:bg-rose-100' : 'border-rose-300/30 text-rose-100 hover:bg-white/[0.05]'} transition-colors`}>
+                Contact sales
+              </a>
+            </div>
+          </div>
+        ) : isQuotaLow ? (
+          <div className={`mb-8 rounded-[28px] border p-6 ${themePreference === 'light' ? 'border-amber-200 bg-amber-50/90' : 'border-amber-400/30 bg-amber-500/10'}`}>
+            <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${themePreference === 'light' ? 'text-amber-700' : 'text-amber-200'}`}>Quota running low</p>
+            <p className={`mt-2 text-sm leading-7 ${themePreference === 'light' ? 'text-amber-900/80' : 'text-amber-100/80'}`}>
+              You only have {usage.quotaRemaining} try-ons left this period. If you expect more previews or live traffic before renewal, upgrade early so rollout does not stall.
+            </p>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
           <div className={cardClass}>
             <CreditCard className="w-8 h-8 text-cyan-400 mb-4" />
@@ -134,7 +162,9 @@ export default function SubscriptionPage() {
             <Gauge className="w-8 h-8 text-blue-400 mb-4" />
             <p className={`text-sm mb-2 ${mutedTextClass}`}>Usage This Period</p>
             <p className="text-2xl font-bold">{usage.rendersUsed} / {usage.quota}</p>
-            <p className={`text-xs mt-2 ${mutedTextClass}`}>{usage.quotaRemaining} try-ons remaining</p>
+            <p className={`text-xs mt-2 ${isQuotaExhausted ? (themePreference === 'light' ? 'text-rose-700' : 'text-rose-300') : isQuotaLow ? (themePreference === 'light' ? 'text-amber-700' : 'text-amber-300') : mutedTextClass}`}>
+              {isQuotaExhausted ? 'No try-ons remaining this period' : `${usage.quotaRemaining} try-ons remaining`}
+            </p>
           </div>
 
           <div className={cardClass}>
@@ -201,20 +231,29 @@ export default function SubscriptionPage() {
               </div>
               <div className={panelClass}>
                 <p className={`font-medium mb-2 ${strongTextClass}`}>3. Increase volume only after validation</p>
-                <p className={mutedTextClass}>Use the trial or current plan to confirm quality, catalog readiness, and traffic fit before increasing monthly volume or moving into a sales-led rollout.</p>
+                <p className={mutedTextClass}>
+                  {isQuotaExhausted
+                    ? 'You have already consumed the plan limit for this period. Upgrade now or contact sales before trying to continue rollout.'
+                    : 'Use the trial or current plan to confirm quality, catalog readiness, and traffic fit before increasing monthly volume or moving into a sales-led rollout.'}
+                </p>
               </div>
             </div>
             <div className="flex flex-wrap gap-3 mt-6">
               <Link href="/settings" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                 Open Settings
               </Link>
-              <Link href="/docs" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
-                Integration Guide
+              <Link href="/help" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                Integration Help
               </Link>
               <Link href="/pricing" className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
-                Upgrade Plan
+                {isQuotaExhausted ? 'Upgrade now' : 'Upgrade Plan'}
                 <ExternalLink className="w-4 h-4" />
               </Link>
+              {isQuotaExhausted ? (
+                <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className="inline-flex items-center gap-2 rounded-xl border border-rose-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                  Contact Sales
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

@@ -19,7 +19,7 @@ import { getSdkScriptUrl, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
 export const metadata: Metadata = {
   title: 'Help',
-  description: 'Help center, setup guidance, and troubleshooting for DrapixAI.',
+  description: 'Unified onboarding, integration, troubleshooting, and support help for DrapixAI.',
 };
 
 const sidebarSections = [
@@ -129,6 +129,24 @@ const quickStartEmbed = `<script src="${getSdkScriptUrl()}"></script>
   });
 </script>`;
 
+const autoAttachSnippet = `<script src="${getSdkScriptUrl()}"></script>
+
+<div data-drapix-product-id="shirt-001">
+  <div data-drapix-button-slot></div>
+</div>
+
+<script>
+  DrapixAI.init({
+    apiKey: 'YOUR_API_KEY',
+    autoAttach: true,
+    productSelector: '[data-drapix-product-id]',
+    productIdAttribute: 'data-drapix-product-id',
+    buttonTargetSelector: '[data-drapix-button-slot]',
+    baseUrl: '${PUBLIC_API_BASE_URL}',
+    garmentType: 'upper'
+  });
+</script>`;
+
 const curlTryOn = `curl -X POST '${PUBLIC_API_BASE_URL}/sdk/tryon' \\
   -H 'Authorization: Bearer YOUR_API_KEY' \\
   -F 'garment_id=sku-12345' \\
@@ -164,22 +182,29 @@ export default function HelpPage() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTQ4IDBIMFY0OCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')] opacity-30" />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-16 lg:py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-8">
-          <aside className="lg:sticky lg:top-24 self-start rounded-3xl border border-white/[0.08] bg-[#0b1120]/85 backdrop-blur-xl p-5">
-            <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-3 mb-6">
-              <Search className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-400">Browse help topics by section</span>
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-10 lg:py-12">
+        <div className="grid grid-cols-1 items-start lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
+          <aside className="self-start rounded-3xl border border-white/[0.08] bg-[#0b1120]/85 backdrop-blur-xl p-5 lg:flex lg:max-h-[calc(100vh-5.5rem)] lg:flex-col">
+            <div className="mb-6 rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white">Browse help topics</p>
+                  <p className="mt-1 text-xs leading-5 text-gray-400">
+                    Use the section list below for setup help, troubleshooting, and support questions.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="mb-6">
-              <p className="text-xl font-semibold text-white">DrapixAI Help Center</p>
+              <p className="text-xl font-semibold text-white">DrapixAI Help</p>
               <p className="text-sm text-gray-400 mt-2">
-                Start here before opening a support request.
+                One place for onboarding, SDK setup, troubleshooting, rollout guidance, and support-first answers.
               </p>
             </div>
 
-            <nav className="space-y-2">
+            <nav className="space-y-2 lg:min-h-0 lg:max-h-[calc(100vh-18rem)] lg:flex-1 lg:overflow-y-auto lg:pr-2 [scrollbar-color:rgba(103,232,249,0.35)_transparent] [scrollbar-width:thin]">
               {sidebarSections.map((section) => (
                 <a
                   key={section.id}
@@ -192,12 +217,12 @@ export default function HelpPage() {
             </nav>
           </aside>
 
-          <div className="space-y-8">
+          <div className="self-start space-y-6">
             <section id="overview" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
               <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Help Center</p>
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Support should follow the same onboarding story brands see in the product.</h1>
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">One place for onboarding, installation, troubleshooting, and rollout answers.</h1>
               <p className="text-lg text-gray-300 leading-8 max-w-4xl">
-                DrapixAI support is now organized around the confirmed mapping flow: garment upload and validation, catalog discovery, suggested matches, manual confirmation, then SDK install on confirmed pairings only.
+                DrapixAI guidance is organized around the confirmed mapping flow: garment upload and validation, catalog discovery, suggested matches, manual confirmation, then SDK install on confirmed pairings only.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
@@ -253,8 +278,8 @@ export default function HelpPage() {
 {quickStartEmbed}
                 </pre>
                 <div className="mt-4">
-                  <Link href="/docs" className="inline-flex items-center gap-2 text-sm text-cyan-300 hover:text-cyan-200">
-                    Open full SDK installation docs
+                  <Link href="#integration-help" className="inline-flex items-center gap-2 text-sm text-cyan-300 hover:text-cyan-200">
+                    Jump to full integration guidance
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
@@ -376,6 +401,20 @@ export default function HelpPage() {
                 </div>
               </div>
 
+              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 mb-8">
+                <h3 className="text-lg font-semibold mb-3">Browser SDK single-product install</h3>
+                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200">
+{quickStartEmbed}
+                </pre>
+              </div>
+
+              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 mb-8">
+                <h3 className="text-lg font-semibold mb-3">Browser SDK auto-attach install</h3>
+                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200">
+{autoAttachSnippet}
+                </pre>
+              </div>
+
               <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
                 <h3 className="text-lg font-semibold mb-3">Python example</h3>
                 <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200 whitespace-pre-wrap">
@@ -390,7 +429,8 @@ export default function HelpPage() {
                 <h2 className="text-3xl font-semibold">Limits &amp; Billing</h2>
               </div>
               <div className="space-y-4 text-gray-300">
-                <p>Trial, Starter, Growth, and Pro plans have different monthly try-on limits. Requests can fail even with a valid API key if the account has already consumed its quota.</p>
+                <p>Trial, Starter, and Growth are the current public plans. Requests can fail even with a valid API key if the account has already consumed its quota.</p>
+                <p>Pro should currently be explained as coming soon and tied to future full-body try-ons, not as a plan brands can activate today.</p>
                 <p>If a customer believes the limit is wrong, first check the dashboard usage counts and the admin analytics panel before assuming a billing issue.</p>
                 <p>Upgrade links should point customers to the pricing page until the live billing flow is finalized, and enterprise requests should go through the sales contact path.</p>
               </div>
