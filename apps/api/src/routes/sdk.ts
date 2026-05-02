@@ -41,6 +41,10 @@ type GarmentPreprocessResponse = {
   image_base64: string;
   did_process: boolean;
   reason: string;
+  profile_key?: string;
+  profile_label?: string;
+  support_level?: string;
+  warnings?: string[];
 };
 
 const parseJsonSafe = <T>(value: string): T | null => {
@@ -71,6 +75,8 @@ const getGarmentValidationMessage = (code: string) => {
       return 'Upload a garment-only image. Photos with a person wearing the garment are rejected because they reduce try-on realism.';
     case 'GARMENT_TOO_LONG':
       return 'This garment is too long for the current upper-body launch scope. Use tops, shirts, blouses, or short kurtis with tighter framing.';
+    case 'GARMENT_CATEGORY_UNSUPPORTED':
+      return 'This garment category is not in the current realism-focused launch scope. Use shirts, t-shirts, polos, tops, blouses, or short upper-body kurtis.';
     default:
       return 'Garment upload failed validation. Use one isolated upper-body garment on a clean background.';
   }
@@ -663,6 +669,8 @@ router.post('/tryon', authMiddleware, upload.fields([
               cloth_image_base64: originalBytes.toString('base64'),
               brand_id: String(user.id),
               garment_id: actualGarmentId,
+              category: garmentRecord.category || undefined,
+              product_name: garmentRecord.productName || garmentRecord.displayName || undefined,
               admin_bypass: false
             };
             const regenRes = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
@@ -732,6 +740,9 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
   try {
     const user = req.user;
     const requestedGarmentId = String(req.body.garment_id || req.body.productId || '').trim();
+    const requestedCategory = String(req.body.category || '').trim();
+    const requestedProductName = String(req.body.product_name || req.body.display_name || '').trim();
+    const requestedProfile = String(req.body.garment_profile || '').trim();
     const adminBypass = String(req.body.admin_bypass || '').toLowerCase() === 'true';
 
     if (!req.file) {
@@ -750,6 +761,9 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
       cloth_image_base64: clothBytes.toString('base64'),
       brand_id: String(user.id),
       garment_id: garmentId,
+      category: requestedCategory || undefined,
+      product_name: requestedProductName || displayName,
+      garment_profile: requestedProfile || undefined,
       admin_bypass: adminBypass
     };
 
@@ -773,13 +787,37 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
 
     const result = await aiResponse.json() as GarmentPreprocessResponse;
     const cacheKey = result.cache_key as string;
+    const normalizedCategory = requestedCategory || result.profile_label || 'Upper-Body Garment';
+    const normalizedProductName = requestedProductName || displayName;
 
     const thumbnailUrl = await uploadThumbnail(user.id, garmentId, Buffer.from(result.image_base64, 'base64'));
     const status = GARMENT_APPROVAL_REQUIRED ? 'pending' : 'ready';
     await prisma.garment.upsert({
       where: { userId_garmentId: { userId: user.id, garmentId } },
-      update: { cacheKey, displayName, originalHash, originalUrl, thumbnailUrl, status },
-      create: { userId: user.id, garmentId, displayName, cacheKey, originalHash, originalUrl, thumbnailUrl, status }
+      update: {
+        cacheKey,
+        displayName,
+        originalHash,
+        originalUrl,
+        thumbnailUrl,
+        status,
+        category: normalizedCategory,
+        garmentType: 'upper',
+        productName: normalizedProductName,
+      },
+      create: {
+        userId: user.id,
+        garmentId,
+        displayName,
+        cacheKey,
+        originalHash,
+        originalUrl,
+        thumbnailUrl,
+        status,
+        category: normalizedCategory,
+        garmentType: 'upper',
+        productName: normalizedProductName,
+      }
     });
     await recomputeGarmentMatchesForUser(prisma, user.id);
 
@@ -789,7 +827,10 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
       cacheKey,
       didProcess: result.did_process,
       reason: result.reason,
-      status
+      status,
+      category: normalizedCategory,
+      supportLevel: result.support_level || 'launch_ready',
+      warnings: result.warnings || [],
     });
   } catch (error) {
     console.error('Garment upload error:', error);
@@ -827,6 +868,7 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
         cloth_image_base64: clothBytes.toString('base64'),
         brand_id: String(user.id),
         garment_id: garmentId,
+        product_name: displayName,
         admin_bypass: false
       };
       const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
@@ -846,14 +888,45 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
       }
       const result = await aiResponse.json() as GarmentPreprocessResponse;
       const cacheKey = result.cache_key as string;
+      const normalizedCategory = result.profile_label || 'Upper-Body Garment';
       const thumbnailUrl = await uploadThumbnail(user.id, garmentId, Buffer.from(result.image_base64, 'base64'));
       const status = GARMENT_APPROVAL_REQUIRED ? 'pending' : 'ready';
       await prisma.garment.upsert({
         where: { userId_garmentId: { userId: user.id, garmentId } },
-        update: { cacheKey, displayName, originalHash, originalUrl, thumbnailUrl, status },
-        create: { userId: user.id, garmentId, displayName, cacheKey, originalHash, originalUrl, thumbnailUrl, status }
+        update: {
+          cacheKey,
+          displayName,
+          originalHash,
+          originalUrl,
+          thumbnailUrl,
+          status,
+          category: normalizedCategory,
+          garmentType: 'upper',
+          productName: displayName,
+        },
+        create: {
+          userId: user.id,
+          garmentId,
+          displayName,
+          cacheKey,
+          originalHash,
+          originalUrl,
+          thumbnailUrl,
+          status,
+          category: normalizedCategory,
+          garmentType: 'upper',
+          productName: displayName,
+        }
       });
-      results.push({ garmentId, displayName, cacheKey, status });
+      results.push({
+        garmentId,
+        displayName,
+        cacheKey,
+        status,
+        category: normalizedCategory,
+        supportLevel: result.support_level || 'launch_ready',
+        warnings: result.warnings || [],
+      });
     }
 
     await recomputeGarmentMatchesForUser(prisma, user.id);

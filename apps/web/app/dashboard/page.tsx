@@ -124,6 +124,18 @@ const humanizeGarmentId = (value: string) =>
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
+const garmentCategoryOptions = [
+  { value: '', label: 'Auto-detect from file name' },
+  { value: 'Shirt', label: 'Shirt' },
+  { value: 'T-Shirt', label: 'T-Shirt' },
+  { value: 'Polo', label: 'Polo' },
+  { value: 'Blouse', label: 'Blouse' },
+  { value: 'Top', label: 'Top' },
+  { value: 'Short Kurti', label: 'Short Kurti (beta)' },
+  { value: 'Hoodie', label: 'Hoodie (beta)' },
+  { value: 'Sweatshirt', label: 'Sweatshirt (beta)' },
+];
+
 export default function Dashboard() {
   const themePreference = useThemePreference();
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -132,6 +144,7 @@ export default function Dashboard() {
   const [catalogProducts, setCatalogProducts] = useState<CatalogProductItem[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [garmentUploadId, setGarmentUploadId] = useState('');
+  const [garmentUploadCategory, setGarmentUploadCategory] = useState('');
   const [garmentFile, setGarmentFile] = useState<File | null>(null);
   const [garmentStatus, setGarmentStatus] = useState('');
   const [catalogCsvFile, setCatalogCsvFile] = useState<File | null>(null);
@@ -428,10 +441,11 @@ export default function Dashboard() {
     const successCount = items.filter((item: { cacheKey?: string }) => Boolean(item.cacheKey)).length;
     const failedCount = items.length - successCount;
     const firstFailure = items.find((item: { message?: string; error?: string }) => item.message || item.error);
+    const betaCount = items.filter((item: { supportLevel?: string }) => item.supportLevel === 'beta').length;
     setBulkGarmentStatus(
       failedCount && firstFailure
         ? `Uploaded ${successCount} garments. ${failedCount} file(s) failed. ${getApiErrorMessage(firstFailure, 'Review the rejected uploads and use isolated garment-only images.')}`
-        : `Uploaded ${successCount} garments.${failedCount ? ` ${failedCount} files still need cleaner garment assets.` : ''}`
+        : `Uploaded ${successCount} garments.${betaCount ? ` ${betaCount} beta-category item(s) still need closer preview review.` : ''}${failedCount ? ` ${failedCount} files still need cleaner garment assets.` : ''}`
     );
     setToast(`Bulk upload complete. ${successCount} garments are now ready for matching.`);
     setBulkGarmentFiles([]);
@@ -1090,6 +1104,20 @@ export default function Dashboard() {
             <p className={`text-sm mb-3 ${mutedTextClass}`}>
               Optional operator upload. Use this only when you need to add or replace one asset manually behind the scenes. Brands should still experience the simpler flow: upload, discover, suggest, confirm, then preview.
             </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 text-sm">
+              <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-emerald-100 bg-emerald-50/70' : 'border-emerald-500/20 bg-emerald-500/10'}`}>
+                <p className={`font-medium mb-2 ${strongTextClass}`}>Launch-ready</p>
+                <p className={mutedTextClass}>Shirts, T-shirts, polos, blouses, and clean tops usually give the strongest 2D realism.</p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-amber-100 bg-amber-50/70' : 'border-amber-500/20 bg-amber-500/10'}`}>
+                <p className={`font-medium mb-2 ${strongTextClass}`}>Beta</p>
+                <p className={mutedTextClass}>Short kurtis, hoodies, and sweatshirts are still supported, but they need cleaner assets and closer review.</p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-rose-100 bg-rose-50/70' : 'border-rose-500/20 bg-rose-500/10'}`}>
+                <p className={`font-medium mb-2 ${strongTextClass}`}>Blocked</p>
+                <p className={mutedTextClass}>Long kurtas, jackets, blazers, coats, cardigans, and layered outerwear are rejected for now because they still hurt realism.</p>
+              </div>
+            </div>
             <div className="flex flex-col md:flex-row gap-3">
               <input
                 type="text"
@@ -1098,6 +1126,17 @@ export default function Dashboard() {
                 placeholder="asset label (optional)"
                 className={inputClass}
               />
+              <select
+                value={garmentUploadCategory}
+                onChange={(e) => setGarmentUploadCategory(e.target.value)}
+                className={inputClass}
+              >
+                {garmentCategoryOptions.map((option) => (
+                  <option key={option.label} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               <input
                 type="file"
                 accept="image/*"
@@ -1115,6 +1154,9 @@ export default function Dashboard() {
                   if (garmentUploadId.trim()) {
                     form.append('garment_id', garmentUploadId.trim());
                   }
+                  if (garmentUploadCategory.trim()) {
+                    form.append('category', garmentUploadCategory.trim());
+                  }
                   form.append('cloth_image', garmentFile);
                   const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments`, {
                     method: 'POST',
@@ -1128,9 +1170,16 @@ export default function Dashboard() {
                     setToast(message);
                     return;
                   }
-                  setGarmentStatus(`Uploaded ${data?.displayName || data?.garmentId || 'garment'} and refreshed suggestions.`);
+                  const warningSuffix =
+                    Array.isArray(data?.warnings) && data.warnings.length
+                      ? ' This category is still beta, so review the preview carefully before using it live.'
+                      : '';
+                  setGarmentStatus(
+                    `Uploaded ${data?.displayName || data?.garmentId || 'garment'} as ${data?.category || garmentUploadCategory || 'an upper-body garment'} and refreshed suggestions.${warningSuffix}`
+                  );
                   setToast('Garment uploaded successfully.');
                   setGarmentUploadId('');
+                  setGarmentUploadCategory('');
                   setGarmentFile(null);
                   await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
                 }}

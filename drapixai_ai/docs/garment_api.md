@@ -15,6 +15,11 @@ Garment upload standard:
 - no model-worn lifestyle photos
 - minimum recommended size: 512x512
 
+Current support matrix:
+- launch-ready: shirts, t-shirts, polos, blouses, clean tops
+- beta: short kurtis, hoodies, sweatshirts
+- unsupported: long kurtas, jackets, blazers, coats, cardigans, layered outerwear
+
 Headers:
 - `Authorization: Bearer <api_key>`
 
@@ -32,6 +37,7 @@ Response:
 Common validation errors:
 - `MODEL_WORN_GARMENT`
 - `GARMENT_TOO_LONG`
+- `GARMENT_CATEGORY_UNSUPPORTED`
 - `LOW_RESOLUTION`
 - `IMAGE_BLURRY`
 - `SUBJECT_TOO_SMALL`

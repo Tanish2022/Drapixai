@@ -43,6 +43,8 @@ const getGarmentValidationMessage = (code: string) => {
       return 'Use a higher-resolution garment image for the demo.';
     case 'IMAGE_BLURRY':
       return 'The garment image is too blurry. Use a sharper product photo.';
+    case 'GARMENT_CATEGORY_UNSUPPORTED':
+      return 'That garment category is outside the current realism-focused demo scope. Try a shirt, t-shirt, polo, blouse, top, or short upper-body kurti.';
     default:
       return 'Garment preprocessing failed. Use one isolated upper-body garment on a plain background.';
   }

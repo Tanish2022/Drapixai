@@ -8,9 +8,18 @@ import numpy as np
 from PIL import Image
 
 from drapixai_ai.configs.settings import settings
+from drapixai_ai.services.garment_rules import GarmentRule, resolve_garment_rule
 from drapixai_ai.services.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class GarmentPreprocessOptions:
+    garment_profile: str | None = None
+    category_hint: str | None = None
+    product_name: str | None = None
+    garment_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -18,6 +27,10 @@ class GarmentPreprocessResult:
     image: Image.Image
     did_process: bool
     reason: str
+    profile_key: str
+    profile_label: str
+    support_level: str
+    warnings: tuple[str, ...] = ()
 
 
 class GarmentValidationError(ValueError):
@@ -26,8 +39,8 @@ class GarmentValidationError(ValueError):
         self.reason = reason
 
 
-def _has_sufficient_resolution(image: Image.Image) -> bool:
-    return image.width >= settings.garment_min_width and image.height >= settings.garment_min_height
+def _has_sufficient_resolution(image: Image.Image, rule: GarmentRule) -> bool:
+    return image.width >= rule.min_width and image.height >= rule.min_height
 
 
 def _alpha_transparency_ratio(image: Image.Image) -> float:
@@ -123,21 +136,21 @@ def _blur_score(image: Image.Image) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def _validate_image(image: Image.Image) -> None:
-    if not _has_sufficient_resolution(image):
+def _validate_image(image: Image.Image, rule: GarmentRule) -> None:
+    if not _has_sufficient_resolution(image, rule):
         raise GarmentValidationError("LOW_RESOLUTION")
     if _blur_score(image) < settings.garment_blur_threshold:
         raise GarmentValidationError("IMAGE_BLURRY")
 
 
-def _validate_foreground_ratio(fg_ratio: float) -> None:
-    if fg_ratio < settings.garment_min_fg_ratio:
+def _validate_foreground_ratio(fg_ratio: float, rule: GarmentRule) -> None:
+    if fg_ratio < rule.min_fg_ratio:
         raise GarmentValidationError("SUBJECT_TOO_SMALL")
-    if fg_ratio > settings.garment_max_fg_ratio:
+    if fg_ratio > rule.max_fg_ratio:
         raise GarmentValidationError("NO_BACKGROUND_REMOVAL")
 
 
-def _validate_isolated_garment(image: Image.Image) -> None:
+def _validate_isolated_garment(image: Image.Image, rule: GarmentRule) -> None:
     if not settings.garment_isolation_check:
         return
 
@@ -149,18 +162,18 @@ def _validate_isolated_garment(image: Image.Image) -> None:
     width = max(1, x1 - x0 + 1)
     height = max(1, y1 - y0 + 1)
     aspect_ratio = height / width
-    if aspect_ratio > settings.garment_max_aspect_ratio:
+    if aspect_ratio > rule.max_aspect_ratio:
         raise GarmentValidationError("GARMENT_TOO_LONG")
 
     skin_ratio, top_skin_ratio = _skin_ratios(image)
     if (
-        skin_ratio > settings.garment_skin_ratio_threshold
-        or top_skin_ratio > settings.garment_top_skin_ratio_threshold
+        skin_ratio > rule.skin_ratio_threshold
+        or top_skin_ratio > rule.top_skin_ratio_threshold
     ):
         raise GarmentValidationError("MODEL_WORN_GARMENT")
 
 
-def _auto_crop_and_pad(image: Image.Image) -> Image.Image:
+def _auto_crop_and_pad(image: Image.Image, padding_ratio: float) -> Image.Image:
     rgba = image.convert("RGBA")
     alpha = np.asarray(rgba.getchannel("A"))
     ys, xs = np.where(alpha > settings.garment_alpha_threshold)
@@ -170,8 +183,8 @@ def _auto_crop_and_pad(image: Image.Image) -> Image.Image:
     x0, x1 = xs.min(), xs.max()
     y0, y1 = ys.min(), ys.max()
 
-    pad_x = int((x1 - x0 + 1) * settings.garment_crop_padding_ratio)
-    pad_y = int((y1 - y0 + 1) * settings.garment_crop_padding_ratio)
+    pad_x = int((x1 - x0 + 1) * padding_ratio)
+    pad_y = int((y1 - y0 + 1) * padding_ratio)
 
     x0 = max(0, x0 - pad_x)
     y0 = max(0, y0 - pad_y)
@@ -196,24 +209,49 @@ def _resize_with_padding(image: Image.Image, target: Tuple[int, int]) -> Image.I
     return canvas
 
 
-def preprocess_garment(image_bytes: bytes, bypass_validation: bool = False) -> GarmentPreprocessResult:
+def preprocess_garment(
+    image_bytes: bytes,
+    bypass_validation: bool = False,
+    options: GarmentPreprocessOptions | None = None,
+) -> GarmentPreprocessResult:
     image = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+    opts = options or GarmentPreprocessOptions()
+    rule = resolve_garment_rule(opts.garment_profile, opts.category_hint, opts.product_name, opts.garment_id)
+    warnings: tuple[str, ...] = (f"BETA_CATEGORY:{rule.key.upper()}",) if rule.support_level == "beta" else ()
 
     if not bypass_validation:
-        _validate_image(image)
+        if rule.support_level == "unsupported":
+            raise GarmentValidationError("GARMENT_CATEGORY_UNSUPPORTED")
+        _validate_image(image, rule)
 
     if _is_clean_transparent(image):
         if not bypass_validation:
-            _validate_foreground_ratio(_foreground_ratio(image))
-            _validate_isolated_garment(image)
+            _validate_foreground_ratio(_foreground_ratio(image), rule)
+            _validate_isolated_garment(image, rule)
         resized = _resize_with_padding(image, settings.garment_target_size())
-        return GarmentPreprocessResult(image=resized, did_process=False, reason="ALREADY_TRANSPARENT")
+        return GarmentPreprocessResult(
+            image=resized,
+            did_process=False,
+            reason="ALREADY_TRANSPARENT",
+            profile_key=rule.key,
+            profile_label=rule.label,
+            support_level=rule.support_level,
+            warnings=warnings,
+        )
 
     processed = _remove_background(image)
     if not bypass_validation:
-        _validate_foreground_ratio(_foreground_ratio(processed))
-        _validate_isolated_garment(processed)
-    processed = _auto_crop_and_pad(processed)
+        _validate_foreground_ratio(_foreground_ratio(processed), rule)
+        _validate_isolated_garment(processed, rule)
+    processed = _auto_crop_and_pad(processed, rule.crop_padding_ratio)
     processed = _resize_with_padding(processed, settings.garment_target_size())
 
-    return GarmentPreprocessResult(image=processed, did_process=True, reason="BACKGROUND_REMOVED")
+    return GarmentPreprocessResult(
+        image=processed,
+        did_process=True,
+        reason="BACKGROUND_REMOVED",
+        profile_key=rule.key,
+        profile_label=rule.label,
+        support_level=rule.support_level,
+        warnings=warnings,
+    )

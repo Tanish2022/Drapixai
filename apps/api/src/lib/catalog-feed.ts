@@ -14,7 +14,32 @@ export type NormalizedCatalogItem = {
   imageUrl?: string;
 };
 
+export type CatalogCategoryMatch = {
+  key: string;
+  label: string;
+  supportLevel: 'launch_ready' | 'beta' | 'unsupported';
+};
+
 const normalizeText = (value: unknown) => String(value || '').trim().toLowerCase();
+
+const normalizeHaystack = (value: unknown) =>
+  normalizeText(value)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const CATEGORY_RULES: Array<CatalogCategoryMatch & { aliases: string[] }> = [
+  { key: 'shirt', label: 'Shirt', supportLevel: 'launch_ready', aliases: ['oxford shirt', 'button down', 'button up', 'shirt', 'flannel'] },
+  { key: 'tshirt', label: 'T-Shirt', supportLevel: 'launch_ready', aliases: ['t shirt', 'tshirt', 'tee shirt', 'graphic tee', 'tee'] },
+  { key: 'polo', label: 'Polo', supportLevel: 'launch_ready', aliases: ['polo shirt', 'polo'] },
+  { key: 'blouse', label: 'Blouse', supportLevel: 'launch_ready', aliases: ['blouse'] },
+  { key: 'top', label: 'Top', supportLevel: 'launch_ready', aliases: ['crop top', 'sleeveless top', 'tank top', 'camisole', 'cami', 'tank', 'top', 'tops'] },
+  { key: 'short_kurti', label: 'Short Kurti', supportLevel: 'beta', aliases: ['short kurti', 'kurti top', 'kurti'] },
+  { key: 'hoodie', label: 'Hoodie', supportLevel: 'beta', aliases: ['zip hoodie', 'hooded sweatshirt', 'hoodie'] },
+  { key: 'sweatshirt', label: 'Sweatshirt', supportLevel: 'beta', aliases: ['crewneck sweatshirt', 'sweat shirt', 'sweatshirt', 'sweater'] },
+  { key: 'outerwear', label: 'Outerwear', supportLevel: 'unsupported', aliases: ['blazer', 'jacket', 'coat', 'cardigan', 'outerwear', 'overshirt', 'vest'] },
+  { key: 'long_kurta', label: 'Long Kurta', supportLevel: 'unsupported', aliases: ['anarkali', 'kurta dress', 'long kurta'] },
+];
 
 const UPPER_BODY_KEYWORDS = [
   'shirt',
@@ -70,6 +95,42 @@ const NON_UPPER_BODY_KEYWORDS = [
   'sock',
   'socks'
 ];
+
+export const detectCatalogCategory = (item: CatalogSyncInputItem): CatalogCategoryMatch | null => {
+  const explicitGarmentType = normalizeHaystack(item.garmentType);
+  const haystack = [item.garmentType, item.category, item.productName]
+    .map((value) => normalizeHaystack(value))
+    .filter(Boolean)
+    .join(' ');
+
+  const candidates: Array<{ aliasLength: number; rule: CatalogCategoryMatch }> = [];
+  for (const rule of CATEGORY_RULES) {
+    for (const alias of rule.aliases) {
+      const normalizedAlias = normalizeHaystack(alias);
+      if (normalizedAlias && haystack.includes(normalizedAlias)) {
+        candidates.push({ aliasLength: normalizedAlias.length, rule });
+        break;
+      }
+    }
+  }
+
+  if (candidates.length > 0) {
+    candidates.sort((left, right) => right.aliasLength - left.aliasLength);
+    return candidates[0].rule;
+  }
+
+  if (NON_UPPER_BODY_KEYWORDS.some((keyword) => haystack.includes(keyword))) {
+    return null;
+  }
+
+  const explicitUpper = ['upper', 'upper body', 'upper_body', 'top', 'tops'].includes(explicitGarmentType);
+  const inferredUpper = UPPER_BODY_KEYWORDS.some((keyword) => haystack.includes(keyword));
+  if (explicitUpper || inferredUpper) {
+    return { key: 'generic_top', label: 'Upper-Body Garment', supportLevel: 'launch_ready' };
+  }
+
+  return null;
+};
 
 const splitCsvLine = (line: string) =>
   line
@@ -173,36 +234,20 @@ export const normalizeCatalogItem = (item: CatalogSyncInputItem): NormalizedCata
     return null;
   }
 
+  const detectedCategory = detectCatalogCategory(item);
+
   return {
     productId,
     productName: String(item.productName || '').trim() || undefined,
-    category: String(item.category || '').trim() || undefined,
-    garmentType: String(item.garmentType || '').trim() || undefined,
+    category: detectedCategory?.label || String(item.category || '').trim() || undefined,
+    garmentType: detectedCategory ? 'upper' : String(item.garmentType || '').trim() || undefined,
     imageUrl: String(item.imageUrl || '').trim() || undefined,
   };
 };
 
 export const isSupportedUpperBodyItem = (item: CatalogSyncInputItem) => {
-  const garmentType = normalizeText(item.garmentType);
-  if (['upper', 'upper_body', 'top', 'tops'].includes(garmentType)) {
-    return true;
-  }
-  if (garmentType && !['upper', 'upper_body', 'top', 'tops'].includes(garmentType)) {
-    return false;
-  }
-
-  const haystack = [item.category, item.productName]
-    .map((value) => normalizeText(value))
-    .filter(Boolean)
-    .join(' ');
-
-  if (!haystack) {
-    return false;
-  }
-  if (NON_UPPER_BODY_KEYWORDS.some((keyword) => haystack.includes(keyword))) {
-    return false;
-  }
-  return UPPER_BODY_KEYWORDS.some((keyword) => haystack.includes(keyword));
+  const detectedCategory = detectCatalogCategory(item);
+  return Boolean(detectedCategory && detectedCategory.supportLevel !== 'unsupported');
 };
 
 export const parseCatalogFeed = (feedText: string, contentType = '', sourceHint = ''): CatalogSyncInputItem[] => {

@@ -20,6 +20,8 @@ class GarmentCacheHit:
 
 
 class GarmentCache:
+    PREPROCESS_VERSION = "v2"
+
     def __init__(self) -> None:
         self.base_dir = Path(settings.garment_cache_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -44,12 +46,20 @@ class GarmentCache:
         return hashlib.sha256(image_bytes).hexdigest()
 
     @staticmethod
-    def build_key(image_hash: str, brand_id: Optional[str], garment_id: Optional[str]) -> str:
+    def build_key(
+        image_hash: str,
+        brand_id: Optional[str],
+        garment_id: Optional[str],
+        profile_key: Optional[str] = None,
+    ) -> str:
         parts = []
+        parts.append(GarmentCache.PREPROCESS_VERSION)
         if brand_id:
             parts.append(brand_id)
         if garment_id:
             parts.append(garment_id)
+        if profile_key:
+            parts.append(profile_key)
         parts.append(image_hash)
         return ":".join(parts)
 

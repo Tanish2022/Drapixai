@@ -14,7 +14,12 @@ from pydantic import BaseModel, Field
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.queue.redis_queue import get_redis
 from drapixai_ai.services.garment_cache import GarmentCache
-from drapixai_ai.services.garment_preprocessor import GarmentValidationError, preprocess_garment
+from drapixai_ai.services.garment_preprocessor import (
+    GarmentPreprocessOptions,
+    GarmentValidationError,
+    preprocess_garment,
+)
+from drapixai_ai.services.garment_rules import resolve_garment_rule
 from drapixai_ai.services.logger import get_logger
 from drapixai_ai.services.tryon_service import TryOnService
 from drapixai_ai.services.upper_body_validator import is_upper_body
@@ -38,6 +43,9 @@ class GarmentBase64Request(BaseModel):
     cloth_image_base64: str = Field(..., min_length=1)
     brand_id: Optional[str] = Field(default=None)
     garment_id: Optional[str] = Field(default=None)
+    category: Optional[str] = Field(default=None)
+    product_name: Optional[str] = Field(default=None)
+    garment_profile: Optional[str] = Field(default=None)
     admin_bypass: Optional[bool] = Field(default=False)
 
 
@@ -215,6 +223,9 @@ async def garment_preprocess(
     cloth_image: UploadFile = File(...),
     brand_id: Optional[str] = Form(default=None),
     garment_id: Optional[str] = Form(default=None),
+    category: Optional[str] = Form(default=None),
+    product_name: Optional[str] = Form(default=None),
+    garment_profile: Optional[str] = Form(default=None),
     admin_bypass: Optional[bool] = Form(default=False),
     x_admin_token: Optional[str] = Header(default=None),
 ):
@@ -223,7 +234,8 @@ async def garment_preprocess(
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
     image_hash = garment_cache.compute_hash(cloth_bytes)
-    cache_key = garment_cache.build_key(image_hash, brand_id, garment_id)
+    rule = resolve_garment_rule(garment_profile, category, product_name, garment_id)
+    cache_key = garment_cache.build_key(image_hash, brand_id, garment_id, rule.key)
     cache_hit = garment_cache.get(cache_key)
     if cache_hit:
         return {
@@ -231,11 +243,24 @@ async def garment_preprocess(
             "reason": "CACHE_HIT",
             "cache_key": cache_key,
             "image_base64": base64.b64encode(cache_hit.image_bytes).decode("utf-8"),
+            "profile_key": rule.key,
+            "profile_label": rule.label,
+            "support_level": rule.support_level,
+            "warnings": [f"BETA_CATEGORY:{rule.key.upper()}"] if rule.support_level == "beta" else [],
         }
 
     bypass_allowed = bool(admin_bypass) and bool(settings.admin_token) and settings.admin_token == (x_admin_token or "")
     try:
-        result = preprocess_garment(cloth_bytes, bypass_validation=bypass_allowed)
+        result = preprocess_garment(
+            cloth_bytes,
+            bypass_validation=bypass_allowed,
+            options=GarmentPreprocessOptions(
+                garment_profile=garment_profile,
+                category_hint=category,
+                product_name=product_name,
+                garment_id=garment_id,
+            ),
+        )
     except GarmentValidationError as exc:
         raise HTTPException(status_code=422, detail=f"GARMENT_INVALID:{exc.reason}")
     output = io.BytesIO()
@@ -247,6 +272,10 @@ async def garment_preprocess(
         "reason": result.reason,
         "cache_key": cache_key,
         "image_base64": base64.b64encode(processed_bytes).decode("utf-8"),
+        "profile_key": result.profile_key,
+        "profile_label": result.profile_label,
+        "support_level": result.support_level,
+        "warnings": list(result.warnings),
     }
 
 
@@ -275,7 +304,8 @@ async def garment_preprocess_base64(
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
     image_hash = garment_cache.compute_hash(cloth_bytes)
-    cache_key = garment_cache.build_key(image_hash, payload.brand_id, payload.garment_id)
+    rule = resolve_garment_rule(payload.garment_profile, payload.category, payload.product_name, payload.garment_id)
+    cache_key = garment_cache.build_key(image_hash, payload.brand_id, payload.garment_id, rule.key)
     cache_hit = garment_cache.get(cache_key)
     if cache_hit:
         return {
@@ -283,11 +313,24 @@ async def garment_preprocess_base64(
             "reason": "CACHE_HIT",
             "cache_key": cache_key,
             "image_base64": base64.b64encode(cache_hit.image_bytes).decode("utf-8"),
+            "profile_key": rule.key,
+            "profile_label": rule.label,
+            "support_level": rule.support_level,
+            "warnings": [f"BETA_CATEGORY:{rule.key.upper()}"] if rule.support_level == "beta" else [],
         }
 
     bypass_allowed = bool(payload.admin_bypass) and bool(settings.admin_token) and settings.admin_token == (x_admin_token or "")
     try:
-        result = preprocess_garment(cloth_bytes, bypass_validation=bypass_allowed)
+        result = preprocess_garment(
+            cloth_bytes,
+            bypass_validation=bypass_allowed,
+            options=GarmentPreprocessOptions(
+                garment_profile=payload.garment_profile,
+                category_hint=payload.category,
+                product_name=payload.product_name,
+                garment_id=payload.garment_id,
+            ),
+        )
     except GarmentValidationError as exc:
         raise HTTPException(status_code=422, detail=f"GARMENT_INVALID:{exc.reason}")
 
@@ -300,4 +343,8 @@ async def garment_preprocess_base64(
         "reason": result.reason,
         "cache_key": cache_key,
         "image_base64": base64.b64encode(processed_bytes).decode("utf-8"),
+        "profile_key": result.profile_key,
+        "profile_label": result.profile_label,
+        "support_level": result.support_level,
+        "warnings": list(result.warnings),
     }

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { CatalogSyncInputItem, isSupportedUpperBodyItem, normalizeCatalogItem } from './catalog-feed';
+import { CatalogSyncInputItem, detectCatalogCategory, isSupportedUpperBodyItem, normalizeCatalogItem } from './catalog-feed';
 
 type MatchCandidate = {
   productId: string;
@@ -170,12 +170,18 @@ export const upsertCatalogProductsForUser = async (
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   const uniqueItems = Array.from(new Map(normalizedItems.map((item) => [item.productId, item])).values());
-  const discovered: Array<{ productId: string; status: string }> = [];
+  const discovered: Array<{ productId: string; status: string; category?: string }> = [];
   const skipped: Array<{ productId: string; reason: string }> = [];
 
   for (const item of uniqueItems) {
-    if (!isSupportedUpperBodyItem(item)) {
+    const detectedCategory = detectCatalogCategory(item);
+    if (!detectedCategory) {
       skipped.push({ productId: item.productId, reason: 'NOT_UPPER_BODY' });
+      continue;
+    }
+
+    if (detectedCategory.supportLevel === 'unsupported' || !isSupportedUpperBodyItem(item)) {
+      skipped.push({ productId: item.productId, reason: 'UNSUPPORTED_UPPER_BODY_CATEGORY' });
       continue;
     }
 
@@ -183,8 +189,8 @@ export const upsertCatalogProductsForUser = async (
       where: { userId_productId: { userId, productId: item.productId } },
       update: {
         productName: item.productName,
-        category: item.category,
-        garmentType: item.garmentType || 'upper',
+        category: detectedCategory.label,
+        garmentType: 'upper',
         imageUrl: item.imageUrl,
         source,
         status: 'discovered',
@@ -193,15 +199,15 @@ export const upsertCatalogProductsForUser = async (
         userId,
         productId: item.productId,
         productName: item.productName,
-        category: item.category,
-        garmentType: item.garmentType || 'upper',
+        category: detectedCategory.label,
+        garmentType: 'upper',
         imageUrl: item.imageUrl,
         source,
         status: 'discovered',
       },
     });
 
-    discovered.push({ productId: record.productId, status: record.status });
+    discovered.push({ productId: record.productId, status: record.status, category: detectedCategory.label });
   }
 
   await recomputeGarmentMatchesForUser(prisma, userId);

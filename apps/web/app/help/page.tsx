@@ -65,6 +65,10 @@ const garmentHelp = [
     body: 'Use one isolated upper-body garment only, centered in frame, preferably on a clean background. DrapixAI rejects model-worn product photos, visible body parts, multiple products in one image, and heavy blur.',
   },
   {
+    title: 'Which upper-body categories are strongest right now?',
+    body: 'Launch-ready categories are shirts, t-shirts, polos, blouses, and clean tops. Beta categories are short kurtis, hoodies, and sweatshirts. Long kurtas, jackets, blazers, coats, cardigans, and layered outerwear are currently blocked because they still weaken realism.',
+  },
+  {
     title: 'Garment validation passes but the brand is still confused',
     body: 'That usually means the onboarding story is still too technical. Brands should think in terms of garment upload, product discovery, suggested matches, manual confirmation, then preview. They should not have to manage raw identifiers first.',
   },
@@ -96,7 +100,7 @@ const mappingHelp = [
 const tryOnHelp = [
   {
     title: 'Try-on result looks weak or unrealistic',
-    body: 'Use a clean, front-facing person image with visible upper body and better lighting. Also confirm the garment image is garment-only, color-accurate, and belongs to the same upper-body category.',
+    body: 'Use a clean, front-facing person image with visible upper body and better lighting. Also confirm the garment image is garment-only, color-accurate, and belongs to a launch-ready or carefully reviewed beta upper-body category.',
   },
   {
     title: 'Try-on fails immediately',
