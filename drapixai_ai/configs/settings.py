@@ -68,7 +68,22 @@ _apply_gpu_preset()
 class Settings:
     redis_url: str = os.getenv("DRAPIXAI_REDIS_URL", "redis://localhost:6379/0")
     queue_name: str = os.getenv("DRAPIXAI_QUEUE_NAME", "drapixai_tryon")
-    model_dir: str = os.getenv("DRAPIXAI_MODEL_DIR", "models/idm_vton")
+    model_dir: str = os.getenv("DRAPIXAI_MODEL_DIR", "models/catvton")
+    tryon_engine: str = os.getenv("DRAPIXAI_TRYON_ENGINE", "catvton")
+    catvton_model_dir: str = os.getenv("DRAPIXAI_CATVTON_MODEL_DIR", "models/catvton")
+    catvton_repo_id: str = os.getenv("DRAPIXAI_CATVTON_REPO_ID", "zhengchong/CatVTON")
+    catvton_base_model: str = os.getenv("DRAPIXAI_CATVTON_BASE_MODEL", "runwayml/stable-diffusion-inpainting")
+    catvton_attn_version: str = os.getenv("DRAPIXAI_CATVTON_ATTN_VERSION", "mix")
+    catvton_mixed_precision: str = os.getenv("DRAPIXAI_CATVTON_MIXED_PRECISION", "bf16")
+    catvton_width: int = int(os.getenv("DRAPIXAI_CATVTON_WIDTH", "768"))
+    catvton_height: int = int(os.getenv("DRAPIXAI_CATVTON_HEIGHT", "1024"))
+    catvton_mask_blur: int = int(os.getenv("DRAPIXAI_CATVTON_MASK_BLUR", "9"))
+    catvton_mask_source: str = os.getenv("DRAPIXAI_CATVTON_MASK_SOURCE", "automasker")
+    catvton_skip_safety_check: bool = os.getenv("DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK", "0") == "1"
+    enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
+    enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
+    candidate_count: int = int(os.getenv("DRAPIXAI_CANDIDATE_COUNT", "4"))
+    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.72"))
     device: str = os.getenv("DRAPIXAI_DEVICE", "cuda")
     cuda_device_index: int = int(os.getenv("DRAPIXAI_CUDA_DEVICE", "0"))
 

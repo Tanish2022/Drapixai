@@ -10,6 +10,21 @@ This file is the execution guide for the remaining launch work after local code/
 - Prisma schema has been pushed successfully to the clean local `drapixai` database
 - Web and API builds pass
 - Python compile validation for `drapixai_ai` passes
+- Local Windows output is not a CatVTON quality gate.
+
+## 1A. RunPod Source Of Truth
+
+DrapixAI CatVTON quality is validated on RunPod Linux Ubuntu GPU.
+
+- OS: `Ubuntu 22.04`
+- Base image: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- Python: `3.11`
+- CUDA: `12.4.1`
+- GPU target: `A100` preferred, `A10` acceptable, `T4` only for low-cost testing
+- Pinned Python stack: `drapixai_ai/requirements.txt`
+- Required system packages: `curl`, `ffmpeg`, `git`, `libgl1`, `libglib2.0-0`, `libgomp1`, `libsm6`, `libxext6`, `libxrender1`, `redis-server`
+
+Do not approve production quality from Windows/local smoke images. Production quality gates must run on the RunPod stack above with AutoMasker, normal resolution, normal inference steps, and the expanded matrix.
 
 ## 2. Production Env Checklist
 
@@ -125,7 +140,8 @@ Required:
 - `DRAPIXAI_DEVICE=cuda`
 - `DRAPIXAI_CUDA_DEVICE=0`
 - `DRAPIXAI_REDIS_URL`
-- `DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/idm_vton`
+- `DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/catvton`
+- `DRAPIXAI_TRYON_ENGINE=catvton`
 - `DRAPIXAI_GARMENT_CACHE_DIR=/workspace/drapixai/runtime/garments`
 - `DRAPIXAI_ADMIN_TOKEN`
 - `DRAPIXAI_S3_BUCKET`

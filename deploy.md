@@ -120,13 +120,25 @@ docker compose -f deploy/docker-compose.edge.yml up -d
 WEB_URL=https://drapixai.com API_URL=https://api.drapixai.com bash deploy/scripts/healthcheck.sh
 ```
 
-## 3. Runpod A100 Setup
+## 3. RunPod Linux GPU Setup
+
+RunPod Ubuntu is the source of truth for DrapixAI CatVTON quality. Windows/local runs are only syntax and basic integration checks.
+
+Final AI runtime:
+
+- OS: `Ubuntu 22.04`
+- Base image: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- Python: `3.11`
+- CUDA: `12.4.1`
+- GPU target: `A100` preferred, `A10` acceptable, `T4` only for low-cost testing
+- Python packages: pinned in `drapixai_ai/requirements.txt`
+- System packages: installed by `drapixai_ai/docker/Dockerfile` and `deploy/runpod/bootstrap.sh`
 
 Recommended Pod settings:
 
 - `On-Demand`
 - `A100 PCIe 80GB`
-- `Runpod Pytorch 2.4.0`
+- `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
 - `SSH terminal access`
 - `Encrypt volume`
 - `Container Disk 30 GB`
@@ -144,7 +156,7 @@ cp deploy/env/ai.production.example deploy/env/ai.production.env
 
 The bootstrap step now also:
 
-- initializes the `IDM-VTON` git submodule on the Pod
+- prepares the CatVTON dependency checkout on the Pod
 - reapplies DrapixAI's OpenPose compatibility patch
 - downloads the required `human parsing` and `body_pose_model` checkpoints if they are missing
 - prepares Hugging Face, Torch, and U2NET cache directories inside the workspace runtime path
@@ -173,10 +185,12 @@ Build from `drapixai_ai/docker/Dockerfile` and use that as the Pod image if you 
 
 ## 4. GPU Models and Runtime
 
-- Put the IDM-VTON model files in:
-- `/workspace/drapixai/models/idm_vton`
-- The third-party `IDM-VTON` support assets under `drapixai_ai/third_party/IDM-VTON/ckpt` are now prepared by:
-- `python -m drapixai_ai.scripts.prepare_idm_vton`
+- Put the CatVTON model files in:
+- `/workspace/drapixai/models/catvton`
+- The third-party CatVTON checkout is prepared by:
+- `python -m drapixai_ai.scripts.prepare_catvton`
+- CatVTON weights are downloaded by:
+- `python -m drapixai_ai.scripts.download_catvton`
 - The AI defaults are now tuned for `DRAPIXAI_GPU_PRESET=runpod-a100`
 - A100 presets now default to model preloading and explicit CUDA OpenPose usage
 - The API now exposes `/ready`, and the web exposes `/api/health`

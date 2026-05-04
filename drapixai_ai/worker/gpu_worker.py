@@ -80,22 +80,39 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
             "guidance_scale": payload.get("guidance_scale"),
             "request_id": payload.get("request_id"),
             "garment_type": payload.get("garment_type"),
+            "quality": payload.get("quality"),
         },
     )
-    result = pipeline.run_tryon(
+    result = pipeline.run_tryon_with_metadata(
         person,
         cloth,
         inference_steps=payload.get("inference_steps"),
         guidance_scale=payload.get("guidance_scale"),
+        garment_type=payload.get("garment_type"),
+        quality=payload.get("quality"),
     )
     logger.info(
         "job_complete",
-        extra={"user_id": payload.get("user_id"), "request_id": payload.get("request_id")},
+        extra={
+            "user_id": payload.get("user_id"),
+            "request_id": payload.get("request_id"),
+            "engine": result.engine,
+            "quality_score": result.quality_score,
+            "candidate_count": result.candidate_count,
+            "warnings": result.warnings,
+            "quality": payload.get("quality"),
+        },
     )
 
     return {
-        "image_base64": _encode_image(result),
+        "image_base64": _encode_image(result.image),
         "format": settings.output_format,
+        "engine": result.engine,
+        "quality_score": result.quality_score,
+        "candidate_count": result.candidate_count,
+        "candidate_scores": result.candidate_scores,
+        "warnings": result.warnings,
+        "metadata": result.metadata,
     }
 
 

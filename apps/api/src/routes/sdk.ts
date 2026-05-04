@@ -108,6 +108,17 @@ const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
 const GARMENT_APPROVAL_REQUIRED = (process.env.DRAPIXAI_GARMENT_APPROVAL_REQUIRED || '0') === '1';
 
+const parseNumberHeader = (value: string | null): number | null => {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseWarningsHeader = (value: string | null): string[] => {
+  if (!value) return [];
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+};
+
 const getUserPlanContext = (planType: string | null | undefined) => {
   const normalizedPlan = normalizePlanKey(planType);
   return {
@@ -701,6 +712,20 @@ router.post('/tryon', authMiddleware, upload.fields([
         return res.status(aiResponse.status).json({ error: errText || 'AI service error' });
       }
 
+      const tryOnResult = await prisma.tryOnResult.create({
+        data: {
+          userId: user.id,
+          apiKeyId: apiKey.id,
+          garmentId: actualGarmentId || undefined,
+          productId: requestedProductId || undefined,
+          engine: aiResponse.headers.get('x-drapixai-engine') || 'unknown',
+          qualityScore: parseNumberHeader(aiResponse.headers.get('x-drapixai-quality-score')),
+          candidateCount: parseNumberHeader(aiResponse.headers.get('x-drapixai-candidate-count')) || 1,
+          warnings: parseWarningsHeader(aiResponse.headers.get('x-drapixai-warnings')),
+          status: 'generated'
+        }
+      });
+
       if (usage) {
         await prisma.usage.update({
           where: { id: usage.id },
@@ -721,6 +746,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       const buffer = Buffer.from(await aiResponse.arrayBuffer());
       const contentType = aiResponse.headers.get('content-type') || 'image/png';
       res.setHeader('Content-Type', contentType);
+      res.setHeader('x-drapixai-tryon-result-id', String(tryOnResult.id));
       res.send(buffer);
     } finally {
       if (personFile?.path && fs.existsSync(personFile.path)) fs.unlinkSync(personFile.path);
@@ -729,6 +755,46 @@ router.post('/tryon', authMiddleware, upload.fields([
   } catch (error) {
     console.error('Try-on error:', error);
     res.status(500).json({ error: 'Try-on failed' });
+  }
+});
+
+/**
+ * POST /sdk/tryon-feedback
+ * Store storefront feedback for future DrapixAI-VTON training data.
+ */
+router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
+  try {
+    const user = req.user;
+    const tryOnResultId = Number(req.body?.tryOnResultId || req.body?.try_on_result_id || 0);
+    if (!tryOnResultId) {
+      return res.status(400).json({ error: 'TRYON_RESULT_ID_REQUIRED' });
+    }
+
+    const result = await prisma.tryOnResult.findUnique({ where: { id: tryOnResultId } });
+    if (!result || result.userId !== user.id) {
+      return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+    }
+
+    const feedback = await prisma.tryOnFeedback.create({
+      data: {
+        tryOnResultId,
+        userId: user.id,
+        looksReal: typeof req.body?.looksReal === 'boolean' ? req.body.looksReal : undefined,
+        bodyChanged: Boolean(req.body?.bodyChanged),
+        garmentChanged: Boolean(req.body?.garmentChanged),
+        faceChanged: Boolean(req.body?.faceChanged),
+        badHands: Boolean(req.body?.badHands),
+        badNeck: Boolean(req.body?.badNeck),
+        badSleeves: Boolean(req.body?.badSleeves),
+        regenerateReason: typeof req.body?.regenerateReason === 'string' ? req.body.regenerateReason : undefined,
+        notes: typeof req.body?.notes === 'string' ? req.body.notes : undefined,
+      }
+    });
+
+    res.json({ ok: true, feedbackId: feedback.id });
+  } catch (error) {
+    console.error('Try-on feedback error:', error);
+    res.status(500).json({ error: 'TRYON_FEEDBACK_FAILED' });
   }
 });
 

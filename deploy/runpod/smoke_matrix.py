@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import traceback
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -17,7 +18,9 @@ from drapixai_ai.services.garment_preprocessor import (
 )
 
 
-BASE = Path("/workspace/drapixai/runtime/test_matrix")
+APP_ROOT = Path(os.getenv("DRAPIXAI_APP_ROOT", Path.cwd()))
+BASE = Path(os.getenv("DRAPIXAI_TEST_MATRIX_DIR", APP_ROOT / "runtime" / "test_matrix"))
+CATVTON_EXAMPLE_ROOT = APP_ROOT / "drapixai_ai" / "third_party" / "CatVTON" / "resource" / "demo" / "example"
 
 
 @dataclass(frozen=True)
@@ -25,13 +28,15 @@ class Case:
     slug: str
     gender: str
     garment_type: str
-    person_url: str
-    garment_url: str
     person_source: str
     garment_source: str
+    person_url: str = ""
+    garment_url: str = ""
+    person_path: str = ""
+    garment_path: str = ""
 
 
-CASES = [
+REMOTE_CASES = [
     Case(
         slug="men_tshirt_black",
         gender="men",
@@ -89,10 +94,53 @@ CASES = [
 ]
 
 
+LOCAL_PEOPLE = [
+    ("cat_men_model_5", "men", "person/men/model_5.png"),
+    ("cat_men_model_7", "men", "person/men/model_7.png"),
+    ("cat_men_simon_1", "men", "person/men/Simon_1.png"),
+    ("cat_men_yifeng_0", "men", "person/men/Yifeng_0.png"),
+    ("cat_women_049713_0", "women", "person/women/049713_0.jpg"),
+    ("cat_women_model_3", "women", "person/women/1-model_3.png"),
+    ("cat_women_model_4", "women", "person/women/2-model_4.png"),
+    ("cat_women_model_8", "women", "person/women/model_8.png"),
+]
+
+LOCAL_UPPER_GARMENTS = [
+    ("plain_tshirt_light", "tshirt", "condition/upper/21514384_52353349_1000.jpg"),
+    ("printed_top_dark", "printed-top", "condition/upper/22790049_53294275_1000.jpg"),
+    ("white_blouse", "blouse", "condition/upper/23255574_53383833_1000.jpg"),
+    ("graphic_tshirt", "graphic-tshirt", "condition/upper/24083449_54173465_2048.jpg"),
+]
+
+LOCAL_CASES = [
+    Case(
+        slug=f"{person_slug}_{garment_slug}",
+        gender=gender,
+        garment_type=garment_type,
+        person_source="CatVTON bundled demo person asset",
+        garment_source="CatVTON bundled demo upper-body garment asset",
+        person_path=str(CATVTON_EXAMPLE_ROOT / person_path),
+        garment_path=str(CATVTON_EXAMPLE_ROOT / garment_path),
+    )
+    for person_slug, gender, person_path in LOCAL_PEOPLE
+    for garment_slug, garment_type, garment_path in LOCAL_UPPER_GARMENTS
+]
+
+CASES = REMOTE_CASES + LOCAL_CASES
+
+
 def _download_image(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read()
+
+
+def _load_image_bytes(case: Case, source: str) -> bytes:
+    path_value = case.person_path if source == "person" else case.garment_path
+    url_value = case.person_url if source == "person" else case.garment_url
+    if path_value:
+        return Path(path_value).read_bytes()
+    return _download_image(url_value)
 
 
 def _load_person(image_bytes: bytes) -> Image.Image:
@@ -107,20 +155,27 @@ def main() -> None:
     BASE.mkdir(parents=True, exist_ok=True)
     pipeline = DrapixAITryOnPipeline()
     summary: list[dict[str, object]] = []
+    start = int(os.getenv("DRAPIXAI_TEST_MATRIX_START", "0") or "0")
+    limit = int(os.getenv("DRAPIXAI_TEST_MATRIX_LIMIT", "0") or "0")
+    selected_cases = CASES[start:]
+    cases = selected_cases[:limit] if limit > 0 else selected_cases
 
-    for case in CASES:
+    for case in cases:
         case_dir = BASE / case.slug
         case_dir.mkdir(parents=True, exist_ok=True)
         entry: dict[str, object] = asdict(case)
         entry["status"] = "pending"
         entry["settings"] = {
+            "engine": settings.tryon_engine,
+            "candidate_count": settings.candidate_count,
+            "min_quality_score": settings.min_quality_score,
             "input_max_side": settings.input_max_side,
             "enhanced_steps": settings.enhanced_inference_steps,
             "enhanced_guidance": settings.enhanced_guidance_scale,
         }
         try:
-            person_bytes = _download_image(case.person_url)
-            garment_bytes = _download_image(case.garment_url)
+            person_bytes = _load_image_bytes(case, "person")
+            garment_bytes = _load_image_bytes(case, "garment")
             (case_dir / "person.bin").write_bytes(person_bytes)
             (case_dir / "garment_raw.bin").write_bytes(garment_bytes)
 
@@ -159,13 +214,22 @@ def main() -> None:
 
             cloth.save(case_dir / "garment_processed.png", format="PNG")
 
-            result = pipeline.run_tryon(
+            result_with_metadata = pipeline.run_tryon_with_metadata(
                 person,
                 cloth,
                 inference_steps=settings.enhanced_inference_steps,
                 guidance_scale=settings.enhanced_guidance_scale,
+                garment_type="upper",
             )
+            result = result_with_metadata.image
             result.save(case_dir / "result.png", format="PNG")
+            entry["result_metadata"] = {
+                "engine": result_with_metadata.engine,
+                "quality_score": result_with_metadata.quality_score,
+                "candidate_count": result_with_metadata.candidate_count,
+                "candidate_scores": result_with_metadata.candidate_scores,
+                "warnings": result_with_metadata.warnings,
+            }
             entry["status"] = "succeeded"
         except Exception as exc:  # noqa: BLE001
             entry["status"] = "failed"

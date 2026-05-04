@@ -33,7 +33,8 @@ fi
 
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r drapixai_ai/requirements.txt
-python -m drapixai_ai.scripts.prepare_idm_vton
+python -m drapixai_ai.scripts.prepare_catvton
+python -m drapixai_ai.scripts.download_catvton
 
 mkdir -p \
   "$APP_ROOT/models" \

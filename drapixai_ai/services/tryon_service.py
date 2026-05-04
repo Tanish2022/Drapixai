@@ -41,6 +41,7 @@ class TryOnService:
             "user_id": user_id,
             "person_image": person_b64,
             "cloth_image": cloth_b64,
+            "quality": quality,
             "inference_steps": steps,
             "guidance_scale": guidance,
             "request_id": request_id,

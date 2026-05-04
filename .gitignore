@@ -22,6 +22,12 @@ drapixai_ai/.hf_cache/
 drapixai_ai/garments/
 drapixai_ai/runtime/
 drapixai_ai/outputs/
+drapixai_ai/third_party/CatVTON/
+runtime/
+drapixai_runpod_*.tar
+drapixai_runpod_*.patch
+runpod_*.env
+runpod_smoke_*.py
 tmp_*
 *.pem
 deploy/env/*.production.env

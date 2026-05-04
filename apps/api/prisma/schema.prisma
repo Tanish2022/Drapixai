@@ -36,6 +36,8 @@ model User {
   emailLogs                    EmailLog[]
   garments                     Garment[]
   garmentMatches               GarmentMatch[]
+  tryOnResults                 TryOnResult[]
+  tryOnFeedback                TryOnFeedback[]
   verificationCodes            VerificationCode[]
 }
 
@@ -50,6 +52,7 @@ model ApiKey {
   renders         Render[]
   usages          Usage[]
   dailyUsages     UsageDaily[]
+  tryOnResults    TryOnResult[]
 }
 
 model Usage {
@@ -93,6 +96,52 @@ model Render {
   error     String?
   createdAt DateTime @default(now())
   apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id])
+}
+
+model TryOnResult {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  apiKeyId        Int?
+  requestId       String?
+  garmentId       String?
+  productId       String?
+  engine          String
+  qualityScore    Float?
+  candidateCount  Int      @default(1)
+  candidateScores Json?
+  warnings        Json?
+  status          String   @default("generated")
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id])
+  apiKey          ApiKey?  @relation(fields: [apiKeyId], references: [id])
+  feedback        TryOnFeedback[]
+
+  @@index([userId, createdAt])
+  @@index([engine, createdAt])
+  @@index([status, createdAt])
+}
+
+model TryOnFeedback {
+  id              Int      @id @default(autoincrement())
+  tryOnResultId   Int
+  userId          Int
+  looksReal       Boolean?
+  bodyChanged     Boolean  @default(false)
+  garmentChanged  Boolean  @default(false)
+  faceChanged     Boolean  @default(false)
+  badHands        Boolean  @default(false)
+  badNeck         Boolean  @default(false)
+  badSleeves      Boolean  @default(false)
+  regenerateReason String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  tryOnResult     TryOnResult @relation(fields: [tryOnResultId], references: [id])
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([tryOnResultId])
+  @@index([userId, createdAt])
 }
 
 model Garment {

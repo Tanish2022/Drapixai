@@ -60,16 +60,12 @@ def _decode_base64_image(value: Optional[str], field_name: str) -> bytes:
 
 
 def _model_ready() -> bool:
-    model_dir = settings.model_dir
-    if not os.path.exists(os.path.join(model_dir, "model_index.json")):
+    engine = settings.tryon_engine.strip().lower().replace("-", "_")
+    if engine not in {"catvton", "cat_vton"}:
         return False
-    unet_has_weights = os.path.exists(os.path.join(model_dir, "unet", "diffusion_pytorch_model.safetensors")) or os.path.exists(
-        os.path.join(model_dir, "unet", "diffusion_pytorch_model.bin")
+    return os.path.isdir(settings.catvton_model_dir) and os.path.exists(
+        os.path.join(settings.catvton_model_dir, "mix-48k-1024", "attention")
     )
-    unet_encoder_has_weights = os.path.exists(
-        os.path.join(model_dir, "unet_encoder", "diffusion_pytorch_model.safetensors")
-    ) or os.path.exists(os.path.join(model_dir, "unet_encoder", "diffusion_pytorch_model.bin"))
-    return unet_has_weights and unet_encoder_has_weights
 
 
 def _is_admin(token: Optional[str]) -> bool:
@@ -106,9 +102,9 @@ async def health() -> dict:
 async def ready() -> dict:
     try:
         get_redis().ping()
-        return {"status": "ready", "model_ready": _model_ready()}
+        return {"status": "ready", "model_ready": _model_ready(), "engine": settings.tryon_engine}
     except Exception:
-        return {"status": "not_ready", "model_ready": _model_ready()}
+        return {"status": "not_ready", "model_ready": _model_ready(), "engine": settings.tryon_engine}
 
 
 @app.post("/ai/tryon")
@@ -163,8 +159,24 @@ async def tryon(
     except RuntimeError:
         raise HTTPException(status_code=500, detail="TRY_ON_FAILED")
 
+    logger.info(
+        "tryon_result_metadata",
+        extra={
+            "request_id": getattr(request.state, "request_id", None),
+            "engine": result.get("engine"),
+            "quality_score": result.get("quality_score"),
+            "candidate_count": result.get("candidate_count"),
+            "warnings": result.get("warnings", []),
+        },
+    )
     image_bytes = base64.b64decode(result["image_base64"])
-    return Response(content=image_bytes, media_type=f"image/{result['format']}")
+    headers = {
+        "x-drapixai-engine": str(result.get("engine", "")),
+        "x-drapixai-quality-score": str(result.get("quality_score", "")),
+        "x-drapixai-candidate-count": str(result.get("candidate_count", "")),
+        "x-drapixai-warnings": ",".join(result.get("warnings", [])),
+    }
+    return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
 
 @app.post("/ai/tryon/base64")
@@ -214,8 +226,24 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
     except RuntimeError:
         raise HTTPException(status_code=500, detail="TRY_ON_FAILED")
 
+    logger.info(
+        "tryon_result_metadata",
+        extra={
+            "request_id": getattr(request.state, "request_id", None),
+            "engine": result.get("engine"),
+            "quality_score": result.get("quality_score"),
+            "candidate_count": result.get("candidate_count"),
+            "warnings": result.get("warnings", []),
+        },
+    )
     image_bytes = base64.b64decode(result["image_base64"])
-    return Response(content=image_bytes, media_type=f"image/{result['format']}")
+    headers = {
+        "x-drapixai-engine": str(result.get("engine", "")),
+        "x-drapixai-quality-score": str(result.get("quality_score", "")),
+        "x-drapixai-candidate-count": str(result.get("candidate_count", "")),
+        "x-drapixai-warnings": ",".join(result.get("warnings", [])),
+    }
+    return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
 
 @app.post("/ai/garment/preprocess")

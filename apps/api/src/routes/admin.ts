@@ -340,4 +340,56 @@ router.get('/garments/:id/thumbnail', async (req, res) => {
   return res.status(404).json({ error: 'THUMBNAIL_NOT_FOUND' });
 });
 
+/**
+ * GET /admin/tryon-results
+ * Quality review queue for CatVTON result review and feedback learning.
+ */
+router.get('/tryon-results', async (req, res) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const results = await prisma.tryOnResult.findMany({
+    where: status ? { status } : undefined,
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    include: {
+      user: { select: { email: true } },
+      feedback: { orderBy: { createdAt: 'desc' }, take: 3 },
+    },
+  });
+
+  res.json({
+    items: results.map((item) => ({
+      id: item.id,
+      userId: item.userId,
+      userEmail: item.user.email,
+      garmentId: item.garmentId,
+      productId: item.productId,
+      engine: item.engine,
+      qualityScore: item.qualityScore,
+      candidateCount: item.candidateCount,
+      warnings: item.warnings,
+      status: item.status,
+      feedback: item.feedback,
+      createdAt: item.createdAt.toISOString(),
+    })),
+  });
+});
+
+router.post('/tryon-results/:id/approve', async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await prisma.tryOnResult.update({
+    where: { id },
+    data: { status: 'approved', approvedAt: new Date(), rejectedAt: null },
+  });
+  res.json({ id: result.id, status: result.status });
+});
+
+router.post('/tryon-results/:id/reject', async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await prisma.tryOnResult.update({
+    where: { id },
+    data: { status: 'rejected', rejectedAt: new Date(), approvedAt: null },
+  });
+  res.json({ id: result.id, status: result.status });
+});
+
 export default router;

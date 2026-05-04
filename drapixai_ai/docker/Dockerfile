@@ -6,7 +6,9 @@ ENV PIP_NO_CACHE_DIR=1
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV TRANSFORMERS_CACHE=/workspace/.cache/huggingface
 ENV DRAPIXAI_APP_ROOT=/workspace/drapixai
-ENV DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/idm_vton
+ENV DRAPIXAI_TRYON_ENGINE=catvton
+ENV DRAPIXAI_CATVTON_MODEL_DIR=/workspace/drapixai/models/catvton
+ENV DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/catvton
 ENV DRAPIXAI_GARMENT_CACHE_DIR=/workspace/drapixai/runtime/garments
 ENV DRAPIXAI_GPU_PRESET=runpod-a100
 
