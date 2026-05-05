@@ -130,8 +130,16 @@ Returns PNG image if cached.
 Form fields:
 - `person_image`
 - `productId` (must point to a confirmed product mapping)
-- `quality` (optional)
+- `quality=standard|enhanced` (optional, defaults by plan)
 - `garment_type=upper`
+
+Response:
+- body: PNG image bytes
+- `x-drapixai-tryon-result-id`
+- `x-drapixai-engine`
+- `x-drapixai-quality-score`
+- `x-drapixai-candidate-count`
+- `x-drapixai-warnings`
 
 If garment is not ready:
 - returns `GARMENT_NOT_READY`

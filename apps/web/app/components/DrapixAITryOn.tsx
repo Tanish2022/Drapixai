@@ -9,11 +9,13 @@ type DrapixAITryOnProps = {
   containerId?: string;
   baseUrl?: string;
   garmentType?: 'upper';
+  quality?: 'standard' | 'enhanced';
   buttonText?: string;
   modalTitle?: string;
   modalSubtitle?: string;
   footerText?: string;
   primaryGradient?: string;
+  onResult?: DrapixAIInitOptions['onResult'];
 };
 
 export default function DrapixAITryOn(props: DrapixAITryOnProps) {
@@ -23,11 +25,13 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     containerId = 'drapixai-container',
     baseUrl = PUBLIC_API_BASE_URL,
     garmentType = 'upper',
+    quality = 'enhanced',
     buttonText,
     modalTitle,
     modalSubtitle,
     footerText,
     primaryGradient,
+    onResult,
   } = props;
 
   useEffect(() => {
@@ -41,11 +45,13 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
           containerId,
           baseUrl,
           garmentType,
+          quality,
           buttonText,
           modalTitle,
           modalSubtitle,
           footerText,
-          primaryGradient
+          primaryGradient,
+          onResult,
         });
       }
     };
@@ -71,11 +77,13 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     containerId,
     baseUrl,
     garmentType,
+    quality,
     buttonText,
     modalTitle,
     modalSubtitle,
     footerText,
-    primaryGradient
+    primaryGradient,
+    onResult,
   ]);
 
   return <div id={containerId}></div>;

@@ -745,8 +745,16 @@ router.post('/tryon', authMiddleware, upload.fields([
 
       const buffer = Buffer.from(await aiResponse.arrayBuffer());
       const contentType = aiResponse.headers.get('content-type') || 'image/png';
+      const engine = aiResponse.headers.get('x-drapixai-engine') || '';
+      const qualityScore = aiResponse.headers.get('x-drapixai-quality-score') || '';
+      const candidateCount = aiResponse.headers.get('x-drapixai-candidate-count') || '';
+      const warnings = aiResponse.headers.get('x-drapixai-warnings') || '';
       res.setHeader('Content-Type', contentType);
       res.setHeader('x-drapixai-tryon-result-id', String(tryOnResult.id));
+      if (engine) res.setHeader('x-drapixai-engine', engine);
+      if (qualityScore) res.setHeader('x-drapixai-quality-score', qualityScore);
+      if (candidateCount) res.setHeader('x-drapixai-candidate-count', candidateCount);
+      if (warnings) res.setHeader('x-drapixai-warnings', warnings);
       res.send(buffer);
     } finally {
       if (personFile?.path && fs.existsSync(personFile.path)) fs.unlinkSync(personFile.path);

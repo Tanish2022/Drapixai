@@ -27,7 +27,11 @@
 
           context.fillStyle = 'rgba(5, 8, 22, 0.62)';
           context.beginPath();
-          context.roundRect(x - boxWidth, y - boxHeight, boxWidth, boxHeight, 12);
+          if (typeof context.roundRect === 'function') {
+            context.roundRect(x - boxWidth, y - boxHeight, boxWidth, boxHeight, 12);
+          } else {
+            context.rect(x - boxWidth, y - boxHeight, boxWidth, boxHeight);
+          }
           context.fill();
 
           context.fillStyle = 'rgba(255,255,255,0.94)';
@@ -64,6 +68,31 @@
     }, 1500);
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function parseNumber(value) {
+    var parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  function readTryOnMetadata(response) {
+    var warnings = response.headers.get('x-drapixai-warnings') || '';
+    return {
+      resultId: response.headers.get('x-drapixai-tryon-result-id') || undefined,
+      engine: response.headers.get('x-drapixai-engine') || undefined,
+      qualityScore: parseNumber(response.headers.get('x-drapixai-quality-score')),
+      candidateCount: parseNumber(response.headers.get('x-drapixai-candidate-count')),
+      warnings: warnings ? warnings.split(',').map(function (item) { return item.trim(); }).filter(Boolean) : []
+    };
+  }
+
   function ensureWidgetStyles() {
     if (document.getElementById('drapixai-sdk-styles')) {
       return;
@@ -94,6 +123,7 @@
         buttonTargetSelector: options.buttonTargetSelector || '[data-drapix-button-slot]',
         baseUrl: options.baseUrl || window.DRAPIXAI_API_BASE_URL || window.location.origin,
         garmentType: (options.garmentType || 'upper').toLowerCase(),
+        quality: (options.quality || 'enhanced').toLowerCase(),
         buttonText: options.buttonText || 'Try On',
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
@@ -103,6 +133,9 @@
 
       if (config.garmentType !== 'upper') {
         throw new Error('UPPER_BODY_ONLY');
+      }
+      if (config.quality !== 'standard' && config.quality !== 'enhanced') {
+        throw new Error('INVALID_QUALITY');
       }
 
       var container = document.getElementById(config.containerId);
@@ -130,9 +163,9 @@
       function createLauncherMarkup(productId) {
         return [
           '<div style="font-family: Arial, sans-serif;">',
-          '  <button data-drapix-launcher="true" data-drapix-product-id="', productId, '" style="display:inline-flex;align-items:center;gap:10px;background:', config.primaryGradient, ';color:#fff;border:none;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:700;box-shadow:0 18px 40px rgba(34,211,238,0.18);">',
+          '  <button data-drapix-launcher="true" data-drapix-product-id="', escapeHtml(productId), '" style="display:inline-flex;align-items:center;gap:10px;background:', escapeHtml(config.primaryGradient), ';color:#fff;border:none;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:700;box-shadow:0 18px 40px rgba(34,211,238,0.18);">',
           '    <span style="display:inline-flex;width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,0.16);align-items:center;justify-content:center;font-size:12px;">D</span>',
-          '    ', config.buttonText,
+          '    ', escapeHtml(config.buttonText),
           '  </button>',
           '</div>'
         ].join('');
@@ -159,23 +192,23 @@
           '<div style="position:relative;width:min(680px,96vw);max-height:92vh;overflow:auto;border-radius:28px;border:1px solid rgba(255,255,255,0.08);background:linear-gradient(180deg,rgba(11,17,32,0.96) 0%,rgba(8,12,24,0.98) 100%);color:#fff;box-shadow:0 40px 120px rgba(4,8,20,0.65);">',
           '  <div style="position:absolute;inset:-20% auto auto -10%;width:220px;height:220px;border-radius:999px;background:rgba(34,211,238,0.14);filter:blur(45px);animation:drapixPulse 6s ease-in-out infinite;"></div>',
           '  <div style="position:absolute;inset:auto -12% -18% auto;width:240px;height:240px;border-radius:999px;background:rgba(59,130,246,0.12);filter:blur(55px);animation:drapixPulse 7s ease-in-out infinite;"></div>',
-          '  <button id="drapix-close" style="position:absolute;top:16px;right:18px;width:36px;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#cbd5e1;cursor:pointer;font-size:18px;">×</button>',
+          '  <button id="drapix-close" style="position:absolute;top:16px;right:18px;width:36px;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#cbd5e1;cursor:pointer;font-size:18px;">&times;</button>',
           '  <div style="position:relative;padding:26px;">',
           '    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">',
-          '      <div style="display:flex;width:40px;height:40px;border-radius:14px;align-items:center;justify-content:center;background:', config.primaryGradient, ';font-weight:800;letter-spacing:0.02em;">D</div>',
+          '      <div style="display:flex;width:40px;height:40px;border-radius:14px;align-items:center;justify-content:center;background:', escapeHtml(config.primaryGradient), ';font-weight:800;letter-spacing:0.02em;">D</div>',
           '      <div>',
           '        <div style="font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#dbeafe;">DrapixAI</div>',
           '        <div style="font-size:12px;color:#94a3b8;">Premium virtual try-on preview</div>',
           '      </div>',
           '    </div>',
-          '    <div style="font-size:24px;font-weight:700;line-height:1.2;margin-bottom:8px;">', config.modalTitle, '</div>',
-          '    <div style="font-size:13px;line-height:1.6;color:#9fb0c7;max-width:560px;margin-bottom:20px;">', config.modalSubtitle, '</div>',
+          '    <div style="font-size:24px;font-weight:700;line-height:1.2;margin-bottom:8px;">', escapeHtml(config.modalTitle), '</div>',
+          '    <div style="font-size:13px;line-height:1.6;color:#9fb0c7;max-width:560px;margin-bottom:20px;">', escapeHtml(config.modalSubtitle), '</div>',
           '    <div style="display:grid;gap:18px;">',
           '      <div id="drapix-dropzone" class="drapix-dropzone" style="position:relative;border:1px dashed rgba(255,255,255,0.16);border-radius:22px;padding:24px;background:rgba(255,255,255,0.03);transition:all .2s ease;">',
           '        <input id="drapix-person" type="file" accept="image/*" style="display:none;" />',
           '        <div id="drapix-upload-state">',
           '          <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:18px;background:rgba(255,255,255,0.06);margin-bottom:14px;">',
-          '            <span style="font-size:22px;">↑</span>',
+          '            <span style="font-size:22px;">&#8593;</span>',
           '          </div>',
           '          <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Upload your front-facing image or drop it here</div>',
           '          <div style="font-size:13px;color:#94a3b8;line-height:1.6;">Clear lighting and a straight-facing pose produce the strongest DrapixAI try-on previews.</div>',
@@ -198,12 +231,12 @@
           '        </label>',
           '        <div style="display:flex;gap:10px;flex-wrap:wrap;">',
           '          <button id="drapix-reset" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#e2e8f0;font-weight:600;cursor:pointer;">Reset</button>',
-          '          <button id="drapix-run" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:none;background:', config.primaryGradient, ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 18px 40px rgba(34,211,238,0.16);">Proceed</button>',
+          '          <button id="drapix-run" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:none;background:', escapeHtml(config.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 18px 40px rgba(34,211,238,0.16);">Proceed</button>',
           '        </div>',
           '      </div>',
           '      <div id="drapix-progress" style="display:none;">',
           '        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">',
-          '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', config.primaryGradient, ';transition:width .25s ease;"></div>',
+          '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', escapeHtml(config.primaryGradient), ';transition:width .25s ease;"></div>',
           '        </div>',
           '      </div>',
           '      <div id="drapix-status" style="font-size:13px;color:#a7b8cc;min-height:20px;"></div>',
@@ -214,13 +247,13 @@
           '            <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
           '          </div>',
           '          <div style="display:flex;gap:10px;flex-wrap:wrap;">',
-          '            <button id="drapix-download" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:none;background:', config.primaryGradient, ';color:#fff;font-weight:700;cursor:pointer;">Download</button>',
+          '            <button id="drapix-download" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:none;background:', escapeHtml(config.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;">Download</button>',
           '            <button id="drapix-share" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#fff;font-weight:600;cursor:pointer;">Share</button>',
           '          </div>',
           '        </div>',
           '        <img id="drapix-result" alt="DrapixAI Result" style="width:100%;display:block;border-radius:18px;background:#081226;border:1px solid rgba(255,255,255,0.06);" />',
           '      </div>',
-          '      <div style="font-size:11px;color:#7f91a8;">', config.footerText, '</div>',
+          '      <div style="font-size:11px;color:#7f91a8;">', escapeHtml(config.footerText), '</div>',
           '    </div>',
           '  </div>',
           '</div>'
@@ -413,8 +446,8 @@
             var form = new FormData();
             form.append('person_image', personInput.files[0]);
             form.append('productId', productId || config.productId);
-            form.append('quality', 'enhanced');
-            form.append('garment_type', 'upper');
+            form.append('quality', config.quality);
+            form.append('garment_type', config.garmentType);
 
             var res = await fetch(config.baseUrl + '/sdk/tryon', {
               method: 'POST',
@@ -427,9 +460,14 @@
               throw new Error(err && (err.message || err.error) || 'TRY_ON_FAILED');
             }
 
+            var metadata = readTryOnMetadata(res);
             var blob = await res.blob();
             if (activeResultUrl) {
               URL.revokeObjectURL(activeResultUrl);
+            }
+            window.DrapixAI.lastResultMetadata = metadata;
+            if (typeof options.onResult === 'function') {
+              options.onResult(metadata);
             }
             activeResultUrl = URL.createObjectURL(blob);
             result.src = activeResultUrl;
@@ -468,8 +506,8 @@
           }
           var wrapper = document.createElement('div');
           wrapper.innerHTML = createLauncherMarkup(productId);
-          targetNode.appendChild(wrapper.firstElementChild);
-          var launcher = targetNode.querySelector('[data-drapix-launcher="true"][data-drapix-product-id="' + productId + '"]');
+          var launcher = wrapper.firstElementChild;
+          targetNode.appendChild(launcher);
           if (launcher) {
             bindLauncher(launcher, productId);
           }
