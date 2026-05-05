@@ -108,6 +108,8 @@ class DrapixAITryOnPipeline:
                 "garment_width": garment_analysis.width,
                 "garment_height": garment_analysis.height,
                 "garment_foreground_ratio": garment_analysis.foreground_ratio,
+                "garment_bbox_ratio": garment_analysis.bbox_ratio,
+                "garment_background_ratio": garment_analysis.background_ratio,
                 "garment_dominant_color": garment_analysis.dominant_color,
                 **best.metadata,
             },

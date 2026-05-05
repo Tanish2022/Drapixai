@@ -83,7 +83,7 @@ class Settings:
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
     candidate_count: int = int(os.getenv("DRAPIXAI_CANDIDATE_COUNT", "4"))
-    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.72"))
+    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.78"))
     device: str = os.getenv("DRAPIXAI_DEVICE", "cuda")
     cuda_device_index: int = int(os.getenv("DRAPIXAI_CUDA_DEVICE", "0"))
 

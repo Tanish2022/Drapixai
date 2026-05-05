@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 from drapixai_ai.engines.base import TryOnCandidate
+from drapixai_ai.preprocess.garment_analyzer import prepare_garment_for_tryon
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class TryOnScorer:
         candidate: Image.Image,
     ) -> TryOnScore:
         person_rgb = self._rgb(person, candidate.size)
-        garment_rgb = self._rgb(garment, candidate.size)
+        garment_rgb = prepare_garment_for_tryon(garment, candidate.size)
         candidate_rgb = self._rgb(candidate, candidate.size)
 
         color_similarity = self._color_similarity(garment_rgb, candidate_rgb)
@@ -40,15 +41,19 @@ class TryOnScorer:
         edge_quality = self._edge_quality(candidate_rgb)
         artifact_score = self._artifact_score(candidate_rgb)
         realism_score = self._realism_score(candidate_rgb)
+        garment_structure = self._garment_structure_score(garment_rgb, candidate_rgb)
+        hem_quality = self._hem_quality(candidate_rgb)
 
         score = (
-            0.22 * face_similarity
-            + 0.20 * body_similarity
-            + 0.20 * color_similarity
-            + 0.16 * texture_similarity
-            + 0.12 * edge_quality
-            + 0.06 * artifact_score
-            + 0.04 * realism_score
+            0.20 * face_similarity
+            + 0.18 * body_similarity
+            + 0.18 * color_similarity
+            + 0.14 * texture_similarity
+            + 0.12 * garment_structure
+            + 0.08 * edge_quality
+            + 0.05 * hem_quality
+            + 0.03 * artifact_score
+            + 0.02 * realism_score
         )
         score = float(max(0.0, min(1.0, score)))
 
@@ -65,6 +70,10 @@ class TryOnScorer:
             warnings.append("IMAGE_ARTIFACT_RISK")
         if realism_score < 0.50:
             warnings.append("LOW_REALISM_RISK")
+        if garment_structure < 0.48:
+            warnings.append("GARMENT_SHAPE_DRIFT")
+        if hem_quality < 0.55:
+            warnings.append("GARMENT_HEM_BLEND_RISK")
 
         return TryOnScore(
             score=score,
@@ -77,6 +86,8 @@ class TryOnScorer:
                 "edge_quality": edge_quality,
                 "artifact_score": artifact_score,
                 "overall_realism": realism_score,
+                "garment_structure": garment_structure,
+                "hem_quality": hem_quality,
             },
         )
 
@@ -170,6 +181,43 @@ class TryOnScorer:
         candidate_edges = self._center_crop_array(candidate.convert("L").filter(ImageFilter.FIND_EDGES))
         diff = abs(float(garment_edges.std()) - float(candidate_edges.std()))
         return float(1.0 - min(1.0, diff * 3.0))
+
+    def _garment_structure_score(self, garment: Image.Image, candidate: Image.Image) -> float:
+        garment_edges = self._upper_body_edges(garment)
+        candidate_edges = self._upper_body_edges(candidate)
+        garment_density = float((garment_edges > 0.18).mean())
+        candidate_density = float((candidate_edges > 0.18).mean())
+        density_score = 1.0 - min(1.0, abs(garment_density - candidate_density) * 4.5)
+
+        garment_vertical = garment_edges.mean(axis=1)
+        candidate_vertical = candidate_edges.mean(axis=1)
+        profile_diff = float(np.abs(garment_vertical - candidate_vertical).mean())
+        profile_score = 1.0 - min(1.0, profile_diff * 7.0)
+
+        return float(max(0.0, min(1.0, 0.55 * density_score + 0.45 * profile_score)))
+
+    @staticmethod
+    def _upper_body_edges(image: Image.Image) -> np.ndarray:
+        arr = np.asarray(image.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        h, w = arr.shape[:2]
+        return arr[int(h * 0.24) : int(h * 0.80), int(w * 0.16) : int(w * 0.84)]
+
+    @staticmethod
+    def _hem_quality(candidate: Image.Image) -> float:
+        arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = arr.shape[:2]
+        hem = arr[int(h * 0.66) : int(h * 0.80), int(w * 0.22) : int(w * 0.78)]
+        lower = arr[int(h * 0.80) : int(h * 0.90), int(w * 0.22) : int(w * 0.78)]
+        if hem.size == 0 or lower.size == 0:
+            return 0.55
+        hem_edges = np.asarray(
+            Image.fromarray((hem * 255).astype(np.uint8)).convert("L").filter(ImageFilter.FIND_EDGES)
+        ).astype(np.float32) / 255.0
+        edge_density = float((hem_edges > 0.18).mean())
+        color_gap = float(np.abs(hem.mean(axis=(0, 1)) - lower.mean(axis=(0, 1))).mean())
+        boundary_score = 1.0 - min(1.0, abs(edge_density - 0.12) * 3.0)
+        separation_score = min(1.0, color_gap * 4.5)
+        return float(max(0.0, min(1.0, 0.55 * boundary_score + 0.45 * separation_score)))
 
     @staticmethod
     def _edge_quality(candidate: Image.Image) -> float:
