@@ -98,14 +98,23 @@ def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Imag
     if float(mask.mean()) < 0.035:
         return image
 
-    source = np.median(arr[mask], axis=0)
+    source_pixels = arr[mask]
+    source = np.median(source_pixels, axis=0)
     strength = max(0.0, min(0.90, settings.garment_color_fix_strength))
     corrected = arr.copy()
 
     # Preserve generated lighting/texture by applying a bounded garment-level
-    # color offset instead of repainting each pixel to a flat product color.
-    rgb_delta = np.clip(target - source, -28.0, 28.0)
-    corrected[mask] = corrected[mask] + rgb_delta * strength
+    # color and contrast correction instead of repainting each pixel flat.
+    target_p10 = np.percentile(garment_pixels.astype(np.float32), 10, axis=0)
+    target_p90 = np.percentile(garment_pixels.astype(np.float32), 90, axis=0)
+    source_p10 = np.percentile(source_pixels, 10, axis=0)
+    source_p90 = np.percentile(source_pixels, 90, axis=0)
+    source_range = np.maximum(12.0, source_p90 - source_p10)
+    target_range = np.maximum(12.0, target_p90 - target_p10)
+    gain = np.clip(target_range / source_range, 0.82, 1.22)
+    rgb_delta = np.clip(target - source, -38.0, 38.0)
+    adjusted = (corrected[mask] - source) * (1.0 + (gain - 1.0) * strength) + source + rgb_delta * strength
+    corrected[mask] = adjusted
 
     alpha = Image.fromarray((mask.astype(np.uint8) * 255), mode="L").filter(ImageFilter.GaussianBlur(radius=10))
     corrected_img = Image.fromarray(np.clip(corrected, 0, 255).astype(np.uint8), mode="RGB")

@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import torch
 from diffusers.image_processor import VaeImageProcessor
 from PIL import Image, ImageChops, ImageDraw
@@ -136,6 +137,68 @@ class CatVTONEngine(TryOnEngine):
         )
         return ImageChops.lighter(mask.convert("L"), extension)
 
+    @staticmethod
+    def _garment_has_long_sleeves(garment: Image.Image) -> bool:
+        arr = np.asarray(garment.convert("RGB"))
+        h, w = arr.shape[:2]
+        foreground = (arr.mean(axis=2) < 242) & (arr.std(axis=2) > 5)
+        side = foreground & (
+            ((np.arange(w)[None, :] < w * 0.36) | (np.arange(w)[None, :] > w * 0.64))
+        )
+        side_window = side[int(h * 0.36) : int(h * 0.88)]
+        if side_window.size == 0:
+            return False
+        row_coverage = side_window.mean(axis=1)
+        visible_rows = np.where(row_coverage > 0.035)[0]
+        if visible_rows.size == 0:
+            return False
+        sleeve_bottom = (int(h * 0.36) + int(visible_rows.max())) / max(1, h)
+        lower_coverage = float(side[int(h * 0.58) : int(h * 0.84)].mean())
+        return sleeve_bottom > 0.68 and lower_coverage > 0.045
+
+    def _preserve_long_sleeves(
+        self,
+        mask: Image.Image,
+        garment: Image.Image,
+        garment_type: str | None,
+    ) -> Image.Image:
+        if (
+            not settings.catvton_preserve_long_sleeves
+            or not self._is_upper_garment(garment_type)
+            or not self._garment_has_long_sleeves(garment)
+        ):
+            return mask
+
+        width, height = mask.size
+        wrist_y = int(height * max(0.70, min(0.80, settings.catvton_long_sleeve_wrist_ratio)))
+        extension = Image.new("L", mask.size, 0)
+        draw = ImageDraw.Draw(extension)
+        shoulder_y = int(height * 0.30)
+        elbow_y = int(height * 0.54)
+
+        left_sleeve = [
+            (int(width * 0.18), shoulder_y),
+            (int(width * 0.31), int(height * 0.34)),
+            (int(width * 0.30), elbow_y),
+            (int(width * 0.27), wrist_y),
+            (int(width * 0.17), wrist_y),
+            (int(width * 0.13), elbow_y),
+        ]
+        right_sleeve = [
+            (int(width * 0.82), shoulder_y),
+            (int(width * 0.69), int(height * 0.34)),
+            (int(width * 0.70), elbow_y),
+            (int(width * 0.73), wrist_y),
+            (int(width * 0.83), wrist_y),
+            (int(width * 0.87), elbow_y),
+        ]
+        draw.polygon(left_sleeve, fill=230)
+        draw.polygon(right_sleeve, fill=230)
+        cuff_width = max(4, width // 75)
+        draw.line([(int(width * 0.18), wrist_y), (int(width * 0.27), wrist_y)], fill=255, width=cuff_width)
+        draw.line([(int(width * 0.73), wrist_y), (int(width * 0.82), wrist_y)], fill=255, width=cuff_width)
+        return ImageChops.lighter(mask.convert("L"), extension)
+
     def generate(
         self,
         person: Image.Image,
@@ -152,6 +215,7 @@ class CatVTONEngine(TryOnEngine):
         person, garment = normalize_tryon_inputs(person, garment, size)
         mask = mask.resize(size, Image.BICUBIC) if mask else self._build_mask(person, garment_type)
         mask = self._preserve_untucked_hem(mask, garment_type)
+        mask = self._preserve_long_sleeves(mask, garment, garment_type)
         mask = self.mask_processor.blur(mask, blur_factor=settings.catvton_mask_blur)
 
         generator = None
