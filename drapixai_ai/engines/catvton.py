@@ -108,15 +108,31 @@ class CatVTONEngine(TryOnEngine):
         width, height = mask.size
         extension = Image.new("L", mask.size, 0)
         draw = ImageDraw.Draw(extension)
-        hem_bottom = int(height * max(0.74, min(0.90, settings.catvton_hem_extension_ratio)))
+        requested_bottom = max(0.74, min(0.90, settings.catvton_hem_extension_ratio))
+        max_upper_bottom = max(0.76, min(0.86, settings.catvton_upper_hem_max_ratio))
+        hem_bottom = int(height * min(requested_bottom, max_upper_bottom))
+        side_lift = int(height * max(0.015, min(0.08, settings.catvton_upper_hem_side_lift_ratio)))
+        side_hem = max(int(height * 0.70), hem_bottom - side_lift)
         draw.polygon(
             [
                 (int(width * 0.24), int(height * 0.58)),
                 (int(width * 0.76), int(height * 0.58)),
-                (int(width * 0.72), hem_bottom),
-                (int(width * 0.28), hem_bottom),
+                (int(width * 0.70), side_hem),
+                (int(width * 0.62), hem_bottom),
+                (int(width * 0.38), hem_bottom),
+                (int(width * 0.30), side_hem),
             ],
             fill=220,
+        )
+        draw.line(
+            [
+                (int(width * 0.30), side_hem),
+                (int(width * 0.40), hem_bottom),
+                (int(width * 0.60), hem_bottom),
+                (int(width * 0.70), side_hem),
+            ],
+            fill=255,
+            width=max(4, width // 80),
         )
         return ImageChops.lighter(mask.convert("L"), extension)
 

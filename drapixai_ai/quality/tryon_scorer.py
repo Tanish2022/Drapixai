@@ -247,14 +247,37 @@ class TryOnScorer:
         garment_color = np.median(self._foreground_pixels(garment), axis=0)
         candidate_arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
         ch, cw = candidate_arr.shape[:2]
-        hem_region = candidate_arr[int(ch * 0.68) : int(ch * 0.84), int(cw * 0.26) : int(cw * 0.74)]
-        if hem_region.size == 0:
+        lower_y0 = int(ch * 0.62)
+        lower_y1 = int(ch * 0.86)
+        lower_x0 = int(cw * 0.26)
+        lower_x1 = int(cw * 0.74)
+        lower_region = candidate_arr[lower_y0:lower_y1, lower_x0:lower_x1]
+        if lower_region.size == 0:
             return 0.45
 
-        color_distance = np.linalg.norm(hem_region - garment_color, axis=2)
-        garment_like_ratio = float((color_distance < 0.24).mean())
-        mean_similarity = 1.0 - min(1.0, float(np.linalg.norm(hem_region.mean(axis=(0, 1)) - garment_color)) * 1.6)
-        return float(max(0.0, min(1.0, 0.70 * min(1.0, garment_like_ratio * 3.2) + 0.30 * mean_similarity)))
+        color_distance = np.linalg.norm(lower_region - garment_color, axis=2)
+        garment_like = color_distance < 0.26
+        row_coverage = garment_like.mean(axis=1)
+        visible_rows = np.where(row_coverage > 0.28)[0]
+        garment_like_ratio = float(garment_like.mean())
+        if visible_rows.size == 0:
+            return float(max(0.0, min(1.0, garment_like_ratio * 1.8)))
+
+        bottom_norm = (lower_y0 + int(visible_rows.max())) / max(1, ch)
+        coverage_score = min(1.0, garment_like_ratio * 4.0)
+        if bottom_norm < 0.72:
+            boundary_score = max(0.0, (bottom_norm - 0.62) / 0.10)
+        elif bottom_norm <= 0.84:
+            boundary_score = 1.0
+        else:
+            boundary_score = max(0.0, 1.0 - ((bottom_norm - 0.84) / 0.08))
+        mean_similarity = 1.0 - min(
+            1.0,
+            float(np.linalg.norm(lower_region[garment_like].mean(axis=0) - garment_color)) * 1.6
+            if garment_like.any()
+            else 1.0,
+        )
+        return float(max(0.0, min(1.0, 0.45 * coverage_score + 0.40 * boundary_score + 0.15 * mean_similarity)))
 
     @staticmethod
     def _edge_quality(candidate: Image.Image) -> float:
