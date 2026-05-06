@@ -128,19 +128,26 @@ def _generated_garment_mask(arr: np.ndarray, target: np.ndarray) -> np.ndarray:
     h, w = arr.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
     body_region = (yy > h * 0.18) & (yy < h * 0.86) & (xx > w * 0.08) & (xx < w * 0.92)
-    face_region = (((xx - w * 0.50) / max(1.0, w * 0.23)) ** 2 + ((yy - h * 0.20) / max(1.0, h * 0.17)) ** 2) < 1.0
-    lower_center = (yy > h * 0.80) & (xx > w * 0.30) & (xx < w * 0.70)
 
     chroma = _rgb_chroma(arr)
     target_chroma = _rgb_chroma(target.reshape(1, 1, 3))[0, 0]
     chroma_distance = np.linalg.norm(chroma - target_chroma, axis=2)
     brightness = arr.mean(axis=2)
     saturation = arr.max(axis=2) - arr.min(axis=2)
+    red = arr[:, :, 0]
+    green = arr[:, :, 1]
+    blue = arr[:, :, 2]
+    skin_like = (
+        (red > green * 1.04)
+        & (red > blue * 1.14)
+        & (green > blue * 0.92)
+        & (brightness > 68)
+        & (brightness < 226)
+    )
 
     return (
         body_region
-        & ~face_region
-        & ~lower_center
+        & ~skin_like
         & (chroma_distance < 0.26)
         & (brightness > 38)
         & (brightness < 235)
