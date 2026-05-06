@@ -84,6 +84,8 @@ class Settings:
     catvton_hem_extension_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_HEM_EXTENSION_RATIO", "0.84"))
     catvton_upper_hem_max_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_UPPER_HEM_MAX_RATIO", "0.82"))
     catvton_upper_hem_side_lift_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_UPPER_HEM_SIDE_LIFT_RATIO", "0.045"))
+    enable_garment_color_fix: bool = os.getenv("DRAPIXAI_ENABLE_GARMENT_COLOR_FIX", "1") == "1"
+    garment_color_fix_strength: float = float(os.getenv("DRAPIXAI_GARMENT_COLOR_FIX_STRENGTH", "0.78"))
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
     candidate_count: int = int(os.getenv("DRAPIXAI_CANDIDATE_COUNT", "4"))
