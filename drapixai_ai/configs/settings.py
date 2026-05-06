@@ -80,6 +80,8 @@ class Settings:
     catvton_mask_blur: int = int(os.getenv("DRAPIXAI_CATVTON_MASK_BLUR", "9"))
     catvton_mask_source: str = os.getenv("DRAPIXAI_CATVTON_MASK_SOURCE", "automasker")
     catvton_skip_safety_check: bool = os.getenv("DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK", "0") == "1"
+    catvton_preserve_untucked_hem: bool = os.getenv("DRAPIXAI_CATVTON_PRESERVE_UNTUCKED_HEM", "1") == "1"
+    catvton_hem_extension_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_HEM_EXTENSION_RATIO", "0.84"))
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
     candidate_count: int = int(os.getenv("DRAPIXAI_CANDIDATE_COUNT", "4"))

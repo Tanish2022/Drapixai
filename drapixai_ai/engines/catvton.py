@@ -6,7 +6,7 @@ from pathlib import Path
 
 import torch
 from diffusers.image_processor import VaeImageProcessor
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.engines.base import TryOnEngine
@@ -97,6 +97,29 @@ class CatVTONEngine(TryOnEngine):
         except Exception:
             return build_upper_body_mask(person)
 
+    @staticmethod
+    def _is_upper_garment(garment_type: str | None) -> bool:
+        return CatVTONEngine._cloth_type(garment_type) == "upper"
+
+    def _preserve_untucked_hem(self, mask: Image.Image, garment_type: str | None) -> Image.Image:
+        if not settings.catvton_preserve_untucked_hem or not self._is_upper_garment(garment_type):
+            return mask
+
+        width, height = mask.size
+        extension = Image.new("L", mask.size, 0)
+        draw = ImageDraw.Draw(extension)
+        hem_bottom = int(height * max(0.74, min(0.90, settings.catvton_hem_extension_ratio)))
+        draw.polygon(
+            [
+                (int(width * 0.24), int(height * 0.58)),
+                (int(width * 0.76), int(height * 0.58)),
+                (int(width * 0.72), hem_bottom),
+                (int(width * 0.28), hem_bottom),
+            ],
+            fill=220,
+        )
+        return ImageChops.lighter(mask.convert("L"), extension)
+
     def generate(
         self,
         person: Image.Image,
@@ -112,6 +135,7 @@ class CatVTONEngine(TryOnEngine):
         size = (self.width, self.height)
         person, garment = normalize_tryon_inputs(person, garment, size)
         mask = mask.resize(size, Image.BICUBIC) if mask else self._build_mask(person, garment_type)
+        mask = self._preserve_untucked_hem(mask, garment_type)
         mask = self.mask_processor.blur(mask, blur_factor=settings.catvton_mask_blur)
 
         generator = None

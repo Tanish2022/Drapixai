@@ -43,17 +43,19 @@ class TryOnScorer:
         realism_score = self._realism_score(candidate_rgb)
         garment_structure = self._garment_structure_score(garment_rgb, candidate_rgb)
         hem_quality = self._hem_quality(candidate_rgb)
+        untucked_hem_presence = self._untucked_hem_presence(garment_rgb, candidate_rgb)
 
         score = (
-            0.20 * face_similarity
-            + 0.18 * body_similarity
-            + 0.18 * color_similarity
-            + 0.14 * texture_similarity
+            0.19 * face_similarity
+            + 0.17 * body_similarity
+            + 0.17 * color_similarity
+            + 0.13 * texture_similarity
             + 0.12 * garment_structure
             + 0.08 * edge_quality
-            + 0.05 * hem_quality
+            + 0.08 * untucked_hem_presence
+            + 0.04 * hem_quality
             + 0.03 * artifact_score
-            + 0.02 * realism_score
+            + 0.01 * realism_score
         )
         score = float(max(0.0, min(1.0, score)))
 
@@ -74,6 +76,8 @@ class TryOnScorer:
             warnings.append("GARMENT_SHAPE_DRIFT")
         if hem_quality < 0.55:
             warnings.append("GARMENT_HEM_BLEND_RISK")
+        if untucked_hem_presence < 0.42:
+            warnings.append("GARMENT_TUCKED_HEM_RISK")
 
         return TryOnScore(
             score=score,
@@ -88,6 +92,7 @@ class TryOnScorer:
                 "overall_realism": realism_score,
                 "garment_structure": garment_structure,
                 "hem_quality": hem_quality,
+                "untucked_hem_presence": untucked_hem_presence,
             },
         )
 
@@ -218,6 +223,38 @@ class TryOnScorer:
         boundary_score = 1.0 - min(1.0, abs(edge_density - 0.12) * 3.0)
         separation_score = min(1.0, color_gap * 4.5)
         return float(max(0.0, min(1.0, 0.55 * boundary_score + 0.45 * separation_score)))
+
+    @staticmethod
+    def _foreground_pixels(image: Image.Image) -> np.ndarray:
+        arr = np.asarray(image.convert("RGB")).astype(np.float32) / 255.0
+        # Prepared garments sit on a white canvas. Exclude background and very dark buttons.
+        foreground = (arr.mean(axis=2) < 0.94) & (arr.std(axis=2) > 0.015)
+        pixels = arr[foreground]
+        if pixels.size == 0:
+            return arr.reshape(-1, 3)
+        return pixels
+
+    def _untucked_hem_presence(self, garment: Image.Image, candidate: Image.Image) -> float:
+        garment_arr = np.asarray(garment.convert("RGB")).astype(np.float32) / 255.0
+        h, w = garment_arr.shape[:2]
+        garment_lower = garment_arr[int(h * 0.58) : int(h * 0.90), int(w * 0.24) : int(w * 0.76)]
+        garment_lower_pixels = garment_lower[
+            (garment_lower.mean(axis=2) < 0.94) & (garment_lower.std(axis=2) > 0.015)
+        ]
+        if garment_lower_pixels.size == 0:
+            return 0.65
+
+        garment_color = np.median(self._foreground_pixels(garment), axis=0)
+        candidate_arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        ch, cw = candidate_arr.shape[:2]
+        hem_region = candidate_arr[int(ch * 0.68) : int(ch * 0.84), int(cw * 0.26) : int(cw * 0.74)]
+        if hem_region.size == 0:
+            return 0.45
+
+        color_distance = np.linalg.norm(hem_region - garment_color, axis=2)
+        garment_like_ratio = float((color_distance < 0.24).mean())
+        mean_similarity = 1.0 - min(1.0, float(np.linalg.norm(hem_region.mean(axis=(0, 1)) - garment_color)) * 1.6)
+        return float(max(0.0, min(1.0, 0.70 * min(1.0, garment_like_ratio * 3.2) + 0.30 * mean_similarity)))
 
     @staticmethod
     def _edge_quality(candidate: Image.Image) -> float:
