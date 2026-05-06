@@ -109,12 +109,10 @@ class TryOnScorer:
     ) -> tuple[TryOnCandidate, list[float], list[str]]:
         scored: list[TryOnCandidate] = []
         candidate_scores: list[float] = []
-        warnings: list[str] = []
 
         for candidate in candidates:
             result = self.score_candidate(person, garment, candidate.image)
             candidate_scores.append(result.score)
-            warnings.extend(result.warnings)
             scored.append(
                 TryOnCandidate(
                     image=candidate.image,
@@ -126,7 +124,7 @@ class TryOnScorer:
             )
 
         best = max(scored, key=lambda item: item.score or 0.0)
-        return best, candidate_scores, sorted(set(warnings))
+        return best, candidate_scores, sorted(set(best.warnings))
 
     @staticmethod
     def _rgb(image: Image.Image, size: tuple[int, int]) -> Image.Image:

@@ -75,7 +75,7 @@ def _naturalize_lighting(image: Image.Image, person: Image.Image) -> Image.Image
         factor = 1.0 + ((target_luma - current_luma) / 255.0) * 0.20 * strength
         result = ImageEnhance.Brightness(result).enhance(max(0.965, min(1.03, factor)))
 
-    result = ImageEnhance.Color(result).enhance(1.0 - 0.035 * strength)
+    result = ImageEnhance.Color(result).enhance(1.0)
     result = ImageEnhance.Contrast(result).enhance(1.0 + 0.045 * strength)
     sharpened = result.filter(
         ImageFilter.UnsharpMask(
@@ -100,7 +100,7 @@ def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Imag
 
     source_pixels = arr[mask]
     source = np.median(source_pixels, axis=0)
-    strength = max(0.0, min(0.90, settings.garment_color_fix_strength))
+    strength = max(0.0, min(0.98, settings.garment_color_fix_strength))
     corrected = arr.copy()
 
     # Preserve generated lighting/texture by applying a bounded garment-level
@@ -112,7 +112,7 @@ def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Imag
     source_range = np.maximum(12.0, source_p90 - source_p10)
     target_range = np.maximum(12.0, target_p90 - target_p10)
     gain = np.clip(target_range / source_range, 0.82, 1.22)
-    rgb_delta = np.clip(target - source, -38.0, 38.0)
+    rgb_delta = np.clip(target - source, -48.0, 48.0)
     adjusted = (corrected[mask] - source) * (1.0 + (gain - 1.0) * strength) + source + rgb_delta * strength
     corrected[mask] = adjusted
 
