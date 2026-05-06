@@ -25,6 +25,9 @@ def apply_quality_boosters(
     if settings.enable_garment_color_fix:
         result = _match_garment_color(result, garment)
 
+    if settings.enable_natural_lighting_fix:
+        result = _naturalize_lighting(result, person)
+
     if settings.enable_refinement:
         result = _harmonize_luma(result, person)
         result = _restore_garment_saturation(result, garment)
@@ -57,6 +60,31 @@ def _restore_garment_saturation(image: Image.Image, garment: Image.Image) -> Ima
     if result_saturation >= garment_saturation * 0.85:
         return ImageEnhance.Color(image).enhance(1.02)
     return ImageEnhance.Color(image).enhance(1.05)
+
+
+def _naturalize_lighting(image: Image.Image, person: Image.Image) -> Image.Image:
+    strength = max(0.0, min(1.0, settings.natural_lighting_strength))
+    if strength <= 0:
+        return image
+
+    result = image.convert("RGB")
+    person_resized = person.convert("RGB").resize(result.size, Image.BICUBIC)
+    current_luma = _mean_luma(result)
+    target_luma = _mean_luma(person_resized)
+    if current_luma > 1:
+        factor = 1.0 + ((target_luma - current_luma) / 255.0) * 0.20 * strength
+        result = ImageEnhance.Brightness(result).enhance(max(0.965, min(1.03, factor)))
+
+    result = ImageEnhance.Color(result).enhance(1.0 - 0.035 * strength)
+    result = ImageEnhance.Contrast(result).enhance(1.0 + 0.045 * strength)
+    sharpened = result.filter(
+        ImageFilter.UnsharpMask(
+            radius=1.05,
+            percent=int(35 + 30 * strength),
+            threshold=4,
+        )
+    )
+    return Image.blend(result, sharpened, 0.28 * strength)
 
 
 def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Image:

@@ -82,10 +82,12 @@ class Settings:
     catvton_skip_safety_check: bool = os.getenv("DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK", "0") == "1"
     catvton_preserve_untucked_hem: bool = os.getenv("DRAPIXAI_CATVTON_PRESERVE_UNTUCKED_HEM", "1") == "1"
     catvton_hem_extension_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_HEM_EXTENSION_RATIO", "0.84"))
-    catvton_upper_hem_max_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_UPPER_HEM_MAX_RATIO", "0.82"))
-    catvton_upper_hem_side_lift_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_UPPER_HEM_SIDE_LIFT_RATIO", "0.045"))
+    catvton_upper_hem_max_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_UPPER_HEM_MAX_RATIO", "0.78"))
+    catvton_upper_hem_side_lift_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_UPPER_HEM_SIDE_LIFT_RATIO", "0.032"))
     enable_garment_color_fix: bool = os.getenv("DRAPIXAI_ENABLE_GARMENT_COLOR_FIX", "1") == "1"
     garment_color_fix_strength: float = float(os.getenv("DRAPIXAI_GARMENT_COLOR_FIX_STRENGTH", "0.78"))
+    enable_natural_lighting_fix: bool = os.getenv("DRAPIXAI_ENABLE_NATURAL_LIGHTING_FIX", "1") == "1"
+    natural_lighting_strength: float = float(os.getenv("DRAPIXAI_NATURAL_LIGHTING_STRENGTH", "0.55"))
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
     candidate_count: int = int(os.getenv("DRAPIXAI_CANDIDATE_COUNT", "4"))
