@@ -45,17 +45,19 @@ class TryOnScorer:
         hem_quality = self._hem_quality(candidate_rgb)
         untucked_hem_presence = self._untucked_hem_presence(garment_rgb, candidate_rgb)
         long_sleeve_preservation = self._long_sleeve_preservation(garment_rgb, candidate_rgb)
+        pose_preservation = self._pose_preservation(person_rgb, candidate_rgb)
 
         score = (
             0.19 * face_similarity
-            + 0.17 * body_similarity
-            + 0.15 * color_similarity
+            + 0.14 * body_similarity
+            + 0.15 * pose_preservation
+            + 0.13 * color_similarity
             + 0.12 * texture_similarity
-            + 0.11 * garment_structure
-            + 0.08 * edge_quality
-            + 0.08 * untucked_hem_presence
+            + 0.10 * garment_structure
+            + 0.07 * edge_quality
+            + 0.07 * untucked_hem_presence
             + 0.06 * long_sleeve_preservation
-            + 0.04 * hem_quality
+            + 0.03 * hem_quality
             + 0.03 * artifact_score
             + 0.01 * realism_score
         )
@@ -66,6 +68,8 @@ class TryOnScorer:
             warnings.append("GARMENT_COLOR_DRIFT")
         if body_similarity < 0.45:
             warnings.append("BODY_CHANGED_RISK")
+        if pose_preservation < 0.58:
+            warnings.append("POSE_CHANGED_RISK")
         if face_similarity < 0.50:
             warnings.append("FACE_CHANGED_RISK")
         if edge_quality < 0.35:
@@ -98,6 +102,7 @@ class TryOnScorer:
                 "hem_quality": hem_quality,
                 "untucked_hem_presence": untucked_hem_presence,
                 "long_sleeve_preservation": long_sleeve_preservation,
+                "pose_preservation": pose_preservation,
             },
         )
 
@@ -168,6 +173,37 @@ class TryOnScorer:
         )
         diff = np.abs(person_border.mean(axis=0) - candidate_border.mean(axis=0)).mean()
         return float(1.0 - min(1.0, diff * 1.5))
+
+    def _pose_preservation(self, person: Image.Image, candidate: Image.Image) -> float:
+        person_edges = self._pose_edge_map(person)
+        candidate_edges = self._pose_edge_map(candidate)
+        if person_edges.size == 0 or candidate_edges.size == 0:
+            return 0.55
+
+        h, w = person_edges.shape
+        yy, xx = np.mgrid[0:h, 0:w]
+        preserve_region = (
+            (yy < h * 0.34)
+            | (yy > h * 0.78)
+            | (xx < w * 0.24)
+            | (xx > w * 0.76)
+        )
+        preserve_region &= ~((yy > h * 0.34) & (yy < h * 0.78) & (xx > w * 0.28) & (xx < w * 0.72))
+        p = person_edges[preserve_region]
+        c = candidate_edges[preserve_region]
+        if p.size == 0 or c.size == 0:
+            return 0.55
+
+        density_score = 1.0 - min(1.0, abs(float(p.mean()) - float(c.mean())) * 4.5)
+        row_score = 1.0 - min(1.0, float(np.abs(person_edges.mean(axis=1) - candidate_edges.mean(axis=1)).mean()) * 8.0)
+        col_score = 1.0 - min(1.0, float(np.abs(person_edges.mean(axis=0) - candidate_edges.mean(axis=0)).mean()) * 8.0)
+        overlap = float((p & c).sum() / max(1, (p | c).sum()))
+        return float(max(0.0, min(1.0, 0.30 * density_score + 0.25 * row_score + 0.25 * col_score + 0.20 * overlap)))
+
+    @staticmethod
+    def _pose_edge_map(image: Image.Image) -> np.ndarray:
+        edges = np.asarray(image.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        return edges > 0.16
 
     @staticmethod
     def _face_crop_array(image: Image.Image) -> np.ndarray:
@@ -284,7 +320,8 @@ class TryOnScorer:
 
     def _long_sleeve_preservation(self, garment: Image.Image, candidate: Image.Image) -> float:
         garment_arr = np.asarray(garment.convert("RGB")).astype(np.float32) / 255.0
-        if not self._has_long_sleeves(garment_arr):
+        sleeve_style = self._sleeve_style(garment_arr)
+        if sleeve_style not in {"full_length", "folded_cuff", "rolled_sleeve"}:
             return 0.75
 
         garment_color = np.median(self._foreground_pixels(garment), axis=0)
@@ -303,12 +340,13 @@ class TryOnScorer:
 
         sleeve_map = np.zeros((h, w), dtype=bool)
         sleeve_map[sleeve_region] = garment_like_flat
-        left_score = self._single_sleeve_score(sleeve_map & left_region, left_region)
-        right_score = self._single_sleeve_score(sleeve_map & right_region, right_region)
+        target_bottom = self._target_sleeve_bottom(sleeve_style)
+        left_score = self._single_sleeve_score(sleeve_map & left_region, left_region, target_bottom)
+        right_score = self._single_sleeve_score(sleeve_map & right_region, right_region, target_bottom)
         return float(max(0.0, min(1.0, min(left_score, right_score))))
 
     @staticmethod
-    def _single_sleeve_score(garment_like: np.ndarray, sleeve_region: np.ndarray) -> float:
+    def _single_sleeve_score(garment_like: np.ndarray, sleeve_region: np.ndarray, target_bottom: float) -> float:
         h = garment_like.shape[0]
         y0 = int(h * 0.46)
         y1 = int(h * 0.78)
@@ -324,14 +362,15 @@ class TryOnScorer:
             return float(max(0.0, min(1.0, garment_like_ratio * 1.4)))
 
         sleeve_bottom = (y0 + int(visible_rows.max())) / max(1, h)
-        reach_score = 1.0 if sleeve_bottom >= 0.72 else max(0.0, (sleeve_bottom - 0.58) / 0.14)
+        bottom_error = abs(sleeve_bottom - target_bottom)
+        reach_score = 1.0 - min(1.0, bottom_error / 0.12)
         lower_band = row_coverage[int(len(row_coverage) * 0.62) :]
         lower_coverage_score = min(1.0, float(lower_band.mean()) * 3.0) if lower_band.size else 0.0
         coverage_score = min(1.0, garment_like_ratio * 3.2)
         return float(max(0.0, min(1.0, 0.45 * reach_score + 0.35 * lower_coverage_score + 0.20 * coverage_score)))
 
     @staticmethod
-    def _has_long_sleeves(garment_arr: np.ndarray) -> bool:
+    def _sleeve_style(garment_arr: np.ndarray) -> str:
         h, w = garment_arr.shape[:2]
         foreground = (garment_arr.mean(axis=2) < 0.94) & (garment_arr.std(axis=2) > 0.015)
         side = foreground & (
@@ -339,14 +378,38 @@ class TryOnScorer:
         )
         side_window = side[int(h * 0.36) : int(h * 0.88)]
         if side_window.size == 0:
-            return False
+            return "unknown"
         row_coverage = side_window.mean(axis=1)
         visible_rows = np.where(row_coverage > 0.035)[0]
         if visible_rows.size == 0:
-            return False
+            return "short_sleeve"
         sleeve_bottom = (int(h * 0.36) + int(visible_rows.max())) / max(1, h)
         lower_coverage = float(side[int(h * 0.58) : int(h * 0.84)].mean())
-        return sleeve_bottom > 0.68 and lower_coverage > 0.045
+        if sleeve_bottom < 0.50:
+            return "short_sleeve"
+        if sleeve_bottom < 0.66:
+            return "rolled_sleeve"
+        if lower_coverage <= 0.045:
+            return "unknown"
+        sleeve_rows = np.where(row_coverage > 0.035)[0]
+        last_rows = row_coverage[max(0, int(sleeve_rows.max()) - 18) : sleeve_rows.max() + 1]
+        forearm_rows = row_coverage[int(len(row_coverage) * 0.40) : int(len(row_coverage) * 0.72)]
+        cuff_coverage = float(last_rows.mean()) if last_rows.size else 0.0
+        forearm_coverage = float(forearm_rows.mean()) if forearm_rows.size else max(cuff_coverage, 1e-6)
+        cuff_ratio = cuff_coverage / max(0.001, forearm_coverage)
+        if sleeve_bottom > 0.82 and cuff_ratio < 0.45:
+            return "folded_cuff"
+        if sleeve_bottom > 0.72 and cuff_ratio > 1.10:
+            return "folded_cuff"
+        return "full_length"
+
+    @staticmethod
+    def _target_sleeve_bottom(style: str) -> float:
+        if style == "folded_cuff":
+            return 0.715
+        if style == "rolled_sleeve":
+            return 0.640
+        return 0.755
 
     @staticmethod
     def _edge_quality(candidate: Image.Image) -> float:

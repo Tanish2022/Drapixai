@@ -138,23 +138,46 @@ class CatVTONEngine(TryOnEngine):
         return ImageChops.lighter(mask.convert("L"), extension)
 
     @staticmethod
-    def _garment_has_long_sleeves(garment: Image.Image) -> bool:
+    def _detect_sleeve_style(garment: Image.Image) -> str:
         arr = np.asarray(garment.convert("RGB"))
         h, w = arr.shape[:2]
         foreground = (arr.mean(axis=2) < 242) & (arr.std(axis=2) > 5)
-        side = foreground & (
-            ((np.arange(w)[None, :] < w * 0.36) | (np.arange(w)[None, :] > w * 0.64))
-        )
+        side = foreground & (((np.arange(w)[None, :] < w * 0.36) | (np.arange(w)[None, :] > w * 0.64)))
         side_window = side[int(h * 0.36) : int(h * 0.88)]
         if side_window.size == 0:
-            return False
+            return "unknown"
         row_coverage = side_window.mean(axis=1)
         visible_rows = np.where(row_coverage > 0.035)[0]
         if visible_rows.size == 0:
-            return False
+            return "short_sleeve"
         sleeve_bottom = (int(h * 0.36) + int(visible_rows.max())) / max(1, h)
         lower_coverage = float(side[int(h * 0.58) : int(h * 0.84)].mean())
-        return sleeve_bottom > 0.68 and lower_coverage > 0.045
+        if sleeve_bottom < 0.50:
+            return "short_sleeve"
+        if sleeve_bottom < 0.66:
+            return "rolled_sleeve"
+        if lower_coverage <= 0.045:
+            return "unknown"
+
+        sleeve_rows = np.where(row_coverage > 0.035)[0]
+        last_rows = row_coverage[max(0, int(sleeve_rows.max()) - 18) : sleeve_rows.max() + 1]
+        forearm_rows = row_coverage[int(len(row_coverage) * 0.40) : int(len(row_coverage) * 0.72)]
+        cuff_coverage = float(last_rows.mean()) if last_rows.size else 0.0
+        forearm_coverage = float(forearm_rows.mean()) if forearm_rows.size else max(cuff_coverage, 1e-6)
+        cuff_flare = cuff_coverage / max(0.001, forearm_coverage)
+        if sleeve_bottom > 0.82 and cuff_flare < 0.45:
+            return "folded_cuff"
+        if sleeve_bottom > 0.72 and cuff_flare > 1.10:
+            return "folded_cuff"
+        return "full_length"
+
+    @staticmethod
+    def _sleeve_target_ratio(style: str) -> float:
+        if style == "folded_cuff":
+            return settings.catvton_folded_cuff_wrist_ratio
+        if style == "rolled_sleeve":
+            return settings.catvton_rolled_sleeve_wrist_ratio
+        return settings.catvton_long_sleeve_wrist_ratio
 
     def _preserve_long_sleeves(
         self,
@@ -165,16 +188,19 @@ class CatVTONEngine(TryOnEngine):
         if (
             not settings.catvton_preserve_long_sleeves
             or not self._is_upper_garment(garment_type)
-            or not self._garment_has_long_sleeves(garment)
         ):
+            return mask
+        sleeve_style = self._detect_sleeve_style(garment)
+        if sleeve_style not in {"full_length", "folded_cuff", "rolled_sleeve"}:
             return mask
 
         width, height = mask.size
-        wrist_y = int(height * max(0.70, min(0.80, settings.catvton_long_sleeve_wrist_ratio)))
+        wrist_y = int(height * max(0.60, min(0.80, self._sleeve_target_ratio(sleeve_style))))
         extension = Image.new("L", mask.size, 0)
         draw = ImageDraw.Draw(extension)
         shoulder_y = int(height * 0.30)
         elbow_y = int(height * 0.54)
+        cuff_fill = 255 if sleeve_style == "folded_cuff" else 235
 
         left_sleeve = [
             (int(width * 0.18), shoulder_y),
@@ -195,8 +221,8 @@ class CatVTONEngine(TryOnEngine):
         draw.polygon(left_sleeve, fill=230)
         draw.polygon(right_sleeve, fill=230)
         cuff_width = max(4, width // 75)
-        draw.line([(int(width * 0.18), wrist_y), (int(width * 0.27), wrist_y)], fill=255, width=cuff_width)
-        draw.line([(int(width * 0.73), wrist_y), (int(width * 0.82), wrist_y)], fill=255, width=cuff_width)
+        draw.line([(int(width * 0.18), wrist_y), (int(width * 0.27), wrist_y)], fill=cuff_fill, width=cuff_width)
+        draw.line([(int(width * 0.73), wrist_y), (int(width * 0.82), wrist_y)], fill=cuff_fill, width=cuff_width)
         return ImageChops.lighter(mask.convert("L"), extension)
 
     def generate(
