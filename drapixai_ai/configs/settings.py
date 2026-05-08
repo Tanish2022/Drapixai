@@ -32,6 +32,8 @@ def _apply_gpu_preset() -> None:
         },
         "a100": {
             "DRAPIXAI_INPUT_MAX_SIDE": "640",
+            "DRAPIXAI_INFERENCE_STEPS": "22",
+            "DRAPIXAI_GUIDANCE_SCALE": "2.5",
             "DRAPIXAI_ENHANCED_STEPS": "36",
             "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
             "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "8",
@@ -45,6 +47,8 @@ def _apply_gpu_preset() -> None:
         },
         "runpod-a100": {
             "DRAPIXAI_INPUT_MAX_SIDE": "640",
+            "DRAPIXAI_INFERENCE_STEPS": "22",
+            "DRAPIXAI_GUIDANCE_SCALE": "2.5",
             "DRAPIXAI_ENHANCED_STEPS": "36",
             "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
             "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "8",

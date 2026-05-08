@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -17,6 +19,10 @@ class GarmentAnalysis:
     warnings: list[str] = field(default_factory=list)
 
 
+_GARMENT_CUTOUT_CACHE: OrderedDict[str, Image.Image] = OrderedDict()
+_GARMENT_CUTOUT_CACHE_MAX = 64
+
+
 def isolate_garment(image: Image.Image) -> Image.Image:
     """Return an RGBA garment cutout with transparent background.
 
@@ -27,6 +33,12 @@ def isolate_garment(image: Image.Image) -> Image.Image:
     """
 
     rgba = ImageOps.exif_transpose(image).convert("RGBA")
+    cache_key = _image_cache_key(rgba)
+    cached = _GARMENT_CUTOUT_CACHE.get(cache_key)
+    if cached is not None:
+        _GARMENT_CUTOUT_CACHE.move_to_end(cache_key)
+        return cached.copy()
+
     try:
         from rembg import remove  # type: ignore
 
@@ -35,11 +47,27 @@ def isolate_garment(image: Image.Image) -> Image.Image:
             alpha = np.asarray(removed.convert("RGBA"))[:, :, 3]
             fg_ratio = float((alpha > 16).mean())
             if 0.04 <= fg_ratio <= 0.88:
-                return _trim_transparent_edges(removed.convert("RGBA"))
+                return _store_cutout(cache_key, _trim_transparent_edges(removed.convert("RGBA")))
     except Exception:
         pass
 
-    return _trim_transparent_edges(_corner_color_matte(rgba))
+    return _store_cutout(cache_key, _trim_transparent_edges(_corner_color_matte(rgba)))
+
+
+def _image_cache_key(image: Image.Image) -> str:
+    digest = hashlib.sha1()
+    digest.update(str(image.size).encode("ascii"))
+    digest.update(image.mode.encode("ascii"))
+    digest.update(image.tobytes())
+    return digest.hexdigest()
+
+
+def _store_cutout(cache_key: str, image: Image.Image) -> Image.Image:
+    _GARMENT_CUTOUT_CACHE[cache_key] = image.copy()
+    _GARMENT_CUTOUT_CACHE.move_to_end(cache_key)
+    while len(_GARMENT_CUTOUT_CACHE) > _GARMENT_CUTOUT_CACHE_MAX:
+        _GARMENT_CUTOUT_CACHE.popitem(last=False)
+    return image.copy()
 
 
 def prepare_garment_for_tryon(
