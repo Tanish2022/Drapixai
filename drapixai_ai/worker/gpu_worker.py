@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import sys
 import time
 from typing import Any, Dict
 
@@ -19,6 +20,9 @@ from drapixai_ai.services.logger import get_logger
 
 _PIPELINE: DrapixAITryOnPipeline | None = None
 logger = get_logger("drapixai_ai.worker")
+
+if __name__ == "__main__" and __spec__ and __spec__.name:
+    sys.modules.setdefault(__spec__.name, sys.modules[__name__])
 
 
 class WindowsSimpleWorker(SimpleWorker):
