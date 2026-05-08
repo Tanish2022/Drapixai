@@ -71,10 +71,14 @@ def _encode_image(image: Image.Image) -> str:
 
 
 def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
+    job_started_at_ms = int(time.time() * 1000)
+    total_start = time.perf_counter()
+    decode_start = time.perf_counter()
     pipeline = _get_pipeline()
 
     person = _decode_image(payload["person_image"])
     cloth = _decode_image(payload["cloth_image"], preserve_white_background=True)
+    decode_ms = int((time.perf_counter() - decode_start) * 1000)
 
     logger.info(
         "job_start",
@@ -87,6 +91,7 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
             "quality": payload.get("quality"),
         },
     )
+    pipeline_start = time.perf_counter()
     result = pipeline.run_tryon_with_metadata(
         person,
         cloth,
@@ -95,6 +100,40 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         garment_type=payload.get("garment_type"),
         quality=payload.get("quality"),
     )
+    pipeline_ms = int((time.perf_counter() - pipeline_start) * 1000)
+    encode_start = time.perf_counter()
+    image_base64 = _encode_image(result.image)
+    encode_ms = int((time.perf_counter() - encode_start) * 1000)
+    total_ms = int((time.perf_counter() - total_start) * 1000)
+    enqueued_at_ms = payload.get("enqueued_at_ms")
+    queue_wait_ms = (
+        max(0, job_started_at_ms - int(enqueued_at_ms))
+        if isinstance(enqueued_at_ms, (int, float))
+        else None
+    )
+    timings = {
+        **dict(result.metadata.get("timings", {})),
+        "decode_ms": decode_ms,
+        "worker_pipeline_ms": pipeline_ms,
+        "encode_ms": encode_ms,
+        "worker_total_ms": total_ms,
+    }
+    if queue_wait_ms is not None:
+        timings["queue_wait_ms"] = queue_wait_ms
+    warnings = list(result.warnings)
+    if total_ms > settings.target_tryon_ms:
+        warnings = sorted(set([*warnings, "LATENCY_BUDGET_EXCEEDED"]))
+        logger.warning(
+            "latency_budget_exceeded",
+            extra={
+                "user_id": payload.get("user_id"),
+                "request_id": payload.get("request_id"),
+                "quality": payload.get("quality"),
+                "processing_ms": total_ms,
+                "target_tryon_ms": settings.target_tryon_ms,
+                "timings": timings,
+            },
+        )
     logger.info(
         "job_complete",
         extra={
@@ -103,20 +142,23 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
             "engine": result.engine,
             "quality_score": result.quality_score,
             "candidate_count": result.candidate_count,
-            "warnings": result.warnings,
+            "warnings": warnings,
             "quality": payload.get("quality"),
+            "timings": timings,
         },
     )
 
     return {
-        "image_base64": _encode_image(result.image),
+        "image_base64": image_base64,
         "format": settings.output_format,
         "engine": result.engine,
         "quality_score": result.quality_score,
         "candidate_count": result.candidate_count,
         "candidate_scores": result.candidate_scores,
-        "warnings": result.warnings,
-        "metadata": result.metadata,
+        "warnings": warnings,
+        "timings": timings,
+        "processing_ms": total_ms,
+        "metadata": {**result.metadata, "timings": timings},
     }
 
 

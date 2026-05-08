@@ -82,6 +82,18 @@
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
+  function parseJsonObject(value) {
+    if (!value) {
+      return undefined;
+    }
+    try {
+      var parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined;
+    } catch (_) {
+      return undefined;
+    }
+  }
+
   function readTryOnMetadata(response) {
     var warnings = response.headers.get('x-drapixai-warnings') || '';
     return {
@@ -89,6 +101,8 @@
       engine: response.headers.get('x-drapixai-engine') || undefined,
       qualityScore: parseNumber(response.headers.get('x-drapixai-quality-score')),
       candidateCount: parseNumber(response.headers.get('x-drapixai-candidate-count')),
+      processingMs: parseNumber(response.headers.get('x-drapixai-processing-ms')),
+      timings: parseJsonObject(response.headers.get('x-drapixai-timing-json')),
       warnings: warnings ? warnings.split(',').map(function (item) { return item.trim(); }).filter(Boolean) : []
     };
   }

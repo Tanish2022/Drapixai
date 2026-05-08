@@ -139,6 +139,8 @@ Response:
 - `x-drapixai-engine`
 - `x-drapixai-quality-score`
 - `x-drapixai-candidate-count`
+- `x-drapixai-processing-ms`
+- `x-drapixai-timing-json`
 - `x-drapixai-warnings`
 
 If garment is not ready:

@@ -53,6 +53,7 @@ class TryOnService:
             "guidance_scale": guidance,
             "request_id": request_id,
             "garment_type": garment_type,
+            "enqueued_at_ms": int(time.time() * 1000),
         }
 
         return self.queue.enqueue(

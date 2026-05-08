@@ -166,12 +166,15 @@ router.post(
       const qualityScore = tryOnResponse.headers.get('x-drapixai-quality-score') || '';
       const candidateCount = tryOnResponse.headers.get('x-drapixai-candidate-count') || '';
       const warnings = tryOnResponse.headers.get('x-drapixai-warnings') || '';
+      const processingMs = tryOnResponse.headers.get('x-drapixai-processing-ms') || '';
+      const timingJson = tryOnResponse.headers.get('x-drapixai-timing-json') || '';
       await trackWebsiteEvent('demo_tryon_succeeded', '/demo', null, req.headers.referer || null, {
         source: 'public_demo',
         engine,
         qualityScore,
         candidateCount,
         warnings,
+        processingMs,
       });
       res.setHeader('Content-Type', tryOnResponse.headers.get('content-type') || 'image/png');
       res.setHeader('Cache-Control', 'no-store');
@@ -179,6 +182,8 @@ router.post(
       if (qualityScore) res.setHeader('x-drapixai-quality-score', qualityScore);
       if (candidateCount) res.setHeader('x-drapixai-candidate-count', candidateCount);
       if (warnings) res.setHeader('x-drapixai-warnings', warnings);
+      if (processingMs) res.setHeader('x-drapixai-processing-ms', processingMs);
+      if (timingJson) res.setHeader('x-drapixai-timing-json', timingJson);
       return res.send(buffer);
     } catch (error) {
       console.error('Public demo try-on error:', error);

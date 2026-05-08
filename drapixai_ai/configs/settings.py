@@ -113,6 +113,7 @@ class Settings:
     result_ttl_seconds: int = int(os.getenv("DRAPIXAI_RESULT_TTL", "900"))
     max_wait_seconds: int = int(os.getenv("DRAPIXAI_MAX_WAIT", "120"))
     poll_interval_seconds: float = float(os.getenv("DRAPIXAI_POLL_INTERVAL", "0.5"))
+    target_tryon_ms: int = int(os.getenv("DRAPIXAI_TARGET_TRYON_MS", "12000"))
 
     monthly_basic_limit: int = int(os.getenv("DRAPIXAI_BASIC_LIMIT", "1200"))
 

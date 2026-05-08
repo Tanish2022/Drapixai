@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 import time
 import uuid
@@ -167,6 +168,8 @@ async def tryon(
             "quality_score": result.get("quality_score"),
             "candidate_count": result.get("candidate_count"),
             "warnings": result.get("warnings", []),
+            "processing_ms": result.get("processing_ms"),
+            "timings": result.get("timings", {}),
         },
     )
     image_bytes = base64.b64decode(result["image_base64"])
@@ -175,6 +178,8 @@ async def tryon(
         "x-drapixai-quality-score": str(result.get("quality_score", "")),
         "x-drapixai-candidate-count": str(result.get("candidate_count", "")),
         "x-drapixai-warnings": ",".join(result.get("warnings", [])),
+        "x-drapixai-processing-ms": str(result.get("processing_ms", "")),
+        "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
@@ -234,6 +239,8 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
             "quality_score": result.get("quality_score"),
             "candidate_count": result.get("candidate_count"),
             "warnings": result.get("warnings", []),
+            "processing_ms": result.get("processing_ms"),
+            "timings": result.get("timings", {}),
         },
     )
     image_bytes = base64.b64decode(result["image_base64"])
@@ -242,6 +249,8 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         "x-drapixai-quality-score": str(result.get("quality_score", "")),
         "x-drapixai-candidate-count": str(result.get("candidate_count", "")),
         "x-drapixai-warnings": ",".join(result.get("warnings", [])),
+        "x-drapixai-processing-ms": str(result.get("processing_ms", "")),
+        "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 

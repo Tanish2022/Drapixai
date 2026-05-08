@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 from dataclasses import dataclass, field
 from typing import Union
@@ -14,6 +15,8 @@ class TryOnMetadata:
     engine: str = ""
     quality_score: float | None = None
     candidate_count: int | None = None
+    processing_ms: int | None = None
+    timings: dict[str, object] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -201,10 +204,17 @@ class DrapixAI:
                 return None
 
         warnings = headers.get("x-drapixai-warnings", "")
+        timing_json = headers.get("x-drapixai-timing-json", "")
+        try:
+            timings = json.loads(timing_json) if timing_json else {}
+        except json.JSONDecodeError:
+            timings = {}
         return TryOnMetadata(
             result_id=headers.get("x-drapixai-tryon-result-id", ""),
             engine=headers.get("x-drapixai-engine", ""),
             quality_score=parse_float(headers.get("x-drapixai-quality-score")),
             candidate_count=parse_int(headers.get("x-drapixai-candidate-count")),
+            processing_ms=parse_int(headers.get("x-drapixai-processing-ms")),
+            timings=timings if isinstance(timings, dict) else {},
             warnings=[item.strip() for item in warnings.split(",") if item.strip()],
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import time
 from typing import Iterable, List
 
 from PIL import Image
@@ -75,18 +76,25 @@ class DrapixAITryOnPipeline:
         garment_type: str | None = None,
         quality: str | None = None,
     ) -> TryOnResult:
+        pipeline_start = time.perf_counter()
+        timings: dict[str, int | list[int]] = {}
         quality_mode = self._normalize_quality(quality)
         candidate_count = self._candidate_count_for_quality(quality_mode)
         candidates: list[TryOnCandidate] = []
         base_seed = 1009
+        analysis_start = time.perf_counter()
         person_analysis = analyze_person(person)
         garment_analysis = analyze_garment(cloth)
+        timings["analysis_ms"] = int((time.perf_counter() - analysis_start) * 1000)
         input_warnings = sorted(
             set([*person_analysis.validation_warnings, *garment_analysis.warnings])
         )
 
+        generate_ms: list[int] = []
+        postprocess_ms: list[int] = []
         for index in range(candidate_count):
             seed = base_seed + index if candidate_count > 1 else None
+            generate_start = time.perf_counter()
             image = self.engine.generate(
                 person,
                 cloth,
@@ -95,10 +103,18 @@ class DrapixAITryOnPipeline:
                 seed=seed,
                 garment_type=garment_type,
             )
+            generate_ms.append(int((time.perf_counter() - generate_start) * 1000))
+            postprocess_start = time.perf_counter()
             image = apply_quality_boosters(image, person=person, garment=cloth)
+            postprocess_ms.append(int((time.perf_counter() - postprocess_start) * 1000))
             candidates.append(TryOnCandidate(image=image, seed=seed))
 
+        timings["candidate_generate_ms"] = generate_ms
+        timings["candidate_postprocess_ms"] = postprocess_ms
+        scoring_start = time.perf_counter()
         best, candidate_scores, warnings = self.scorer.choose_best(person, cloth, candidates)
+        timings["scoring_ms"] = int((time.perf_counter() - scoring_start) * 1000)
+        timings["pipeline_total_ms"] = int((time.perf_counter() - pipeline_start) * 1000)
         warnings = sorted(set([*warnings, *input_warnings]))
         if (best.score or 0.0) < settings.min_quality_score:
             warnings = sorted(set([*warnings, "QUALITY_SCORE_BELOW_THRESHOLD"]))
@@ -121,6 +137,7 @@ class DrapixAITryOnPipeline:
                 "garment_bbox_ratio": garment_analysis.bbox_ratio,
                 "garment_background_ratio": garment_analysis.background_ratio,
                 "garment_dominant_color": garment_analysis.dominant_color,
+                "timings": timings,
                 **best.metadata,
             },
         )

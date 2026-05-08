@@ -22,6 +22,8 @@ declare global {
       engine?: string;
       qualityScore?: number;
       candidateCount?: number;
+      processingMs?: number;
+      timings?: Record<string, unknown>;
       warnings?: string[];
     }) => void;
   }
@@ -34,6 +36,8 @@ declare global {
         engine?: string;
         qualityScore?: number;
         candidateCount?: number;
+        processingMs?: number;
+        timings?: Record<string, unknown>;
         warnings?: string[];
       };
     };

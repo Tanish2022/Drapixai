@@ -35,4 +35,4 @@ export default function ProductPage() {
 - `modalSubtitle` (optional)
 - `footerText` (optional)
 - `primaryGradient` (optional)
-- `onResult` (optional metadata callback with result id, engine, quality score, candidate count, and warnings)
+- `onResult` (optional metadata callback with result id, engine, quality score, candidate count, processing time, timing breakdown, and warnings)
