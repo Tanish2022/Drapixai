@@ -130,7 +130,7 @@ Returns PNG image if cached.
 Form fields:
 - `person_image`
 - `productId` (must point to a confirmed product mapping)
-- `quality=standard|enhanced` (optional, defaults by plan)
+- `quality=standard|enhanced|ultra` (optional, defaults by plan; `ultra` is slower and intended for premium/A100 quality passes)
 - `garment_type=upper`
 
 Response:

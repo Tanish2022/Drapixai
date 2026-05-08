@@ -31,9 +31,16 @@ class TryOnService:
         if not allowed:
             raise PermissionError("TRY_ON_LIMIT_EXCEEDED")
 
+        quality_mode = (quality or "enhanced").strip().lower()
+        if quality_mode not in {"standard", "enhanced", "ultra"}:
+            quality_mode = "enhanced"
+
         steps = inference_steps
         guidance = guidance_scale
-        if quality == "enhanced":
+        if quality_mode == "ultra":
+            steps = settings.ultra_inference_steps
+            guidance = settings.ultra_guidance_scale
+        elif quality_mode == "enhanced":
             steps = settings.enhanced_inference_steps
             guidance = settings.enhanced_guidance_scale
 
@@ -41,7 +48,7 @@ class TryOnService:
             "user_id": user_id,
             "person_image": person_b64,
             "cloth_image": cloth_b64,
-            "quality": quality,
+            "quality": quality_mode,
             "inference_steps": steps,
             "guidance_scale": guidance,
             "request_id": request_id,

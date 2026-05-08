@@ -29,7 +29,7 @@ export default function ProductPage() {
 - `containerId` (optional)
 - `baseUrl` (optional, default `http://localhost:8000`)
 - `garmentType` (optional, `upper`)
-- `quality` (optional, `standard` or `enhanced`)
+- `quality` (optional, `standard`, `enhanced`, or `ultra`; use `ultra` for slower A100-grade candidate search)
 - `buttonText` (optional)
 - `modalTitle` (optional)
 - `modalSubtitle` (optional)

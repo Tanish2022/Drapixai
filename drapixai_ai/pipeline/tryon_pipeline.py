@@ -51,10 +51,19 @@ class DrapixAITryOnPipeline:
         ).image
 
     @staticmethod
-    def _candidate_count_for_quality(quality: str | None) -> int:
+    def _normalize_quality(quality: str | None) -> str:
         normalized = (quality or "enhanced").strip().lower()
+        if normalized in {"standard", "enhanced", "ultra"}:
+            return normalized
+        return "enhanced"
+
+    @classmethod
+    def _candidate_count_for_quality(cls, quality: str | None) -> int:
+        normalized = cls._normalize_quality(quality)
         if normalized == "standard":
             return 1
+        if normalized == "ultra":
+            return max(settings.candidate_count, settings.ultra_candidate_count, 1)
         return max(1, settings.candidate_count)
 
     def run_tryon_with_metadata(
@@ -66,7 +75,8 @@ class DrapixAITryOnPipeline:
         garment_type: str | None = None,
         quality: str | None = None,
     ) -> TryOnResult:
-        candidate_count = self._candidate_count_for_quality(quality)
+        quality_mode = self._normalize_quality(quality)
+        candidate_count = self._candidate_count_for_quality(quality_mode)
         candidates: list[TryOnCandidate] = []
         base_seed = 1009
         person_analysis = analyze_person(person)
@@ -102,7 +112,7 @@ class DrapixAITryOnPipeline:
             warnings=warnings,
             metadata={
                 "selected_seed": best.seed,
-                "quality_mode": quality or "enhanced",
+                "quality_mode": quality_mode,
                 "person_width": person_analysis.width,
                 "person_height": person_analysis.height,
                 "garment_width": garment_analysis.width,

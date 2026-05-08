@@ -16,7 +16,7 @@ type PlanConfig = {
   key: PlanKey;
   name: string;
   quota: number;
-  quality: 'standard' | 'enhanced';
+  quality: 'standard' | 'enhanced' | 'ultra';
   active: boolean;
 };
 

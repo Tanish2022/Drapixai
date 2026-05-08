@@ -134,7 +134,7 @@
       if (config.garmentType !== 'upper') {
         throw new Error('UPPER_BODY_ONLY');
       }
-      if (config.quality !== 'standard' && config.quality !== 'enhanced') {
+      if (config.quality !== 'standard' && config.quality !== 'enhanced' && config.quality !== 'ultra') {
         throw new Error('INVALID_QUALITY');
       }
 
