@@ -11,7 +11,7 @@ export default function ProductPage() {
       apiKey="YOUR_API_KEY"
       productId="PRODUCT_ID"
       garmentType="upper"
-      quality="enhanced"
+      quality="standard"
       buttonText="Try It On"
       modalTitle="Try On"
       modalSubtitle="Upload your photo to see the fit."
@@ -29,7 +29,7 @@ export default function ProductPage() {
 - `containerId` (optional)
 - `baseUrl` (optional, default `http://localhost:8000`)
 - `garmentType` (optional, `upper`)
-- `quality` (optional, `standard`, `enhanced`, or `ultra`; use `ultra` for slower A100-grade candidate search)
+- `quality` (optional, `standard`; this is the only production try-on mode)
 - `buttonText` (optional)
 - `modalTitle` (optional)
 - `modalSubtitle` (optional)

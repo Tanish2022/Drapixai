@@ -137,7 +137,7 @@
         buttonTargetSelector: options.buttonTargetSelector || '[data-drapix-button-slot]',
         baseUrl: options.baseUrl || window.DRAPIXAI_API_BASE_URL || window.location.origin,
         garmentType: (options.garmentType || 'upper').toLowerCase(),
-        quality: (options.quality || 'enhanced').toLowerCase(),
+        quality: 'standard',
         buttonText: options.buttonText || 'Try On',
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
@@ -148,7 +148,7 @@
       if (config.garmentType !== 'upper') {
         throw new Error('UPPER_BODY_ONLY');
       }
-      if (config.quality !== 'standard' && config.quality !== 'enhanced' && config.quality !== 'ultra') {
+      if (options.quality && String(options.quality).toLowerCase() !== 'standard') {
         throw new Error('INVALID_QUALITY');
       }
 

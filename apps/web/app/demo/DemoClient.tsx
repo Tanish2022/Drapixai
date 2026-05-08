@@ -119,7 +119,7 @@ export default function DemoClient() {
             {[
               ['01', 'Upload a clean person image'],
               ['02', 'Add one isolated garment image'],
-              ['03', 'Run the enhanced-quality demo'],
+              ['03', 'Run the standard-quality demo'],
             ].map(([step, label]) => (
               <div key={step} className="rounded-2xl border border-white/[0.08] bg-[#0b1120]/70 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-2">Step {step}</p>

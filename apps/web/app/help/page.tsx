@@ -156,7 +156,7 @@ const curlTryOn = `curl -X POST '${PUBLIC_API_BASE_URL}/sdk/tryon' \\
   -F 'garment_id=sku-12345' \\
   -F 'person_image=@./person.jpg' \\
   -F 'garment_type=upper' \\
-  -F 'quality=enhanced' \\
+  -F 'quality=standard' \\
   --output tryon-result.png`;
 
 const pythonExample = `import requests
@@ -168,7 +168,7 @@ with open("person.jpg", "rb") as person_image:
         data={
             "garment_id": "sku-12345",
             "garment_type": "upper",
-            "quality": "enhanced",
+            "quality": "standard",
         },
         files={"person_image": person_image},
         timeout=180,

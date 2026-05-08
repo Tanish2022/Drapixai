@@ -43,7 +43,7 @@ class DrapixAI:
         user_id: str,
         person_image: Union[str, bytes],
         cloth_image: Union[str, bytes],
-        quality: str = "enhanced",
+        quality: str = "standard",
         garment_type: str = "upper",
         timeout: int = 180,
     ) -> bytes:
@@ -67,7 +67,7 @@ class DrapixAI:
         user_id: str,
         person_image: Union[str, bytes],
         cloth_image: Union[str, bytes],
-        quality: str = "enhanced",
+        quality: str = "standard",
         garment_type: str = "upper",
         timeout: int = 180,
     ) -> TryOnResponse:
@@ -97,7 +97,7 @@ class DrapixAI:
         garment_id: str | None = None,
         cloth_cache_key: str | None = None,
         cloth_image: Union[str, bytes, None] = None,
-        quality: str = "enhanced",
+        quality: str = "standard",
         garment_type: str = "upper",
         timeout: int = 240,
     ) -> TryOnResponse:

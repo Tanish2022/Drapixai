@@ -53,19 +53,7 @@ class DrapixAITryOnPipeline:
 
     @staticmethod
     def _normalize_quality(quality: str | None) -> str:
-        normalized = (quality or "enhanced").strip().lower()
-        if normalized in {"standard", "enhanced", "ultra"}:
-            return normalized
-        return "enhanced"
-
-    @classmethod
-    def _candidate_count_for_quality(cls, quality: str | None) -> int:
-        normalized = cls._normalize_quality(quality)
-        if normalized == "standard":
-            return 1
-        if normalized == "ultra":
-            return max(settings.candidate_count, settings.ultra_candidate_count, 1)
-        return max(1, settings.candidate_count)
+        return "standard"
 
     def run_tryon_with_metadata(
         self,
@@ -79,9 +67,7 @@ class DrapixAITryOnPipeline:
         pipeline_start = time.perf_counter()
         timings: dict[str, int | list[int]] = {}
         quality_mode = self._normalize_quality(quality)
-        candidate_count = self._candidate_count_for_quality(quality_mode)
         candidates: list[TryOnCandidate] = []
-        base_seed = 1009
         analysis_start = time.perf_counter()
         person_analysis = analyze_person(person)
         garment_analysis = analyze_garment(cloth)
@@ -92,8 +78,8 @@ class DrapixAITryOnPipeline:
 
         generate_ms: list[int] = []
         postprocess_ms: list[int] = []
-        for index in range(candidate_count):
-            seed = base_seed + index if candidate_count > 1 else None
+        for _index in range(1):
+            seed = None
             generate_start = time.perf_counter()
             image = self.engine.generate(
                 person,

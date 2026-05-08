@@ -9,7 +9,7 @@ type DrapixAITryOnProps = {
   containerId?: string;
   baseUrl?: string;
   garmentType?: 'upper';
-  quality?: 'standard' | 'enhanced' | 'ultra';
+  quality?: 'standard';
   buttonText?: string;
   modalTitle?: string;
   modalSubtitle?: string;
@@ -25,7 +25,7 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     containerId = 'drapixai-container',
     baseUrl = PUBLIC_API_BASE_URL,
     garmentType = 'upper',
-    quality = 'enhanced',
+    quality = 'standard',
     buttonText,
     modalTitle,
     modalSubtitle,

@@ -7,7 +7,7 @@ declare global {
     containerId?: string;
     baseUrl?: string;
     garmentType?: 'upper';
-    quality?: 'standard' | 'enhanced' | 'ultra';
+    quality?: 'standard';
     autoAttach?: boolean;
     productSelector?: string;
     productIdAttribute?: string;

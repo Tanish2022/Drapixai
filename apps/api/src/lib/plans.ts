@@ -16,7 +16,7 @@ type PlanConfig = {
   key: PlanKey;
   name: string;
   quota: number;
-  quality: 'standard' | 'enhanced' | 'ultra';
+  quality: 'standard';
   active: boolean;
 };
 
@@ -39,21 +39,21 @@ const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
     key: 'growth',
     name: 'Growth',
     quota: 7500,
-    quality: 'enhanced',
+    quality: 'standard',
     active: true,
   },
   pro: {
     key: 'pro',
     name: 'Pro',
     quota: 25000,
-    quality: 'enhanced',
+    quality: 'standard',
     active: true,
   },
   enterprise: {
     key: 'enterprise',
     name: 'Enterprise',
     quota: ENTERPRISE_DEFAULT_QUOTA,
-    quality: 'enhanced',
+    quality: 'standard',
     active: true,
   },
   expired: {

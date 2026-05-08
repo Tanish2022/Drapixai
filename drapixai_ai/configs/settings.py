@@ -13,19 +13,16 @@ def _apply_gpu_preset() -> None:
     mapping = {
         "4060": {
             "DRAPIXAI_INPUT_MAX_SIDE": "448",
-            "DRAPIXAI_ENHANCED_STEPS": "28",
-            "DRAPIXAI_ENHANCED_GUIDANCE": "2.6",
+            "DRAPIXAI_INFERENCE_STEPS": "22",
+            "DRAPIXAI_GUIDANCE_SCALE": "2.5",
             "DRAPIXAI_LOW_VRAM": "1",
             "DRAPIXAI_OPENPOSE_DEVICE": "cpu",
             "DRAPIXAI_PRELOAD_MODEL": "0",
         },
         "a10": {
             "DRAPIXAI_INPUT_MAX_SIDE": "512",
-            "DRAPIXAI_ENHANCED_STEPS": "32",
-            "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
-            "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "6",
-            "DRAPIXAI_ULTRA_STEPS": "32",
-            "DRAPIXAI_ULTRA_GUIDANCE": "3.0",
+            "DRAPIXAI_INFERENCE_STEPS": "22",
+            "DRAPIXAI_GUIDANCE_SCALE": "2.5",
             "DRAPIXAI_JOB_TIMEOUT": "1200",
             "DRAPIXAI_MAX_WAIT": "180",
             "DRAPIXAI_PRELOAD_MODEL": "1",
@@ -34,11 +31,6 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_INPUT_MAX_SIDE": "640",
             "DRAPIXAI_INFERENCE_STEPS": "22",
             "DRAPIXAI_GUIDANCE_SCALE": "2.5",
-            "DRAPIXAI_ENHANCED_STEPS": "36",
-            "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
-            "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "8",
-            "DRAPIXAI_ULTRA_STEPS": "36",
-            "DRAPIXAI_ULTRA_GUIDANCE": "3.0",
             "DRAPIXAI_JOB_TIMEOUT": "1800",
             "DRAPIXAI_MAX_WAIT": "300",
             "DRAPIXAI_LOW_VRAM": "0",
@@ -49,11 +41,6 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_INPUT_MAX_SIDE": "640",
             "DRAPIXAI_INFERENCE_STEPS": "22",
             "DRAPIXAI_GUIDANCE_SCALE": "2.5",
-            "DRAPIXAI_ENHANCED_STEPS": "36",
-            "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
-            "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "8",
-            "DRAPIXAI_ULTRA_STEPS": "36",
-            "DRAPIXAI_ULTRA_GUIDANCE": "3.0",
             "DRAPIXAI_JOB_TIMEOUT": "1800",
             "DRAPIXAI_MAX_WAIT": "300",
             "DRAPIXAI_LOW_VRAM": "0",
@@ -62,8 +49,8 @@ def _apply_gpu_preset() -> None:
         },
         "t4": {
             "DRAPIXAI_INPUT_MAX_SIDE": "512",
-            "DRAPIXAI_ENHANCED_STEPS": "28",
-            "DRAPIXAI_ENHANCED_GUIDANCE": "2.6",
+            "DRAPIXAI_INFERENCE_STEPS": "22",
+            "DRAPIXAI_GUIDANCE_SCALE": "2.5",
             "DRAPIXAI_PRELOAD_MODEL": "0",
         },
     }
@@ -107,8 +94,6 @@ class Settings:
     natural_lighting_strength: float = float(os.getenv("DRAPIXAI_NATURAL_LIGHTING_STRENGTH", "0.55"))
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
-    candidate_count: int = int(os.getenv("DRAPIXAI_CANDIDATE_COUNT", "4"))
-    ultra_candidate_count: int = int(os.getenv("DRAPIXAI_ULTRA_CANDIDATE_COUNT", "8"))
     min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.78"))
     device: str = os.getenv("DRAPIXAI_DEVICE", "cuda")
     cuda_device_index: int = int(os.getenv("DRAPIXAI_CUDA_DEVICE", "0"))
@@ -125,10 +110,6 @@ class Settings:
     output_format: str = os.getenv("DRAPIXAI_OUTPUT_FORMAT", "png")
     inference_steps: int = int(os.getenv("DRAPIXAI_INFERENCE_STEPS", "28"))
     guidance_scale: float = float(os.getenv("DRAPIXAI_GUIDANCE_SCALE", "2.5"))
-    enhanced_inference_steps: int = int(os.getenv("DRAPIXAI_ENHANCED_STEPS", "30"))
-    enhanced_guidance_scale: float = float(os.getenv("DRAPIXAI_ENHANCED_GUIDANCE", "2.8"))
-    ultra_inference_steps: int = int(os.getenv("DRAPIXAI_ULTRA_STEPS", "36"))
-    ultra_guidance_scale: float = float(os.getenv("DRAPIXAI_ULTRA_GUIDANCE", "3.0"))
     input_max_side: int = int(os.getenv("DRAPIXAI_INPUT_MAX_SIDE", "512"))
 
     enable_xformers: bool = os.getenv("DRAPIXAI_ENABLE_XFORMERS", "1") == "1"
