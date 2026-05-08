@@ -24,8 +24,8 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_ENHANCED_STEPS": "32",
             "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
             "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "6",
-            "DRAPIXAI_ULTRA_STEPS": "38",
-            "DRAPIXAI_ULTRA_GUIDANCE": "3.1",
+            "DRAPIXAI_ULTRA_STEPS": "32",
+            "DRAPIXAI_ULTRA_GUIDANCE": "3.0",
             "DRAPIXAI_JOB_TIMEOUT": "1200",
             "DRAPIXAI_MAX_WAIT": "180",
             "DRAPIXAI_PRELOAD_MODEL": "1",
@@ -35,8 +35,8 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_ENHANCED_STEPS": "36",
             "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
             "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "8",
-            "DRAPIXAI_ULTRA_STEPS": "42",
-            "DRAPIXAI_ULTRA_GUIDANCE": "3.1",
+            "DRAPIXAI_ULTRA_STEPS": "36",
+            "DRAPIXAI_ULTRA_GUIDANCE": "3.0",
             "DRAPIXAI_JOB_TIMEOUT": "1800",
             "DRAPIXAI_MAX_WAIT": "300",
             "DRAPIXAI_LOW_VRAM": "0",
@@ -48,8 +48,8 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_ENHANCED_STEPS": "36",
             "DRAPIXAI_ENHANCED_GUIDANCE": "3.0",
             "DRAPIXAI_ULTRA_CANDIDATE_COUNT": "8",
-            "DRAPIXAI_ULTRA_STEPS": "42",
-            "DRAPIXAI_ULTRA_GUIDANCE": "3.1",
+            "DRAPIXAI_ULTRA_STEPS": "36",
+            "DRAPIXAI_ULTRA_GUIDANCE": "3.0",
             "DRAPIXAI_JOB_TIMEOUT": "1800",
             "DRAPIXAI_MAX_WAIT": "300",
             "DRAPIXAI_LOW_VRAM": "0",
@@ -122,8 +122,8 @@ class Settings:
     guidance_scale: float = float(os.getenv("DRAPIXAI_GUIDANCE_SCALE", "2.5"))
     enhanced_inference_steps: int = int(os.getenv("DRAPIXAI_ENHANCED_STEPS", "30"))
     enhanced_guidance_scale: float = float(os.getenv("DRAPIXAI_ENHANCED_GUIDANCE", "2.8"))
-    ultra_inference_steps: int = int(os.getenv("DRAPIXAI_ULTRA_STEPS", "42"))
-    ultra_guidance_scale: float = float(os.getenv("DRAPIXAI_ULTRA_GUIDANCE", "3.1"))
+    ultra_inference_steps: int = int(os.getenv("DRAPIXAI_ULTRA_STEPS", "36"))
+    ultra_guidance_scale: float = float(os.getenv("DRAPIXAI_ULTRA_GUIDANCE", "3.0"))
     input_max_side: int = int(os.getenv("DRAPIXAI_INPUT_MAX_SIDE", "512"))
 
     enable_xformers: bool = os.getenv("DRAPIXAI_ENABLE_XFORMERS", "1") == "1"
