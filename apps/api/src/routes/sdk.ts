@@ -3,7 +3,7 @@
  */
 
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import bcrypt from 'bcryptjs';
@@ -107,6 +107,7 @@ const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
 const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
 const GARMENT_APPROVAL_REQUIRED = (process.env.DRAPIXAI_GARMENT_APPROVAL_REQUIRED || '0') === '1';
+const TRYON_LATENCY_TARGET_MS = Number(process.env.DRAPIXAI_TARGET_TRYON_MS || 12000);
 
 const parseNumberHeader = (value: string | null): number | null => {
   if (!value) return null;
@@ -117,6 +118,38 @@ const parseNumberHeader = (value: string | null): number | null => {
 const parseWarningsHeader = (value: string | null): string[] => {
   if (!value) return [];
   return value.split(',').map((item) => item.trim()).filter(Boolean);
+};
+
+const getImageExtension = (contentType: string) => {
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return '.jpg';
+  if (contentType.includes('webp')) return '.webp';
+  return '.png';
+};
+
+const uploadReviewImage = async (
+  userId: number,
+  requestId: string,
+  kind: 'person' | 'garment' | 'result',
+  imageBytes: Buffer,
+  contentType: string
+): Promise<string> => {
+  const extension = getImageExtension(contentType);
+  const key = `tryon-review/${userId}/${requestId}/${kind}${extension}`;
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: imageBytes,
+      ContentType: contentType
+    }));
+    return `s3://${BUCKET}/${key}`;
+  } catch {
+    const localDir = path.join('uploads', 'tryon-review', String(userId), requestId);
+    fs.mkdirSync(localDir, { recursive: true });
+    const localPath = path.join(localDir, `${kind}${extension}`);
+    fs.writeFileSync(localPath, imageBytes);
+    return `local:${localPath}`;
+  }
 };
 
 const getUserPlanContext = (planType: string | null | undefined) => {
@@ -620,11 +653,15 @@ router.post('/tryon', authMiddleware, upload.fields([
       return res.status(400).json({ error: 'UPPER_BODY_ONLY' });
     }
 
+    const requestStartedAt = Date.now();
+    const requestId = uuidv4();
+
     try {
       const personBytes = fs.readFileSync(personFile.path);
       let clothBase64 = '';
       let cacheKey = clothCacheKey;
       let garmentRecord: any = null;
+      let garmentReviewUrl: string | undefined;
       const resolvedGarmentId = garmentId ?? '';
       let actualGarmentId = resolvedGarmentId;
       if (garmentId) {
@@ -641,6 +678,7 @@ router.post('/tryon', authMiddleware, upload.fields([
         }
         garmentRecord = garment;
         actualGarmentId = garment.garmentId;
+        garmentReviewUrl = garment.thumbnailUrl || garment.originalUrl || undefined;
         if (!garment.cacheKey) {
           return res.status(409).json({ error: 'GARMENT_NOT_READY' });
         }
@@ -658,6 +696,13 @@ router.post('/tryon', authMiddleware, upload.fields([
         }
         const clothBytes = fs.readFileSync(clothFile.path);
         clothBase64 = clothBytes.toString('base64');
+        garmentReviewUrl = await uploadReviewImage(
+          user.id,
+          requestId,
+          'garment',
+          clothBytes,
+          clothFile.mimetype || 'image/png'
+        );
       }
       const selectedQuality = req.body.quality || plan.quality;
 
@@ -712,16 +757,51 @@ router.post('/tryon', authMiddleware, upload.fields([
         return res.status(aiResponse.status).json({ error: errText || 'AI service error' });
       }
 
+      const buffer = Buffer.from(await aiResponse.arrayBuffer());
+      const contentType = aiResponse.headers.get('content-type') || 'image/png';
+      const engine = aiResponse.headers.get('x-drapixai-engine') || '';
+      const qualityScore = aiResponse.headers.get('x-drapixai-quality-score') || '';
+      const candidateCount = aiResponse.headers.get('x-drapixai-candidate-count') || '';
+      const warnings = aiResponse.headers.get('x-drapixai-warnings') || '';
+      const processingMs = aiResponse.headers.get('x-drapixai-processing-ms') || '';
+      const timingJson = aiResponse.headers.get('x-drapixai-timing-json') || '';
+      const parsedTimingJson = parseJsonSafe<Record<string, unknown>>(timingJson);
+      const latencyMs = Date.now() - requestStartedAt;
+      const latencyWarnings = latencyMs > TRYON_LATENCY_TARGET_MS
+        ? [...parseWarningsHeader(warnings), `LATENCY_OVER_${TRYON_LATENCY_TARGET_MS}MS`]
+        : parseWarningsHeader(warnings);
+      const personReviewUrl = await uploadReviewImage(
+        user.id,
+        requestId,
+        'person',
+        personBytes,
+        personFile.mimetype || 'image/jpeg'
+      );
+      const resultReviewUrl = await uploadReviewImage(
+        user.id,
+        requestId,
+        'result',
+        buffer,
+        contentType
+      );
+
       const tryOnResult = await prisma.tryOnResult.create({
         data: {
           userId: user.id,
           apiKeyId: apiKey.id,
+          requestId,
           garmentId: actualGarmentId || undefined,
           productId: requestedProductId || undefined,
-          engine: aiResponse.headers.get('x-drapixai-engine') || 'unknown',
-          qualityScore: parseNumberHeader(aiResponse.headers.get('x-drapixai-quality-score')),
-          candidateCount: parseNumberHeader(aiResponse.headers.get('x-drapixai-candidate-count')) || 1,
-          warnings: parseWarningsHeader(aiResponse.headers.get('x-drapixai-warnings')),
+          personImageUrl: personReviewUrl,
+          garmentImageUrl: garmentReviewUrl,
+          resultImageUrl: resultReviewUrl,
+          engine: engine || 'unknown',
+          qualityScore: parseNumberHeader(qualityScore),
+          candidateCount: parseNumberHeader(candidateCount) || 1,
+          timingJson: parsedTimingJson ? parsedTimingJson as Prisma.InputJsonValue : undefined,
+          processingMs: parseNumberHeader(processingMs),
+          latencyMs,
+          warnings: latencyWarnings,
           status: 'generated'
         }
       });
@@ -743,21 +823,15 @@ router.post('/tryon', authMiddleware, upload.fields([
       }
       await incrementDailyUsage(apiKey.id);
 
-      const buffer = Buffer.from(await aiResponse.arrayBuffer());
-      const contentType = aiResponse.headers.get('content-type') || 'image/png';
-      const engine = aiResponse.headers.get('x-drapixai-engine') || '';
-      const qualityScore = aiResponse.headers.get('x-drapixai-quality-score') || '';
-      const candidateCount = aiResponse.headers.get('x-drapixai-candidate-count') || '';
-      const warnings = aiResponse.headers.get('x-drapixai-warnings') || '';
-      const processingMs = aiResponse.headers.get('x-drapixai-processing-ms') || '';
-      const timingJson = aiResponse.headers.get('x-drapixai-timing-json') || '';
       res.setHeader('Content-Type', contentType);
       res.setHeader('x-drapixai-tryon-result-id', String(tryOnResult.id));
       if (engine) res.setHeader('x-drapixai-engine', engine);
       if (qualityScore) res.setHeader('x-drapixai-quality-score', qualityScore);
       if (candidateCount) res.setHeader('x-drapixai-candidate-count', candidateCount);
-      if (warnings) res.setHeader('x-drapixai-warnings', warnings);
+      if (latencyWarnings.length > 0) res.setHeader('x-drapixai-warnings', latencyWarnings.join(','));
       if (processingMs) res.setHeader('x-drapixai-processing-ms', processingMs);
+      res.setHeader('x-drapixai-latency-ms', String(latencyMs));
+      res.setHeader('x-drapixai-latency-target-ms', String(TRYON_LATENCY_TARGET_MS));
       if (timingJson) res.setHeader('x-drapixai-timing-json', timingJson);
       res.send(buffer);
     } finally {

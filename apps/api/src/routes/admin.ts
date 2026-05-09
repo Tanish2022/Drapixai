@@ -18,6 +18,45 @@ const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:63
 redis.connect().catch(() => undefined);
 const adminRateLimit = createRateLimitMiddleware(60, 15 * 60 * 1000);
 
+const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
+  if (!storedUrl) return null;
+  if (storedUrl.startsWith('local:')) {
+    const localPath = storedUrl.replace('local:', '');
+    if (!fs.existsSync(localPath)) return null;
+    return fs.readFileSync(localPath);
+  }
+  if (storedUrl.startsWith('s3://')) {
+    const rest = storedUrl.replace('s3://', '');
+    const [bucket, ...keyParts] = rest.split('/');
+    const key = keyParts.join('/');
+    try {
+      const resp: any = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      const chunks: Buffer[] = [];
+      for await (const chunk of resp.Body) chunks.push(chunk);
+      return Buffer.concat(chunks);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const getStoredImageContentType = (storedUrl: string | null | undefined) => {
+  const lower = (storedUrl || '').toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/png';
+};
+
+const sendStoredImage = async (res: any, storedUrl: string | null | undefined) => {
+  const buffer = await fetchStoredImage(storedUrl);
+  if (!buffer) {
+    return res.status(404).json({ error: 'IMAGE_NOT_FOUND' });
+  }
+  res.setHeader('Content-Type', getStoredImageContentType(storedUrl));
+  return res.send(buffer);
+};
+
 const adminAuth = async (req: any, res: any, next: any) => {
   const apiKeyHeader = req.headers.authorization?.replace('Bearer ', '');
   if (!apiKeyHeader) {
@@ -363,15 +402,42 @@ router.get('/tryon-results', async (req, res) => {
       userEmail: item.user.email,
       garmentId: item.garmentId,
       productId: item.productId,
+      hasPersonImage: Boolean(item.personImageUrl),
+      hasGarmentImage: Boolean(item.garmentImageUrl),
+      hasResultImage: Boolean(item.resultImageUrl),
       engine: item.engine,
       qualityScore: item.qualityScore,
       candidateCount: item.candidateCount,
+      processingMs: item.processingMs,
+      latencyMs: item.latencyMs,
+      timingJson: item.timingJson,
       warnings: item.warnings,
       status: item.status,
       feedback: item.feedback,
       createdAt: item.createdAt.toISOString(),
     })),
   });
+});
+
+router.get('/tryon-results/:id/person', async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await prisma.tryOnResult.findUnique({ where: { id } });
+  if (!result) return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+  return sendStoredImage(res, result.personImageUrl);
+});
+
+router.get('/tryon-results/:id/garment', async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await prisma.tryOnResult.findUnique({ where: { id } });
+  if (!result) return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+  return sendStoredImage(res, result.garmentImageUrl);
+});
+
+router.get('/tryon-results/:id/result', async (req, res) => {
+  const id = Number(req.params.id);
+  const result = await prisma.tryOnResult.findUnique({ where: { id } });
+  if (!result) return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+  return sendStoredImage(res, result.resultImageUrl);
 });
 
 router.post('/tryon-results/:id/approve', async (req, res) => {

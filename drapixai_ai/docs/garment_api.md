@@ -140,10 +140,27 @@ Response:
 - `x-drapixai-quality-score`
 - `x-drapixai-candidate-count`
 - `x-drapixai-processing-ms`
+- `x-drapixai-latency-ms`
+- `x-drapixai-latency-target-ms`
 - `x-drapixai-timing-json`
 - `x-drapixai-warnings`
+
+The API stores review metadata for admin quality review:
+- person input image
+- garment input or cached garment preview
+- result image
+- quality score
+- AI processing time
+- full API latency
+- warnings
 
 If garment is not ready:
 - returns `GARMENT_NOT_READY`
 If the storefront product is not confirmed yet:
 - returns `GARMENT_MAPPING_NOT_CONFIRMED`
+
+Production latency target:
+- warm standard try-on should aim for 10-12 seconds end-to-end
+- `x-drapixai-latency-ms` is the API-visible customer wait
+- `x-drapixai-processing-ms` is the AI worker/model time
+- results above the configured target include a latency warning for admin review

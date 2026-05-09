@@ -16,6 +16,7 @@ declare global {
     modalTitle?: string;
     modalSubtitle?: string;
     footerText?: string;
+    timeoutMs?: number;
     primaryGradient?: string;
     onResult?: (metadata: {
       resultId?: string;
@@ -23,9 +24,12 @@ declare global {
       qualityScore?: number;
       candidateCount?: number;
       processingMs?: number;
+      latencyMs?: number;
+      latencyTargetMs?: number;
       timings?: Record<string, unknown>;
       warnings?: string[];
     }) => void;
+    onError?: (error: { message: string; productId?: string }) => void;
   }
 
   interface Window {
@@ -37,6 +41,8 @@ declare global {
         qualityScore?: number;
         candidateCount?: number;
         processingMs?: number;
+        latencyMs?: number;
+        latencyTargetMs?: number;
         timings?: Record<string, unknown>;
         warnings?: string[];
       };

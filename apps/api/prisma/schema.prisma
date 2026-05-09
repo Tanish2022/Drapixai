@@ -105,10 +105,16 @@ model TryOnResult {
   requestId       String?
   garmentId       String?
   productId       String?
+  personImageUrl  String?
+  garmentImageUrl String?
+  resultImageUrl  String?
   engine          String
   qualityScore    Float?
   candidateCount  Int      @default(1)
   candidateScores Json?
+  timingJson      Json?
+  processingMs    Int?
+  latencyMs       Int?
   warnings        Json?
   status          String   @default("generated")
   approvedAt      DateTime?

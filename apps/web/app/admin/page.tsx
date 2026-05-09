@@ -14,6 +14,25 @@ interface AdminGarment {
   rejectedReason?: string | null;
 }
 
+interface AdminTryOnResult {
+  id: number;
+  userId: number;
+  userEmail: string;
+  garmentId?: string | null;
+  productId?: string | null;
+  hasPersonImage: boolean;
+  hasGarmentImage: boolean;
+  hasResultImage: boolean;
+  engine: string;
+  qualityScore?: number | null;
+  candidateCount: number;
+  processingMs?: number | null;
+  latencyMs?: number | null;
+  warnings?: string[] | null;
+  status: string;
+  createdAt: string;
+}
+
 interface AdminOverview {
   totals: {
     users: number;
@@ -64,6 +83,8 @@ export default function AdminDashboard() {
   const [apiKey, setApiKey] = useState('');
   const [garments, setGarments] = useState<AdminGarment[]>([]);
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
+  const [tryOnResults, setTryOnResults] = useState<AdminTryOnResult[]>([]);
+  const [tryOnImages, setTryOnImages] = useState<Record<string, string>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -95,6 +116,13 @@ export default function AdminDashboard() {
         .then(res => res.json())
         .then(data => setOps(data))
         .catch(console.error);
+
+      fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?status=generated`, {
+        headers: { 'Authorization': `Bearer ${storedApiKey}` },
+      })
+        .then(res => res.json())
+        .then(data => setTryOnResults(data.items || []))
+        .catch(console.error);
     }
   }, [router]);
 
@@ -105,6 +133,16 @@ export default function AdminDashboard() {
     if (res.ok) {
       const data = await res.json();
       setGarments(data.items || []);
+    }
+  };
+
+  const fetchTryOnResults = async () => {
+    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?status=generated`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setTryOnResults(data.items || []);
     }
   };
 
@@ -132,6 +170,39 @@ export default function AdminDashboard() {
       active = false;
     };
   }, [apiKey, garments]);
+
+  useEffect(() => {
+    if (!apiKey || tryOnResults.length === 0) return;
+    let active = true;
+    const load = async () => {
+      const next: Record<string, string> = {};
+      for (const item of tryOnResults.slice(0, 12)) {
+        const imageKinds = [
+          item.hasPersonImage ? 'person' : '',
+          item.hasGarmentImage ? 'garment' : '',
+          item.hasResultImage ? 'result' : '',
+        ].filter(Boolean);
+        for (const kind of imageKinds) {
+          try {
+            const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results/${item.id}/${kind}`, {
+              headers: { 'Authorization': `Bearer ${apiKey}` }
+            });
+            if (!res.ok) continue;
+            const blob = await res.blob();
+            next[`${item.id}:${kind}`] = URL.createObjectURL(blob);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      if (active) setTryOnImages(next);
+    };
+    load();
+    return () => {
+      active = false;
+      Object.values(tryOnImages).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [apiKey, tryOnResults]);
 
   if (!overview || !website || !ops) {
     return (
@@ -308,6 +379,108 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="p-6 border border-white/10 rounded-xl mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-xl font-bold">Try-On Quality Review</h2>
+              <p className="text-sm text-gray-400 mt-1">Review person input, garment input, output, quality score, latency, and warnings before approving production examples.</p>
+            </div>
+            <button
+              onClick={() => fetchTryOnResults()}
+              className="px-4 py-2 bg-white/10 border border-white/10 rounded-lg hover:bg-white/20"
+            >
+              Load Generated
+            </button>
+          </div>
+          {tryOnResults.length === 0 ? (
+            <p className="text-sm text-gray-400">No generated try-on results waiting for review.</p>
+          ) : (
+            <div className="space-y-5">
+              {tryOnResults.slice(0, 12).map((item) => {
+                const warnings = Array.isArray(item.warnings) ? item.warnings : [];
+                return (
+                  <div key={item.id} className="p-4 bg-white/5 border border-white/10 rounded-lg">
+                    <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Result #{item.id}</p>
+                        <p className="text-xs text-gray-400">{item.userEmail} / {new Date(item.createdAt).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-1">Product: {item.productId || 'not linked'} / Garment: {item.garmentId || 'not linked'}</p>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                        <div className="px-3 py-2 rounded-md bg-black/30 border border-white/10">
+                          <p className="text-gray-500">Score</p>
+                          <p className="font-semibold text-white">{typeof item.qualityScore === 'number' ? item.qualityScore.toFixed(2) : 'n/a'}</p>
+                        </div>
+                        <div className="px-3 py-2 rounded-md bg-black/30 border border-white/10">
+                          <p className="text-gray-500">Latency</p>
+                          <p className={(item.latencyMs || 0) > 12000 ? 'font-semibold text-amber-300' : 'font-semibold text-green-300'}>{item.latencyMs ? `${(item.latencyMs / 1000).toFixed(1)}s` : 'n/a'}</p>
+                        </div>
+                        <div className="px-3 py-2 rounded-md bg-black/30 border border-white/10">
+                          <p className="text-gray-500">AI Time</p>
+                          <p className="font-semibold text-white">{item.processingMs ? `${(item.processingMs / 1000).toFixed(1)}s` : 'n/a'}</p>
+                        </div>
+                        <div className="px-3 py-2 rounded-md bg-black/30 border border-white/10">
+                          <p className="text-gray-500">Engine</p>
+                          <p className="font-semibold text-white">{item.engine}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {['person', 'garment', 'result'].map((kind) => (
+                        <div key={kind} className="bg-black/30 border border-white/10 rounded-md overflow-hidden">
+                          <p className="px-3 py-2 text-xs uppercase tracking-wide text-gray-400 border-b border-white/10">{kind}</p>
+                          {tryOnImages[`${item.id}:${kind}`] ? (
+                            <img
+                              src={tryOnImages[`${item.id}:${kind}`]}
+                              alt={`${kind} ${item.id}`}
+                              className="w-full h-64 object-contain bg-white/5"
+                            />
+                          ) : (
+                            <div className="h-64 flex items-center justify-center text-sm text-gray-500">No image stored</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {warnings.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {warnings.map((warning) => (
+                          <span key={warning} className="px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200">{warning}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={async () => {
+                          await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results/${item.id}/approve`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${apiKey}` }
+                          });
+                          fetchTryOnResults();
+                        }}
+                        className="px-3 py-1 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results/${item.id}/reject`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${apiKey}` }
+                          });
+                          fetchTryOnResults();
+                        }}
+                        className="px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-lg text-red-300"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="p-6 border border-white/10 rounded-xl mt-8">

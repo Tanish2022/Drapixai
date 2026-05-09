@@ -102,6 +102,8 @@
       qualityScore: parseNumber(response.headers.get('x-drapixai-quality-score')),
       candidateCount: parseNumber(response.headers.get('x-drapixai-candidate-count')),
       processingMs: parseNumber(response.headers.get('x-drapixai-processing-ms')),
+      latencyMs: parseNumber(response.headers.get('x-drapixai-latency-ms')),
+      latencyTargetMs: parseNumber(response.headers.get('x-drapixai-latency-target-ms')),
       timings: parseJsonObject(response.headers.get('x-drapixai-timing-json')),
       warnings: warnings ? warnings.split(',').map(function (item) { return item.trim(); }).filter(Boolean) : []
     };
@@ -142,6 +144,7 @@
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
         footerText: options.footerText || 'Your uploaded photo is processed only for the preview flow.',
+        timeoutMs: Number(options.timeoutMs || 20000),
         primaryGradient: options.primaryGradient || 'linear-gradient(135deg,#22d3ee 0%,#3b82f6 100%)'
       };
 
@@ -463,11 +466,20 @@
             form.append('quality', config.quality);
             form.append('garment_type', config.garmentType);
 
+            var startedAt = Date.now();
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            var timeoutId = controller ? setTimeout(function () {
+              controller.abort();
+            }, config.timeoutMs) : null;
             var res = await fetch(config.baseUrl + '/sdk/tryon', {
               method: 'POST',
               headers: { 'Authorization': 'Bearer ' + config.apiKey },
-              body: form
+              body: form,
+              signal: controller ? controller.signal : undefined
             });
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
 
             if (!res.ok) {
               var err = await res.json().catch(function () { return {}; });
@@ -475,6 +487,9 @@
             }
 
             var metadata = readTryOnMetadata(res);
+            if (!metadata.latencyMs) {
+              metadata.latencyMs = Date.now() - startedAt;
+            }
             var blob = await res.blob();
             if (activeResultUrl) {
               URL.revokeObjectURL(activeResultUrl);
@@ -489,7 +504,13 @@
             progressBar.style.width = '100%';
             status.textContent = 'Your DrapixAI try-on is ready.';
           } catch (error) {
-            status.textContent = error && error.message ? error.message : 'Try-on failed.';
+            var message = error && error.name === 'AbortError'
+              ? 'TRY_ON_TIMEOUT'
+              : (error && error.message ? error.message : 'Try-on failed.');
+            if (typeof options.onError === 'function') {
+              options.onError({ message: message, productId: productId || config.productId });
+            }
+            status.textContent = message;
             progressBar.style.width = '0%';
             resultShell.style.display = 'none';
           } finally {

@@ -95,12 +95,11 @@ CatVTON support packages:
 11. API returns image bytes without breaking existing `/ai/tryon` and `/sdk/tryon` clients.
 12. Admin review and user feedback feed future quality improvements.
 
-## Generation Modes
+## Generation Mode
 
 - Standard mode: generate 1 CatVTON output.
-- Enhanced mode: generate 3 to 4 CatVTON outputs, score all candidates, and return the best.
 
-Enhanced mode is the realism path for launch. Standard mode exists for lower latency and cheaper plans.
+Standard mode is the launch path because it gave the best visual result in review while keeping warm latency near the 10-12 second customer-experience target.
 
 ## Quality Layer
 

@@ -14,8 +14,10 @@ type DrapixAITryOnProps = {
   modalTitle?: string;
   modalSubtitle?: string;
   footerText?: string;
+  timeoutMs?: number;
   primaryGradient?: string;
   onResult?: DrapixAIInitOptions['onResult'];
+  onError?: DrapixAIInitOptions['onError'];
 };
 
 export default function DrapixAITryOn(props: DrapixAITryOnProps) {
@@ -30,8 +32,10 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     modalTitle,
     modalSubtitle,
     footerText,
+    timeoutMs,
     primaryGradient,
     onResult,
+    onError,
   } = props;
 
   useEffect(() => {
@@ -50,8 +54,10 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
           modalTitle,
           modalSubtitle,
           footerText,
+          timeoutMs,
           primaryGradient,
           onResult,
+          onError,
         });
       }
     };
@@ -82,8 +88,10 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     modalTitle,
     modalSubtitle,
     footerText,
+    timeoutMs,
     primaryGradient,
     onResult,
+    onError,
   ]);
 
   return <div id={containerId}></div>;
