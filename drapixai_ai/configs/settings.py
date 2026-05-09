@@ -92,6 +92,8 @@ class Settings:
     garment_color_fix_strength: float = float(os.getenv("DRAPIXAI_GARMENT_COLOR_FIX_STRENGTH", "0.94"))
     enable_natural_lighting_fix: bool = os.getenv("DRAPIXAI_ENABLE_NATURAL_LIGHTING_FIX", "1") == "1"
     natural_lighting_strength: float = float(os.getenv("DRAPIXAI_NATURAL_LIGHTING_STRENGTH", "0.55"))
+    enable_fashion_polish: bool = os.getenv("DRAPIXAI_ENABLE_FASHION_POLISH", "1") == "1"
+    fashion_polish_strength: float = float(os.getenv("DRAPIXAI_FASHION_POLISH_STRENGTH", "0.45"))
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
     min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.78"))

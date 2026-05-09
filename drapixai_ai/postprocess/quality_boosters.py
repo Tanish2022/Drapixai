@@ -28,6 +28,9 @@ def apply_quality_boosters(
     if settings.enable_natural_lighting_fix:
         result = _naturalize_lighting(result, person)
 
+    if settings.enable_fashion_polish:
+        result = _apply_fashion_polish(result, garment)
+
     if settings.enable_refinement:
         result = _harmonize_luma(result, person)
         result = _restore_garment_saturation(result, garment)
@@ -119,6 +122,89 @@ def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Imag
     alpha = Image.fromarray((mask.astype(np.uint8) * 255), mode="L").filter(ImageFilter.GaussianBlur(radius=10))
     corrected_img = Image.fromarray(np.clip(corrected, 0, 255).astype(np.uint8), mode="RGB")
     return Image.composite(corrected_img, image.convert("RGB"), alpha)
+
+
+def _apply_fashion_polish(image: Image.Image, garment: Image.Image) -> Image.Image:
+    strength = max(0.0, min(1.0, settings.fashion_polish_strength))
+    if strength <= 0:
+        return image
+
+    arr = np.asarray(image.convert("RGB")).astype(np.float32)
+    garment_pixels = _garment_foreground_pixels(garment)
+    if garment_pixels.size == 0:
+        return image
+
+    target = np.median(garment_pixels.astype(np.float32), axis=0)
+    garment_mask = _generated_garment_mask(arr, target)
+    if float(garment_mask.mean()) < 0.035:
+        return image
+
+    polished = _restore_micro_fabric_texture(arr, garment_mask, strength)
+    polished = _add_hem_contact_shadow(polished, garment_mask, strength)
+    polished = _soften_button_sharpness(polished, garment_mask, strength)
+    return Image.fromarray(np.clip(polished, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def _restore_micro_fabric_texture(arr: np.ndarray, garment_mask: np.ndarray, strength: float) -> np.ndarray:
+    gray = arr.mean(axis=2)
+    fine = gray - _box_blur_gray(gray, radius=4)
+    fine = np.clip(fine, -10.0, 10.0)
+    texture = fine[:, :, None] * (0.10 + 0.10 * strength)
+
+    h, w = garment_mask.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    torso = garment_mask & (yy > h * 0.25) & (yy < h * 0.75) & (xx > w * 0.20) & (xx < w * 0.80)
+    alpha = Image.fromarray((torso.astype(np.uint8) * 255), mode="L").filter(ImageFilter.GaussianBlur(radius=6))
+    alpha_arr = (np.asarray(alpha).astype(np.float32) / 255.0)[:, :, None]
+    return arr + texture * alpha_arr
+
+
+def _add_hem_contact_shadow(arr: np.ndarray, garment_mask: np.ndarray, strength: float) -> np.ndarray:
+    h, w = garment_mask.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    center = (xx > w * 0.25) & (xx < w * 0.75)
+    lower = garment_mask & center & (yy > h * 0.55) & (yy < h * 0.84)
+    row_coverage = lower.mean(axis=1)
+    rows = np.where(row_coverage > 0.16)[0]
+    if rows.size == 0:
+        return arr
+
+    bottom = int(rows.max())
+    band_top = min(h - 1, bottom + 1)
+    band_bottom = min(h, bottom + max(3, int(h * 0.018)))
+    if band_bottom <= band_top:
+        return arr
+
+    band = np.zeros((h, w), dtype=np.float32)
+    band[band_top:band_bottom, int(w * 0.30) : int(w * 0.70)] = 1.0
+    alpha = Image.fromarray((band * 255).astype(np.uint8), mode="L").filter(ImageFilter.GaussianBlur(radius=5))
+    alpha_arr = (np.asarray(alpha).astype(np.float32) / 255.0)[:, :, None]
+    shadow = 1.0 - alpha_arr * (0.035 + 0.035 * strength)
+    return arr * shadow
+
+
+def _soften_button_sharpness(arr: np.ndarray, garment_mask: np.ndarray, strength: float) -> np.ndarray:
+    h, w = garment_mask.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    placket = garment_mask & (xx > w * 0.43) & (xx < w * 0.57) & (yy > h * 0.24) & (yy < h * 0.76)
+    dark_detail = arr.mean(axis=2) < 82
+    button_mask = placket & dark_detail
+    if float(button_mask.mean()) < 0.0002:
+        return arr
+
+    alpha = Image.fromarray((button_mask.astype(np.uint8) * 255), mode="L").filter(ImageFilter.GaussianBlur(radius=1.4))
+    alpha_arr = (np.asarray(alpha).astype(np.float32) / 255.0)[:, :, None] * (0.18 + 0.14 * strength)
+    softened = np.asarray(
+        Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="RGB").filter(ImageFilter.GaussianBlur(radius=0.55))
+    ).astype(np.float32)
+    return arr * (1.0 - alpha_arr) + softened * alpha_arr
+
+
+def _box_blur_gray(gray: np.ndarray, radius: int) -> np.ndarray:
+    image = Image.fromarray(np.clip(gray, 0, 255).astype(np.uint8), mode="L").filter(
+        ImageFilter.BoxBlur(radius)
+    )
+    return np.asarray(image).astype(np.float32)
 
 
 def _garment_foreground_pixels(garment: Image.Image) -> np.ndarray:
