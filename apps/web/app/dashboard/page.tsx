@@ -584,10 +584,13 @@ export default function Dashboard() {
       title: '5. SDK uses confirmed mappings',
       summary: 'Only after the matches feel right should the storefront install use those confirmed links for live shoppers.',
       done: readyForGoLive,
-      actionLabel: readyForPreview ? 'Preview Try-On' : 'Open Help',
-      actionHref: readyForPreview ? '#plugin-demo' : '/help',
+      actionLabel: readyForPreview ? 'Open SDK Install' : 'Preview First',
+      actionHref: readyForPreview ? '/sdk-install' : '#plugin-demo',
     },
   ];
+  const completedOnboardingSteps = onboardingSteps.filter((step) => step.done).length;
+  const onboardingProgress = Math.round((completedOnboardingSteps / onboardingSteps.length) * 100);
+  const currentOnboardingStep = onboardingSteps.find((step) => !step.done) || onboardingSteps[onboardingSteps.length - 1];
 
   return (
     <div className={pageClass}>
@@ -613,6 +616,9 @@ export default function Dashboard() {
             <Link href="/subscription" className={`text-sm transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
               Subscription
             </Link>
+            <Link href="/sdk-install" className={`text-sm transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
+              SDK Install
+            </Link>
             <Link href="/settings" className={`text-sm transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
               Settings
             </Link>
@@ -625,7 +631,7 @@ export default function Dashboard() {
 
       <main className="relative z-10 max-w-7xl mx-auto p-6">
         <div className="mb-8">
-          <p className={`text-sm uppercase tracking-[0.25em] mb-3 ${themePreference === 'light' ? 'text-cyan-700/80' : 'text-cyan-400/80'}`}>Guided Onboarding</p>
+          <p className={`text-sm uppercase tracking-[0.25em] mb-3 ${themePreference === 'light' ? 'text-cyan-700/80' : 'text-cyan-400/80'}`}>Onboarding Wizard</p>
           <h1 className="text-3xl font-bold mb-3">Give brands a clean path from garment upload to confirmed live mappings.</h1>
           <p className={`max-w-3xl text-base ${mutedTextClass}`}>
             The launch story is now: upload garments, discover products, review suggested matches, confirm the right pairings, then let the SDK use only those confirmed mappings on the storefront.
@@ -674,11 +680,26 @@ export default function Dashboard() {
           <section className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
               <Sparkles className="w-6 h-6 text-cyan-400" />
-              <h2 className="text-xl font-bold">Start here</h2>
+              <h2 className="text-xl font-bold">Brand onboarding wizard</h2>
             </div>
             <p className={`text-sm mb-5 ${mutedTextClass}`}>
               Ignore full rollout for a moment. The fastest path is: save your store, add a few products, upload clean garment assets, then preview internally.
             </p>
+            <div className={`${panelClass} mb-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className={`text-sm ${mutedTextClass}`}>Progress</p>
+                  <p className={`text-lg font-semibold ${strongTextClass}`}>{completedOnboardingSteps} of {onboardingSteps.length} launch steps complete</p>
+                </div>
+                <Link href={currentOnboardingStep.actionHref} className={`inline-flex items-center gap-2 ${actionClass}`}>
+                  {currentOnboardingStep.actionLabel}
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
+              <div className={`h-2 rounded-full overflow-hidden ${themePreference === 'light' ? 'bg-slate-200' : 'bg-white/10'}`}>
+                <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all" style={{ width: `${onboardingProgress}%` }} />
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {onboardingSteps.map((step) => (
                 <div key={step.title} className={panelClass}>
