@@ -113,6 +113,8 @@ export default function Home() {
       });
   };
 
+  const showDashboardCta = hasDashboardAccess || sessionStatus === 'authenticated';
+
   return (
     <div className="min-h-screen bg-[#050816] text-white">
 
@@ -189,7 +191,7 @@ export default function Home() {
               ) : (
                 <>
                   <Link href="/auth/login" className="text-sm text-gray-300 hover:text-white transition-colors">Sign In</Link>
-                  <Link href="/auth/register" className="text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity">Start 300 Try-On Trial</Link>
+                  <Link href="/auth/register" className="text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity">Start Free Trial</Link>
                 </>
               )}
             </div>
@@ -221,7 +223,7 @@ export default function Home() {
             Boost product page engagement, increase add-to-cart rates, and reduce returns using photorealistic AI try-on technology. Works with any platform via a universal JavaScript SDK.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <Link href={hasDashboardAccess ? '/dashboard' : '/auth/register'} className="px-8 py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(6,182,212,0.2)]">{hasDashboardAccess ? 'Open Dashboard' : 'Start 300 Try-On Trial'}</Link>
+            <Link href={showDashboardCta ? '/dashboard' : '/auth/login'} className="px-8 py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(6,182,212,0.2)]">{showDashboardCta ? 'Dashboard' : 'Sign In'}</Link>
             <Link href="/demo" className="px-8 py-4 text-lg font-medium rounded-xl border border-white/[0.1] hover:bg-white/[0.05] transition-colors flex items-center gap-2"><Play className="w-5 h-5" />See Live Demo</Link>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
@@ -455,7 +457,7 @@ export default function Home() {
           <p className="text-xl text-gray-400 mb-8">Start with a 300 try-on trial, validate quality on your own products, then roll out with the plan that fits your traffic.</p>
 
           <Link href={hasDashboardAccess ? '/dashboard' : '/auth/register'} className="inline-block px-10 py-4 text-xl font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(6,182,212,0.15)]">
-          {hasDashboardAccess ? 'Open Dashboard' : 'Start 300 Try-On Trial'}
+          {hasDashboardAccess ? 'Open Dashboard' : 'Start Free Trial'}
           </Link>
         </div>
       </section>
