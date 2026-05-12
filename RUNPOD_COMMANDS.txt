@@ -1,0 +1,406 @@
+DrapixAI RunPod Command Runbook
+Updated: 2026-05-12
+
+Purpose
+This file is a quick command reference for operating DrapixAI on a RunPod Ubuntu GPU pod when Codex is not available.
+
+Assumptions
+- Repo path on RunPod: /workspace/drapixai
+- Python/AI runtime source of truth: RunPod Ubuntu 22.04 GPU
+- Preferred image: runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+- Preferred GPU: A100 80GB
+- Production try-on mode: standard
+- Target warm try-on latency: 10-12 seconds
+
+Important
+- Replace <POD_IP>, <PORT>, and <KEY_PATH> with your current RunPod SSH values.
+- Do not paste secrets into shared logs.
+- Run most Linux commands after SSH login on the RunPod pod.
+
+============================================================
+1. Connect To RunPod
+============================================================
+
+Use case: Open SSH terminal from Windows PowerShell.
+
+ssh root@<POD_IP> -p <PORT> -i "$HOME\.ssh\id_ed25519"
+
+Use case: Open SSH terminal from Linux/macOS.
+
+ssh root@<POD_IP> -p <PORT> -i ~/.ssh/id_ed25519
+
+Use case: Copy a local file to the pod.
+
+scp -P <PORT> -i "$HOME\.ssh\id_ed25519" "C:\path\to\file.jpg" root@<POD_IP>:/workspace/drapixai/runtime/test_assets/
+
+Use case: Copy a result image from the pod to Windows.
+
+scp -P <PORT> -i "$HOME\.ssh\id_ed25519" root@<POD_IP>:/workspace/drapixai/runtime/catvton_smoke/result.png "C:\Users\tanis\Downloads\result.png"
+
+============================================================
+2. First Health Check After Login
+============================================================
+
+Use case: Confirm the pod has GPU access.
+
+nvidia-smi
+
+Use case: Confirm Python version.
+
+python --version
+
+Use case: Check disk space.
+
+df -h
+
+Use case: Check workspace contents.
+
+ls -la /workspace
+
+Use case: Go to DrapixAI repo.
+
+cd /workspace/drapixai
+
+Use case: Confirm current git commit.
+
+git log --oneline -5
+
+Use case: Confirm local repo status.
+
+git status -sb
+
+============================================================
+3. Get Latest DrapixAI Code
+============================================================
+
+Use case: Pull newest GitHub code on the pod.
+
+cd /workspace/drapixai
+git pull origin main
+
+Use case: If the pod repo does not exist yet, clone it.
+
+cd /workspace
+git clone https://github.com/Tanish2022/Drapixai.git drapixai
+cd /workspace/drapixai
+
+============================================================
+4. Bootstrap RunPod Environment
+============================================================
+
+Use case: Install system/runtime dependencies for RunPod.
+
+cd /workspace/drapixai
+bash deploy/runpod/bootstrap.sh /workspace/drapixai
+
+Use case: Create AI env file from example.
+
+cd /workspace/drapixai
+cp deploy/env/ai.production.example deploy/env/ai.production.env
+
+Use case: Edit AI env file.
+
+nano deploy/env/ai.production.env
+
+Required AI env values to check:
+- DRAPIXAI_GPU_PRESET=runpod-a100
+- DRAPIXAI_DEVICE=cuda
+- DRAPIXAI_CUDA_DEVICE=0
+- DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/catvton
+- DRAPIXAI_TRYON_ENGINE=catvton
+- DRAPIXAI_GARMENT_CACHE_DIR=/workspace/drapixai/runtime/garments
+- DRAPIXAI_TARGET_TRYON_MS=12000
+- DRAPIXAI_ADMIN_TOKEN=<your-token>
+- Redis and S3 values if using production storage
+
+Use case: Load AI env into current shell.
+
+set -a
+source deploy/env/ai.production.env
+set +a
+
+Use case: Validate AI env.
+
+bash deploy/scripts/validate-env.sh ai
+
+Use case: Run RunPod preflight checks.
+
+bash deploy/runpod/preflight.sh
+
+============================================================
+5. Model Download And Preparation
+============================================================
+
+Use case: Download CatVTON model assets.
+
+cd /workspace/drapixai
+python -m drapixai_ai.scripts.download_catvton
+
+Use case: Prepare CatVTON runtime assets.
+
+cd /workspace/drapixai
+python -m drapixai_ai.scripts.prepare_catvton
+
+Use case: Check model directory size.
+
+du -sh /workspace/drapixai/models/catvton
+
+Use case: Check garment cache directory.
+
+ls -lh /workspace/drapixai/runtime/garments
+
+============================================================
+6. Start DrapixAI AI Services
+============================================================
+
+Use case: Start Redis, AI API, and worker together.
+
+cd /workspace/drapixai
+bash deploy/runpod/start-all.sh
+
+Use case: Start only AI API.
+
+cd /workspace/drapixai
+bash deploy/runpod/start-ai-api.sh
+
+Use case: Start only AI worker.
+
+cd /workspace/drapixai
+bash deploy/runpod/start-ai-worker.sh
+
+Use case: Check if services are running.
+
+pgrep -af "redis-server|uvicorn|gpu_worker|rq worker"
+
+Use case: Check which process is using port 8080.
+
+ss -ltnp | grep 8080
+
+============================================================
+7. AI API Health Checks
+============================================================
+
+Use case: Basic AI service health.
+
+curl http://127.0.0.1:8080/health
+
+Expected:
+{"status":"ok"}
+
+Use case: Confirm model readiness.
+
+curl http://127.0.0.1:8080/ready
+
+Expected:
+status should be ready and model_ready should be true.
+
+Use case: Check API docs in browser if port exposed.
+
+http://<POD_IP>:8080/docs
+
+============================================================
+8. Run Smoke Try-On Test
+============================================================
+
+Use case: Put test images in the expected folder.
+
+mkdir -p /workspace/drapixai/runtime/test_assets
+ls -lh /workspace/drapixai/runtime/test_assets
+
+Expected files:
+- person.jpg or person.png
+- garment.jpg or garment.png
+
+Use case: Run the standard smoke try-on script.
+
+cd /workspace/drapixai
+python deploy/runpod/smoke_tryon.py
+
+Use case: View result file location.
+
+ls -lh /workspace/drapixai/runtime/catvton_smoke
+
+Expected output:
+- result.png
+- timing or metadata files if generated by the script
+
+Use case: Copy smoke result back to Windows.
+
+scp -P <PORT> -i "$HOME\.ssh\id_ed25519" root@<POD_IP>:/workspace/drapixai/runtime/catvton_smoke/result.png "C:\Users\tanis\Downloads\catvton_result.png"
+
+============================================================
+9. Run Full Matrix Test
+============================================================
+
+Use case: Run expanded matrix on available test pairs.
+
+cd /workspace/drapixai
+python deploy/runpod/smoke_matrix.py
+
+Use case: Read matrix summary.
+
+cat /workspace/drapixai/runtime/test_matrix/summary.json
+
+Use case: List matrix outputs.
+
+find /workspace/drapixai/runtime/test_matrix -maxdepth 2 -type f | sort
+
+Use case: Copy matrix folder back to Windows.
+
+scp -r -P <PORT> -i "$HOME\.ssh\id_ed25519" root@<POD_IP>:/workspace/drapixai/runtime/test_matrix "C:\Users\tanis\Downloads\drapixai_test_matrix"
+
+============================================================
+10. Measure Latency
+============================================================
+
+Use case: Watch GPU while testing.
+
+watch -n 1 nvidia-smi
+
+Use case: Check AI logs for processing time.
+
+ls -lh /workspace/drapixai/runtime/logs
+tail -n 200 /workspace/drapixai/runtime/logs/*.log
+
+Use case: Find latency headers from API response.
+
+curl -i http://127.0.0.1:8080/health
+
+For full try-on requests, check these headers:
+- x-drapixai-processing-ms
+- x-drapixai-latency-ms
+- x-drapixai-latency-target-ms
+- x-drapixai-quality-score
+- x-drapixai-warnings
+
+Target:
+- Warm standard try-on should stay close to 10-12 seconds without sacrificing realism.
+
+============================================================
+11. Restart Or Stop Services
+============================================================
+
+Use case: Stop AI API and worker.
+
+pkill -f "uvicorn.*drapixai_ai"
+pkill -f "drapixai_ai.worker.gpu_worker"
+pkill -f "rq worker"
+
+Use case: Stop Redis.
+
+pkill -f "redis-server"
+
+Use case: Restart everything.
+
+cd /workspace/drapixai
+bash deploy/runpod/start-all.sh
+
+Use case: Kill only a stuck process on port 8080.
+
+fuser -k 8080/tcp
+
+============================================================
+12. Debug Common Problems
+============================================================
+
+Problem: CUDA is not available.
+
+Commands:
+nvidia-smi
+python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no cuda')"
+
+Problem: Model not ready.
+
+Commands:
+curl http://127.0.0.1:8080/ready
+ls -lh /workspace/drapixai/models/catvton
+tail -n 200 /workspace/drapixai/runtime/logs/*.log
+
+Problem: Port 8080 already in use.
+
+Commands:
+ss -ltnp | grep 8080
+fuser -k 8080/tcp
+bash deploy/runpod/start-ai-api.sh
+
+Problem: Redis not running.
+
+Commands:
+redis-cli ping
+redis-server --daemonize yes
+redis-cli ping
+
+Problem: Result looks fake or pose changed.
+
+Actions:
+- Do not approve production from that image.
+- Check garment image is garment-only and background-cleaned.
+- Check mask/preprocess output.
+- Rerun one standard test after warmup.
+- Review quality score and warnings.
+
+Problem: Color changed too much.
+
+Actions:
+- Confirm latest GitHub code is pulled.
+- Make sure fashion polish and garment color matching are enabled.
+- Use a clean garment image with strong color reference.
+- Avoid low-resolution or compressed garment images.
+
+============================================================
+13. GitHub Workflow On Pod
+============================================================
+
+Use case: Pull latest production code.
+
+cd /workspace/drapixai
+git pull origin main
+
+Use case: See local changes.
+
+git status -sb
+
+Use case: See latest commits.
+
+git log --oneline -10
+
+Use case: Do not commit generated model files.
+
+git status --ignored -sb
+
+============================================================
+14. Production Launch Gate
+============================================================
+
+Before public launch, confirm:
+- GitHub main has latest code.
+- API build passes.
+- Web build passes.
+- Prisma schema is pushed/migrated on production DB.
+- AI /health returns ok.
+- AI /ready returns ready.
+- Redis is reachable.
+- S3/MinIO writes work.
+- One real /sdk/garments upload succeeds.
+- One real /sdk/tryon returns image bytes.
+- Admin quality review shows person, garment, result, score, latency, and warnings.
+- Warm standard try-on is close to 10-12 seconds.
+- Result preserves face, body, pose, sleeve style, color, lighting, and hem behavior.
+
+============================================================
+15. Quick Daily RunPod Routine
+============================================================
+
+cd /workspace/drapixai
+git pull origin main
+nvidia-smi
+set -a
+source deploy/env/ai.production.env
+set +a
+bash deploy/scripts/validate-env.sh ai
+bash deploy/runpod/start-all.sh
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/ready
+python deploy/runpod/smoke_tryon.py
+ls -lh /workspace/drapixai/runtime/catvton_smoke
+
