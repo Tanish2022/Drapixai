@@ -28,8 +28,13 @@ def apply_quality_boosters(
     if settings.enable_natural_lighting_fix:
         result = _naturalize_lighting(result, person)
 
+    result = _protect_background_color(result, person, garment)
+
     if settings.enable_fashion_polish:
         result = _apply_fashion_polish(result, garment)
+
+    if settings.enable_person_context_restore:
+        result = _restore_person_context(result, person, garment)
 
     if settings.enable_refinement:
         result = _harmonize_luma(result, person)
@@ -119,9 +124,53 @@ def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Imag
     adjusted = (corrected[mask] - source) * (1.0 + (gain - 1.0) * strength) + source + rgb_delta * strength
     corrected[mask] = adjusted
 
-    alpha = Image.fromarray((mask.astype(np.uint8) * 255), mode="L").filter(ImageFilter.GaussianBlur(radius=10))
+    alpha = Image.fromarray((mask.astype(np.uint8) * 255), mode="L")
+    if settings.garment_color_fix_edge_guard:
+        alpha = alpha.filter(ImageFilter.MinFilter(size=5)).filter(ImageFilter.GaussianBlur(radius=4))
+    else:
+        alpha = alpha.filter(ImageFilter.GaussianBlur(radius=10))
     corrected_img = Image.fromarray(np.clip(corrected, 0, 255).astype(np.uint8), mode="RGB")
     return Image.composite(corrected_img, image.convert("RGB"), alpha)
+
+
+def _protect_background_color(image: Image.Image, person: Image.Image, garment: Image.Image) -> Image.Image:
+    result = image.convert("RGB")
+    person_resized = person.convert("RGB").resize(result.size, Image.BICUBIC)
+    result_arr = np.asarray(result).astype(np.float32)
+    person_arr = np.asarray(person_resized).astype(np.float32)
+    garment_pixels = _garment_foreground_pixels(garment)
+    if garment_pixels.size == 0:
+        return result
+
+    target = np.median(garment_pixels.astype(np.float32), axis=0)
+    garment_mask = _generated_garment_mask(result_arr, target)
+    h, w = garment_mask.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    subject_region = (
+        (yy > h * 0.14)
+        & (yy < h * 0.90)
+        & (xx > w * 0.04)
+        & (xx < w * 0.96)
+    )
+    background_region = ~subject_region
+    background_region |= (yy < h * 0.16)
+    background_region |= ((xx < w * 0.08) | (xx > w * 0.92))
+    background_region &= ~garment_mask
+    if float(background_region.mean()) < 0.08:
+        return result
+
+    garment_chroma = _rgb_chroma(target.reshape(1, 1, 3))[0, 0]
+    result_chroma = _rgb_chroma(result_arr)
+    chroma_cast = np.linalg.norm(result_chroma - garment_chroma, axis=2)
+    cast_region = background_region & (chroma_cast < settings.background_color_cast_threshold)
+    if float(cast_region.mean()) < 0.006:
+        return result
+
+    alpha = Image.fromarray((cast_region.astype(np.uint8) * 255), mode="L")
+    alpha = alpha.filter(ImageFilter.MaxFilter(size=7)).filter(ImageFilter.GaussianBlur(radius=5))
+    alpha_arr = (np.asarray(alpha).astype(np.float32) / 255.0)[:, :, None] * 0.82
+    restored = result_arr * (1.0 - alpha_arr) + person_arr * alpha_arr
+    return Image.fromarray(np.clip(restored, 0, 255).astype(np.uint8), mode="RGB")
 
 
 def _apply_fashion_polish(image: Image.Image, garment: Image.Image) -> Image.Image:
@@ -198,6 +247,44 @@ def _soften_button_sharpness(arr: np.ndarray, garment_mask: np.ndarray, strength
         Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="RGB").filter(ImageFilter.GaussianBlur(radius=0.55))
     ).astype(np.float32)
     return arr * (1.0 - alpha_arr) + softened * alpha_arr
+
+
+def _restore_person_context(image: Image.Image, person: Image.Image, garment: Image.Image) -> Image.Image:
+    strength = max(0.0, min(1.0, settings.person_context_restore_strength))
+    if strength <= 0:
+        return image
+
+    result = image.convert("RGB")
+    person_resized = person.convert("RGB").resize(result.size, Image.BICUBIC)
+    result_arr = np.asarray(result).astype(np.float32)
+    person_arr = np.asarray(person_resized).astype(np.float32)
+    garment_pixels = _garment_foreground_pixels(garment)
+    if garment_pixels.size == 0:
+        return result
+
+    target = np.median(garment_pixels.astype(np.float32), axis=0)
+    garment_mask = _generated_garment_mask(result_arr, target)
+    h, w = garment_mask.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    torso_region = (yy > h * 0.28) & (yy < h * 0.88) & (xx > w * 0.12) & (xx < w * 0.88)
+    left_sleeve_region = (yy > h * 0.30) & (yy < h * 0.82) & (xx > w * 0.02) & (xx < w * 0.38)
+    right_sleeve_region = (yy > h * 0.30) & (yy < h * 0.82) & (xx > w * 0.62) & (xx < w * 0.98)
+    collar_region = (
+        (yy > h * 0.24)
+        & (yy < h * 0.40)
+        & (xx > w * 0.30)
+        & (xx < w * 0.70)
+        & ~((yy < h * 0.32) & (xx > w * 0.40) & (xx < w * 0.60))
+    )
+    garment_region = torso_region | left_sleeve_region | right_sleeve_region | collar_region
+    keep_generated = garment_region | (garment_mask & (yy > h * 0.30))
+
+    mask = Image.fromarray((keep_generated.astype(np.uint8) * 255), mode="L")
+    mask = mask.filter(ImageFilter.MaxFilter(size=9)).filter(ImageFilter.GaussianBlur(radius=7))
+    mask_arr = (np.asarray(mask).astype(np.float32) / 255.0)[:, :, None]
+    context_restored = person_arr * (1.0 - mask_arr) + result_arr * mask_arr
+    restored = result_arr * (1.0 - strength) + context_restored * strength
+    return Image.fromarray(np.clip(restored, 0, 255).astype(np.uint8), mode="RGB")
 
 
 def _box_blur_gray(gray: np.ndarray, radius: int) -> np.ndarray:

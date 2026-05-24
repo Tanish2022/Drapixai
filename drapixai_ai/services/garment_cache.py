@@ -53,7 +53,7 @@ class GarmentCache:
         profile_key: Optional[str] = None,
     ) -> str:
         parts = []
-        parts.append(GarmentCache.PREPROCESS_VERSION)
+        parts.append(settings.garment_cache_version or GarmentCache.PREPROCESS_VERSION)
         if brand_id:
             parts.append(brand_id)
         if garment_id:

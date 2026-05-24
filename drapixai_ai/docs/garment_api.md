@@ -34,6 +34,8 @@ Response:
 }
 ```
 
+During onboarding, DrapixAI stores the original garment and generates a high-quality try-on cache. The current launch cache version is `v3-1024x1365`, built for the SDK to reuse during shopper try-on requests. Product mapping is required before live SDK usage: the shopper-facing SDK sends a confirmed `productId`, and DrapixAI resolves it to the cached garment asset.
+
 Common validation errors:
 - `MODEL_WORN_GARMENT`
 - `GARMENT_TOO_LONG`
@@ -123,6 +125,23 @@ Clears a confirmed pairing and lets DrapixAI fall back to suggestion state.
 **GET** `/sdk/garments/:garmentId/image`
 
 Returns PNG image if cached.
+
+## 7. Regenerate Garment Caches
+
+When RunPod is back online, rebuild all onboarding caches after a model, preprocessing, or resolution change:
+
+```bash
+npm --prefix apps/api run garments:regenerate-cache
+```
+
+Useful options:
+
+```bash
+npm --prefix apps/api run garments:regenerate-cache -- --dry-run
+npm --prefix apps/api run garments:regenerate-cache -- --user-id=123
+```
+
+The command calls the AI preprocess endpoint for each stored original garment, writes a JSON report under `runtime/cache-regeneration`, marks successful products as `ready`, and marks failures as `pending` with a `CACHE_REGEN_FAILED` reason so admins can review or re-upload those assets.
 
 ## Try-On Usage
 **POST** `/sdk/tryon`

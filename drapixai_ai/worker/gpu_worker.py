@@ -8,7 +8,7 @@ import time
 from typing import Any, Dict
 
 import torch
-from PIL import Image
+from PIL import Image, ImageFilter
 from rq import SimpleWorker, Worker
 from rq.timeouts import TimerDeathPenalty
 
@@ -70,6 +70,16 @@ def _encode_image(image: Image.Image) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+def _finalize_output_image(image: Image.Image) -> Image.Image:
+    if not settings.enable_final_output_upscale:
+        return image
+    target_size = (settings.output_width, settings.output_height)
+    if image.size == target_size:
+        return image
+    resized = image.resize(target_size, Image.Resampling.LANCZOS)
+    return resized.filter(ImageFilter.UnsharpMask(radius=0.7, percent=35, threshold=4))
+
+
 def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     job_started_at_ms = int(time.time() * 1000)
     total_start = time.perf_counter()
@@ -102,7 +112,10 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     pipeline_ms = int((time.perf_counter() - pipeline_start) * 1000)
     encode_start = time.perf_counter()
-    image_base64 = _encode_image(result.image)
+    output_image = _finalize_output_image(result.image)
+    output_upscale_ms = int((time.perf_counter() - encode_start) * 1000)
+    encode_start = time.perf_counter()
+    image_base64 = _encode_image(output_image)
     encode_ms = int((time.perf_counter() - encode_start) * 1000)
     total_ms = int((time.perf_counter() - total_start) * 1000)
     enqueued_at_ms = payload.get("enqueued_at_ms")
@@ -115,6 +128,7 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         **dict(result.metadata.get("timings", {})),
         "decode_ms": decode_ms,
         "worker_pipeline_ms": pipeline_ms,
+        "output_upscale_ms": output_upscale_ms,
         "encode_ms": encode_ms,
         "worker_total_ms": total_ms,
     }

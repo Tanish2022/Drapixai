@@ -310,6 +310,7 @@ router.get('/garments', async (req, res) => {
       userId: g.userId,
       garmentId: g.garmentId,
       status: g.status,
+      cacheKey: g.cacheKey,
       thumbnailUrl: g.thumbnailUrl,
       updatedAt: g.updatedAt,
       rejectedReason: g.rejectedReason

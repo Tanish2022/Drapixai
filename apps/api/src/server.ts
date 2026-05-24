@@ -33,6 +33,8 @@ const localDevOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
+  'http://localhost:5055',
+  'http://127.0.0.1:5055',
 ];
 
 const allowedOrigins = Array.from(
@@ -45,6 +47,17 @@ const allowedOrigins = Array.from(
 
 const allowAnyOrigin = allowedOrigins.includes('*');
 const trustProxy = (process.env.DRAPIXAI_TRUST_PROXY || '').trim();
+const sdkExposedHeaders = [
+  'x-drapixai-tryon-result-id',
+  'x-drapixai-engine',
+  'x-drapixai-quality-score',
+  'x-drapixai-candidate-count',
+  'x-drapixai-warnings',
+  'x-drapixai-processing-ms',
+  'x-drapixai-latency-ms',
+  'x-drapixai-latency-target-ms',
+  'x-drapixai-timing-json',
+];
 
 app.disable('x-powered-by');
 if (trustProxy) {
@@ -59,6 +72,7 @@ app.use(cors({
     }
     callback(new Error('CORS_ORIGIN_NOT_ALLOWED'));
   },
+  exposedHeaders: sdkExposedHeaders,
 }));
 app.use(express.json({ limit: '10mb' }));
 

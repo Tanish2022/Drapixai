@@ -38,7 +38,7 @@ Pinned Python packages:
 - `python-multipart==0.0.9`
 - `requests==2.32.3`
 - `boto3==1.34.131`
-- `accelerate==0.34.2`
+- `accelerate==0.31.0`
 - `transformers==4.46.3`
 - `diffusers==0.31.0`
 - `huggingface_hub>=0.34.0,<2.0`
@@ -98,8 +98,13 @@ CatVTON support packages:
 ## Generation Mode
 
 - Standard mode: generate 1 CatVTON output.
+- Garment try-on cache: `1024 x 1365`.
+- CatVTON generation canvas: `768 x 1024`.
+- Final returned output: `1024 x 1365`.
 
 Standard mode is the launch path because it gave the best visual result in review while keeping warm latency near the 10-12 second customer-experience target.
+
+Garment cache is prepared during brand onboarding/product mapping, not during every shopper try-on request. The SDK should use the high-quality try-on cache by default so it stays fast without falling back to low-resolution preview assets. Native CatVTON generation remains at `768 x 1024` until higher-resolution generation is proven stable in the RunPod matrix.
 
 ## Quality Layer
 
@@ -138,6 +143,8 @@ Current and planned boosters:
 - auto quality scoring
 - conservative refinement for brightness harmonization and garment color recovery
 - detail restore for texture, edges, logos, prints, buttons, and embroidery
+- tight garment-edge color correction so shirt color matching does not bleed into the background
+- background color-cast rejection/restoration for public-launch SDK outputs
 - future FLUX-style refinement for blending, folds, shadows, and garment-body contact
 
 ## Production Rules

@@ -108,6 +108,7 @@ const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
 const GARMENT_APPROVAL_REQUIRED = (process.env.DRAPIXAI_GARMENT_APPROVAL_REQUIRED || '0') === '1';
 const TRYON_LATENCY_TARGET_MS = Number(process.env.DRAPIXAI_TARGET_TRYON_MS || 12000);
+const SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON = (process.env.DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON || '0') === '1';
 
 const parseNumberHeader = (value: string | null): number | null => {
   if (!value) return null;
@@ -662,6 +663,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       let cacheKey = clothCacheKey;
       let garmentRecord: any = null;
       let garmentReviewUrl: string | undefined;
+      let originalGarmentBytes: Buffer | null = null;
       const resolvedGarmentId = garmentId ?? '';
       let actualGarmentId = resolvedGarmentId;
       if (garmentId) {
@@ -689,8 +691,15 @@ router.post('/tryon', authMiddleware, upload.fields([
           return res.status(403).json({ error: 'GARMENT_REJECTED', reason: garment.rejectedReason || '' });
         }
         cacheKey = garment.cacheKey;
+        if (SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON && garment.originalUrl) {
+          originalGarmentBytes = await fetchOriginalGarment(garment.originalUrl);
+          if (originalGarmentBytes && originalGarmentBytes.length <= MAX_UPLOAD_BYTES) {
+            clothBase64 = originalGarmentBytes.toString('base64');
+            cacheKey = undefined;
+          }
+        }
       }
-      if (!cacheKey) {
+      if (!cacheKey && !clothBase64) {
         if (!clothFile) {
           return res.status(400).json({ error: 'CLOTH_IMAGE_REQUIRED' });
         }

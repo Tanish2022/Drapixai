@@ -22,6 +22,7 @@ type UsageData = {
 type GarmentItem = {
   garmentId: string;
   displayName?: string | null;
+  cacheKey?: string | null;
   confirmedProductId?: string | null;
   confirmedProductName?: string | null;
   status: string;
@@ -227,6 +228,8 @@ export default function ProductTryOn() {
   const readiness = [
     { label: 'Store domain verified', done: Boolean(usage.storeVerified), href: '/settings' },
     { label: 'Garments uploaded', done: (usage.uploadedGarmentCount || 0) > 0, href: '/dashboard#garment-onboarding' },
+    { label: 'Preprocessing complete', done: garments.some((garment) => Boolean(garment.status) && garment.status !== 'missing'), href: '/dashboard#garment-onboarding' },
+    { label: 'Try-on cache ready', done: garments.some((garment) => Boolean(garment.cacheKey) && garment.status === 'ready'), href: '/dashboard#garment-onboarding' },
     { label: 'Products discovered', done: (usage.discoveredProductCount || 0) > 0, href: '/dashboard#garment-onboarding' },
     { label: 'Mappings confirmed', done: confirmedGarments.length > 0, href: '/dashboard#mapping-flow' },
   ];
@@ -248,7 +251,7 @@ export default function ProductTryOn() {
             <p className={`text-sm uppercase tracking-[0.25em] mb-3 ${themePreference === 'light' ? 'text-cyan-700/80' : 'text-cyan-400/80'}`}>SDK Install</p>
             <h1 className="text-4xl font-bold">Copy-paste storefront install for confirmed products.</h1>
             <p className={`mt-3 max-w-3xl ${mutedTextClass}`}>
-              Use this page after product-to-garment mappings are confirmed. The SDK keeps the binary image response simple while exposing quality, latency, and warning metadata.
+              Use this page after product-to-garment mappings are confirmed and high-quality garment caches are ready. The SDK sends the shopper photo plus a product id, then returns image bytes with quality, latency, and warning metadata.
             </p>
           </div>
           <Link href="/help" className={`inline-flex items-center gap-2 ${actionClass}`}>
@@ -285,7 +288,7 @@ export default function ProductTryOn() {
             </div>
             {confirmedGarments.length === 0 ? (
               <div className={panelClass}>
-                <p className={mutedTextClass}>No confirmed mappings yet. Confirm at least one garment-to-product pair in the dashboard before installing live.</p>
+                <p className={mutedTextClass}>No confirmed mappings yet. Confirm at least one garment-to-product pair in the dashboard before installing live. Each live product must point to a ready cached garment asset.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -347,7 +350,7 @@ export default function ProductTryOn() {
             </div>
             <div className={panelClass}>
               <p className={`text-sm font-semibold ${strongTextClass}`}>Metadata callback</p>
-              <p className={`text-sm mt-2 ${mutedTextClass}`}>Use `onResult` to capture result id, quality score, latency, warnings, and timing breakdown.</p>
+              <p className={`text-sm mt-2 ${mutedTextClass}`}>Use `onResult` to capture result id, quality score, latency, warnings, and timing breakdown from the returned SDK headers.</p>
             </div>
             <div className={panelClass}>
               <p className={`text-sm font-semibold ${strongTextClass}`}>Error handling</p>

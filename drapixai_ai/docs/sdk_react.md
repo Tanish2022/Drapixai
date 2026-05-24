@@ -46,5 +46,22 @@ export default function ProductPage() {
 1. Upload and preprocess garment images through `/sdk/garments`.
 2. Sync catalog products through `/sdk/catalog/sync`.
 3. Confirm garment-to-product mapping through `/sdk/matches/:garmentId/confirm`.
-4. Install the widget with the confirmed `productId`.
-5. Read `metadata.latencyMs`, `metadata.qualityScore`, and `metadata.warnings` from `onResult` for storefront monitoring.
+4. DrapixAI generates a high-quality onboarding cache for each garment at the active cache version, currently `v3-1024x1365`.
+5. Install the widget with the confirmed `productId`.
+6. Read `metadata.latencyMs`, `metadata.qualityScore`, and `metadata.warnings` from `onResult` for storefront monitoring.
+
+The storefront SDK should not upload arbitrary garment photos during shopper try-on. It sends the shopper person photo plus the confirmed `productId`; the API resolves that product to the approved garment and uses the cached try-on asset. This keeps quality consistent and avoids spending request time on garment preprocessing.
+
+## Returned Metadata
+
+The binary `/sdk/tryon` response includes the PNG body and these headers, which the SDK maps into `onResult`:
+
+- `x-drapixai-quality-score`
+- `x-drapixai-latency-ms`
+- `x-drapixai-processing-ms`
+- `x-drapixai-latency-target-ms`
+- `x-drapixai-warnings`
+- `x-drapixai-timing-json`
+- `x-drapixai-engine`
+
+Use the quality, latency, and warnings fields for brand dashboards, public-launch monitoring, and manual review routing.

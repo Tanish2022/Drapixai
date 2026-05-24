@@ -90,13 +90,20 @@ class Settings:
     catvton_rolled_sleeve_wrist_ratio: float = float(os.getenv("DRAPIXAI_CATVTON_ROLLED_SLEEVE_WRIST_RATIO", "0.640"))
     enable_garment_color_fix: bool = os.getenv("DRAPIXAI_ENABLE_GARMENT_COLOR_FIX", "1") == "1"
     garment_color_fix_strength: float = float(os.getenv("DRAPIXAI_GARMENT_COLOR_FIX_STRENGTH", "0.94"))
+    garment_color_fix_edge_guard: bool = os.getenv("DRAPIXAI_GARMENT_COLOR_FIX_EDGE_GUARD", "1") == "1"
+    background_color_cast_threshold: float = float(os.getenv("DRAPIXAI_BACKGROUND_COLOR_CAST_THRESHOLD", "0.055"))
     enable_natural_lighting_fix: bool = os.getenv("DRAPIXAI_ENABLE_NATURAL_LIGHTING_FIX", "1") == "1"
     natural_lighting_strength: float = float(os.getenv("DRAPIXAI_NATURAL_LIGHTING_STRENGTH", "0.55"))
     enable_fashion_polish: bool = os.getenv("DRAPIXAI_ENABLE_FASHION_POLISH", "1") == "1"
     fashion_polish_strength: float = float(os.getenv("DRAPIXAI_FASHION_POLISH_STRENGTH", "0.45"))
+    enable_person_context_restore: bool = os.getenv("DRAPIXAI_ENABLE_PERSON_CONTEXT_RESTORE", "0") == "1"
+    person_context_restore_strength: float = float(os.getenv("DRAPIXAI_PERSON_CONTEXT_RESTORE_STRENGTH", "0.92"))
     enable_refinement: bool = os.getenv("DRAPIXAI_ENABLE_REFINEMENT", "0") == "1"
     enable_upscale: bool = os.getenv("DRAPIXAI_ENABLE_UPSCALE", "0") == "1"
-    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.78"))
+    output_width: int = int(os.getenv("DRAPIXAI_OUTPUT_WIDTH", "1024"))
+    output_height: int = int(os.getenv("DRAPIXAI_OUTPUT_HEIGHT", "1365"))
+    enable_final_output_upscale: bool = os.getenv("DRAPIXAI_ENABLE_FINAL_OUTPUT_UPSCALE", "1") == "1"
+    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.90"))
     device: str = os.getenv("DRAPIXAI_DEVICE", "cuda")
     cuda_device_index: int = int(os.getenv("DRAPIXAI_CUDA_DEVICE", "0"))
 
@@ -125,13 +132,14 @@ class Settings:
     enforce_upper_body: bool = os.getenv("DRAPIXAI_ENFORCE_UPPER_BODY", "1") == "1"
     upper_body_min_ratio: float = float(os.getenv("DRAPIXAI_UPPER_BODY_MIN_RATIO", "1.1"))
     upper_body_edge_ratio: float = float(os.getenv("DRAPIXAI_UPPER_BODY_EDGE_RATIO", "0.7"))
+    upper_body_reject_edge_ratio: bool = os.getenv("DRAPIXAI_UPPER_BODY_REJECT_EDGE_RATIO", "0") == "1"
     garment_min_width: int = int(os.getenv("DRAPIXAI_GARMENT_MIN_WIDTH", "512"))
     garment_min_height: int = int(os.getenv("DRAPIXAI_GARMENT_MIN_HEIGHT", "512"))
     garment_alpha_threshold: int = int(os.getenv("DRAPIXAI_GARMENT_ALPHA_THRESHOLD", "16"))
     garment_transparent_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_TRANSPARENT_RATIO", "0.15"))
     garment_crop_padding_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_CROP_PADDING_RATIO", "0.12"))
-    garment_target_width: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_WIDTH", "384"))
-    garment_target_height: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_HEIGHT", "512"))
+    garment_target_width: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_WIDTH", "1024"))
+    garment_target_height: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_HEIGHT", "1365"))
     garment_min_fg_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MIN_FG_RATIO", "0.08"))
     garment_max_fg_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MAX_FG_RATIO", "0.9"))
     garment_max_aspect_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MAX_ASPECT_RATIO", "1.75"))
@@ -142,8 +150,10 @@ class Settings:
     garment_blur_threshold: float = float(os.getenv("DRAPIXAI_GARMENT_BLUR_THRESHOLD", "80.0"))
     garment_cache_dir: str = os.getenv("DRAPIXAI_GARMENT_CACHE_DIR", "drapixai_ai/garments")
     garment_cache_ttl_seconds: int = int(os.getenv("DRAPIXAI_GARMENT_CACHE_TTL", "7776000"))  # 90 days
+    garment_cache_version: str = os.getenv("DRAPIXAI_GARMENT_CACHE_VERSION", "v3-1024x1365")
     admin_token: str = os.getenv("DRAPIXAI_ADMIN_TOKEN", "")
     garment_cache_backend: str = os.getenv("DRAPIXAI_GARMENT_CACHE_BACKEND", "local")
+    garment_fast_plain_background_matte: bool = os.getenv("DRAPIXAI_GARMENT_FAST_PLAIN_BACKGROUND_MATTE", "0") == "1"
     s3_endpoint: str = os.getenv("DRAPIXAI_S3_ENDPOINT", "")
     s3_bucket: str = os.getenv("DRAPIXAI_S3_BUCKET", "drapixai")
     s3_region: str = os.getenv("DRAPIXAI_S3_REGION", "us-east-1")

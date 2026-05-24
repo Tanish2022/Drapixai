@@ -6,6 +6,8 @@
     "dev": "nodemon --exec ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "garments:regenerate-cache": "ts-node src/scripts/regenerate-garment-caches.ts",
+    "garments:regenerate-cache:dist": "npm run build && node dist/scripts/regenerate-garment-caches.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push"
   },

@@ -770,7 +770,9 @@ export default function Dashboard() {
             </p>
             <div className="space-y-3">
               {[
-                { label: 'Clean garments validated', done: hasGarments },
+                { label: 'Garments uploaded', done: hasGarments },
+                { label: 'Preprocessing complete', done: garments.some((g) => g.status !== 'missing') },
+                { label: 'Try-on cache ready', done: garments.some((g) => Boolean(g.cacheKey) && g.status === 'ready') },
                 { label: 'Catalog discovery connected', done: hasCatalogSynced },
                 { label: 'Suggested matches available', done: hasSuggestedMatches },
                 { label: 'Confirmed pairings ready', done: hasConfirmedMappings },
@@ -1004,24 +1006,24 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
               {[
                 {
-                  title: '1. Garment upload and validation',
-                  body: 'Brands upload garment-only assets. DrapixAI rejects weak inputs before they can degrade try-on quality.',
+                  title: '1. Garment uploaded',
+                  body: 'Brands upload garment-only assets. DrapixAI stores the original so caches can be regenerated after model or resolution upgrades.',
                 },
                 {
-                  title: '2. Catalog discovery',
-                  body: 'A small product import, feed, or storefront scan gives DrapixAI product context without forcing hard ID work on day one.',
+                  title: '2. Preprocessing complete',
+                  body: 'The AI service validates the image, removes weak backgrounds when needed, and normalizes the garment for upper-body try-on.',
                 },
                 {
-                  title: '3. Suggested matches',
-                  body: 'DrapixAI proposes likely links between garments and discovered products based on the product context it sees.',
+                  title: '3. Try-on cache ready',
+                  body: 'A high-quality cached try-on asset is generated during onboarding, currently at v3-1024x1365, so shopper requests stay fast.',
                 },
                 {
-                  title: '4. Manual confirmation',
-                  body: 'A human approves or corrects those suggestions so the final mapping stays trustworthy.',
+                  title: '4. Approved or rejected',
+                  body: 'Admins can approve launch-ready garments or reject weak assets before they reach a brand storefront.',
                 },
                 {
-                  title: '5. SDK uses confirmed mappings',
-                  body: 'The storefront layer should only use confirmed pairings when you are ready for a live shopper experience.',
+                  title: '5. Regenerate cache when needed',
+                  body: 'After RunPod upgrades, use the cache regeneration command to rebuild stored garment assets and mark failures for review.',
                 },
               ].map((item) => (
                 <div key={item.title} className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
@@ -1273,7 +1275,22 @@ export default function Dashboard() {
                     <p className={`text-base font-semibold ${strongTextClass}`}>{g.displayName || g.productName || humanizeGarmentId(g.garmentId)}</p>
                     <p className={`text-xs font-mono mt-1 ${mutedTextClass}`}>{g.garmentId}</p>
                     {g.category ? <p className={`text-xs mt-1 ${mutedTextClass}`}>Category: {g.category}</p> : null}
-                    <p className={`text-xs mt-2 ${mutedTextClass}`}>Validation status: {g.status}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className={`text-xs px-2 py-1 rounded-full border ${themePreference === 'light' ? 'border-sky-100 bg-sky-50 text-slate-700' : 'border-white/10 bg-white/5 text-gray-300'}`}>
+                        Garment uploaded
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-full border ${g.status !== 'missing' ? (themePreference === 'light' ? 'border-emerald-100 bg-emerald-50 text-emerald-800' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200') : (themePreference === 'light' ? 'border-amber-100 bg-amber-50 text-amber-800' : 'border-amber-500/20 bg-amber-500/10 text-amber-200')}`}>
+                        Preprocessing {g.status !== 'missing' ? 'complete' : 'pending'}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-full border ${g.cacheKey && g.status === 'ready' ? (themePreference === 'light' ? 'border-emerald-100 bg-emerald-50 text-emerald-800' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200') : (themePreference === 'light' ? 'border-amber-100 bg-amber-50 text-amber-800' : 'border-amber-500/20 bg-amber-500/10 text-amber-200')}`}>
+                        Try-on cache {g.cacheKey && g.status === 'ready' ? 'ready' : 'needs review'}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-full border ${g.status === 'rejected' ? (themePreference === 'light' ? 'border-rose-100 bg-rose-50 text-rose-800' : 'border-rose-500/20 bg-rose-500/10 text-rose-200') : g.status === 'ready' ? (themePreference === 'light' ? 'border-emerald-100 bg-emerald-50 text-emerald-800' : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200') : (themePreference === 'light' ? 'border-amber-100 bg-amber-50 text-amber-800' : 'border-amber-500/20 bg-amber-500/10 text-amber-200')}`}>
+                        {g.status === 'rejected' ? 'Rejected' : g.status === 'ready' ? 'Approved' : 'Awaiting review'}
+                      </span>
+                    </div>
+                    <p className={`text-xs mt-2 ${mutedTextClass}`}>Raw status: {g.status}</p>
+                    {g.cacheKey ? <p className={`text-xs mt-1 font-mono ${mutedTextClass}`}>Cache: {g.cacheKey}</p> : null}
                     <p className={`text-xs mt-1 ${mutedTextClass}`}>Suggested product: {g.suggestedProductName || g.suggestedProductId || 'No confident suggestion yet'}</p>
                     <p className={`text-xs mt-1 ${mutedTextClass}`}>Confirmed product: {g.confirmedProductName || g.confirmedProductId || 'Not confirmed yet'}</p>
                     {g.matchConfidence ? (

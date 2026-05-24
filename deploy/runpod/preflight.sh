@@ -21,6 +21,16 @@ nvidia-smi || true
 echo
 echo "== Python =="
 python --version
+python - <<'PY'
+import sys
+
+if sys.version_info[:2] != (3, 11):
+    raise SystemExit(
+        f"Python {sys.version_info.major}.{sys.version_info.minor} detected; "
+        "DrapixAI RunPod production requires Python 3.11 on "
+        "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04."
+    )
+PY
 
 echo
 echo "== Disk =="
@@ -86,7 +96,7 @@ expected = {
     "python-multipart": "0.0.9",
     "requests": "2.32.3",
     "boto3": "1.34.131",
-    "accelerate": "0.34.2",
+    "accelerate": "0.31.0",
     "transformers": "4.46.3",
     "diffusers": "0.31.0",
     "safetensors": None,

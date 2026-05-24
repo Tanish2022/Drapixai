@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+from drapixai_ai.configs.settings import settings
+
 
 @dataclass(frozen=True)
 class GarmentAnalysis:
@@ -39,6 +41,18 @@ def isolate_garment(image: Image.Image) -> Image.Image:
         _GARMENT_CUTOUT_CACHE.move_to_end(cache_key)
         return cached.copy()
 
+    alpha = np.asarray(rgba)[:, :, 3]
+    alpha_ratio = float((alpha > 16).mean())
+    if 0.04 <= alpha_ratio <= 0.88 and float((alpha < 245).mean()) > 0.02:
+        return _store_cutout(cache_key, _trim_transparent_edges(rgba))
+
+    if settings.garment_fast_plain_background_matte and _has_plain_corner_background(rgba):
+        matted = _trim_transparent_edges(_corner_color_matte(rgba))
+        matte_alpha = np.asarray(matted)[:, :, 3]
+        fg_ratio = float((matte_alpha > 16).mean())
+        if 0.04 <= fg_ratio <= 0.88:
+            return _store_cutout(cache_key, matted)
+
     try:
         from rembg import remove  # type: ignore
 
@@ -52,6 +66,28 @@ def isolate_garment(image: Image.Image) -> Image.Image:
         pass
 
     return _store_cutout(cache_key, _trim_transparent_edges(_corner_color_matte(rgba)))
+
+
+def _has_plain_corner_background(image: Image.Image) -> bool:
+    arr = np.asarray(image.convert("RGBA")).astype(np.float32)
+    rgb = arr[:, :, :3]
+    alpha = arr[:, :, 3]
+    h, w = alpha.shape
+    sample = max(10, min(h, w) // 10)
+    corners = np.concatenate(
+        [
+            rgb[:sample, :sample].reshape(-1, 3),
+            rgb[:sample, -sample:].reshape(-1, 3),
+            rgb[-sample:, :sample].reshape(-1, 3),
+            rgb[-sample:, -sample:].reshape(-1, 3),
+        ],
+        axis=0,
+    )
+    corner_std = float(corners.std(axis=0).mean())
+    corner_range = float((np.percentile(corners, 95, axis=0) - np.percentile(corners, 5, axis=0)).mean())
+    corner_luma = float(corners.mean())
+    transparent_ratio = float((alpha < 245).mean())
+    return transparent_ratio < 0.02 and corner_std < 9.0 and corner_range < 28.0 and corner_luma > 168.0
 
 
 def _image_cache_key(image: Image.Image) -> str:

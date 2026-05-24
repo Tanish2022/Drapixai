@@ -127,8 +127,77 @@
     document.head.appendChild(style);
   }
 
+  function isUsableColor(value) {
+    return value && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)' && value !== 'rgba(0,0,0,0)';
+  }
+
+  function getComputedValue(node, property, fallback) {
+    if (!node || !window.getComputedStyle) {
+      return fallback;
+    }
+    var value = window.getComputedStyle(node).getPropertyValue(property);
+    return value && value.trim() ? value.trim() : fallback;
+  }
+
+  function findBrandButton() {
+    var selectors = [
+      '[data-drapix-brand-button]',
+      '.product-card button:not([data-drapix-launcher])',
+      'button:not([data-drapix-launcher])',
+      '[role="button"]',
+      '.button',
+      '.btn'
+    ];
+    for (var index = 0; index < selectors.length; index += 1) {
+      var node = document.querySelector(selectors[index]);
+      if (node) {
+        return node;
+      }
+    }
+    return null;
+  }
+
+  function resolveBrandTheme(anchor, options, config) {
+    var theme = options.theme || {};
+    var root = document.documentElement;
+    var body = document.body || root;
+    var brandButton = findBrandButton();
+    var computedButtonBg = getComputedValue(brandButton, 'background-color', '');
+    var computedButtonRadius = getComputedValue(brandButton, 'border-radius', '');
+    var computedFont = getComputedValue(body, 'font-family', 'Arial, sans-serif');
+    var computedText = getComputedValue(body, 'color', '#111827');
+    var computedSurface = getComputedValue(anchor, 'background-color', '') || getComputedValue(body, 'background-color', '#ffffff');
+    var rootPrimary = getComputedValue(root, '--drapixai-primary', '');
+
+    var primary = theme.primaryColor
+      || theme.primary
+      || rootPrimary
+      || (isUsableColor(computedButtonBg) ? computedButtonBg : '')
+      || '#111827';
+    var radius = theme.radius || computedButtonRadius || '8px';
+    var fontFamily = theme.fontFamily || computedFont;
+
+    return {
+      primary: primary,
+      primaryGradient: theme.primaryGradient || config.primaryGradient || primary,
+      fontFamily: fontFamily,
+      text: theme.textColor || computedText || '#111827',
+      mutedText: theme.mutedTextColor || '#64748b',
+      surface: theme.surfaceColor || '#ffffff',
+      softSurface: theme.softSurfaceColor || '#f8fafc',
+      pageSurface: theme.pageSurfaceColor || (isUsableColor(computedSurface) ? computedSurface : '#f8fafc'),
+      border: theme.borderColor || '#dbe4ee',
+      radius: radius,
+      cardRadius: theme.cardRadius || '24px',
+      buttonRadius: theme.buttonRadius || radius,
+      shadow: theme.shadow || '0 30px 80px rgba(15,23,42,0.22)',
+      overlay: theme.overlayColor || 'rgba(15, 23, 42, 0.34)'
+    };
+  }
+
   window.DrapixAI = {
     init: async function (options) {
+      options = options || {};
       var config = {
         apiKey: options.apiKey,
         productId: options.productId || 'default',
@@ -145,42 +214,58 @@
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
         footerText: options.footerText || 'Your uploaded photo is processed only for the preview flow.',
         timeoutMs: Number(options.timeoutMs || 20000),
-        primaryGradient: options.primaryGradient || 'linear-gradient(135deg,#22d3ee 0%,#3b82f6 100%)'
+        adaptBrandTheme: options.adaptBrandTheme !== false,
+        primaryGradient: options.primaryGradient || null,
+        buyButtonText: options.buyButtonText || 'Buy this item',
+        buyUrlAttribute: options.buyUrlAttribute || 'data-drapix-buy-url'
       };
 
+      function reportStartupError(message, productId) {
+        if (typeof options.onError === 'function') {
+          options.onError({ message: message, productId: productId || config.productId });
+        }
+        return new Error(message);
+      }
+
       if (config.garmentType !== 'upper') {
-        throw new Error('UPPER_BODY_ONLY');
+        throw reportStartupError('UPPER_BODY_ONLY');
       }
       if (options.quality && String(options.quality).toLowerCase() !== 'standard') {
-        throw new Error('INVALID_QUALITY');
+        throw reportStartupError('INVALID_QUALITY');
       }
 
       var container = document.getElementById(config.containerId);
       if (!config.autoAttach && !container) {
-        throw new Error('CONTAINER_NOT_FOUND');
+        throw reportStartupError('CONTAINER_NOT_FOUND');
       }
 
       ensureWidgetStyles();
 
       var domain = window.location.hostname;
-      var validateRes = await fetch(config.baseUrl + '/sdk/validate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + config.apiKey
-        },
-        body: JSON.stringify({ domain: domain })
-      });
+      var validateRes;
+      try {
+        validateRes = await fetch(config.baseUrl + '/sdk/validate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + config.apiKey
+          },
+          body: JSON.stringify({ domain: domain })
+        });
+      } catch (_) {
+        throw reportStartupError('VALIDATION_NETWORK_FAILED');
+      }
 
       if (!validateRes.ok) {
         var validateErr = await validateRes.json().catch(function () { return {}; });
-        throw new Error(validateErr && (validateErr.message || validateErr.error) || 'VALIDATION_FAILED');
+        throw reportStartupError(validateErr && (validateErr.message || validateErr.error) || 'VALIDATION_FAILED');
       }
 
-      function createLauncherMarkup(productId) {
+      function createLauncherMarkup(productId, theme) {
+        theme = theme || resolveBrandTheme(document.body, options, config);
         return [
-          '<div style="font-family: Arial, sans-serif;">',
-          '  <button data-drapix-launcher="true" data-drapix-product-id="', escapeHtml(productId), '" style="display:inline-flex;align-items:center;gap:10px;background:', escapeHtml(config.primaryGradient), ';color:#fff;border:none;padding:10px 16px;border-radius:999px;cursor:pointer;font-weight:700;box-shadow:0 18px 40px rgba(34,211,238,0.18);">',
+          '<div style="font-family:', escapeHtml(theme.fontFamily), ';">',
+          '  <button data-drapix-launcher="true" data-drapix-product-id="', escapeHtml(productId), '" style="display:inline-flex;align-items:center;gap:10px;background:', escapeHtml(theme.primaryGradient), ';color:#fff;border:none;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';cursor:pointer;font-weight:700;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">',
           '    <span style="display:inline-flex;width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,0.16);align-items:center;justify-content:center;font-size:12px;">D</span>',
           '    ', escapeHtml(config.buttonText),
           '  </button>',
@@ -194,6 +279,10 @@
           return;
         }
 
+        var productNode = openBtn.closest ? openBtn.closest(config.productSelector) : null;
+        var buyUrl = options.buyUrl || options.checkoutUrl || (productNode ? productNode.getAttribute(config.buyUrlAttribute) : '');
+        var theme = config.adaptBrandTheme ? resolveBrandTheme(productNode || openBtn, options, config) : resolveBrandTheme(document.body, { theme: options.theme || {} }, config);
+
         var modal = document.createElement('div');
         modal.id = 'drapix-modal';
         modal.style.position = 'fixed';
@@ -203,74 +292,74 @@
         modal.style.alignItems = 'center';
         modal.style.justifyContent = 'center';
         modal.style.padding = '18px';
-        modal.style.background = 'rgba(4, 8, 20, 0.72)';
+        modal.style.background = theme.overlay;
+        modal.style.fontFamily = theme.fontFamily;
 
         modal.innerHTML = [
-          '<div style="position:relative;width:min(680px,96vw);max-height:92vh;overflow:auto;border-radius:28px;border:1px solid rgba(255,255,255,0.08);background:linear-gradient(180deg,rgba(11,17,32,0.96) 0%,rgba(8,12,24,0.98) 100%);color:#fff;box-shadow:0 40px 120px rgba(4,8,20,0.65);">',
-          '  <div style="position:absolute;inset:-20% auto auto -10%;width:220px;height:220px;border-radius:999px;background:rgba(34,211,238,0.14);filter:blur(45px);animation:drapixPulse 6s ease-in-out infinite;"></div>',
-          '  <div style="position:absolute;inset:auto -12% -18% auto;width:240px;height:240px;border-radius:999px;background:rgba(59,130,246,0.12);filter:blur(55px);animation:drapixPulse 7s ease-in-out infinite;"></div>',
-          '  <button id="drapix-close" style="position:absolute;top:16px;right:18px;width:36px;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#cbd5e1;cursor:pointer;font-size:18px;">&times;</button>',
+          '<div id="drapix-card" style="position:relative;width:min(680px,96vw);max-height:92vh;overflow:auto;border-radius:', escapeHtml(theme.cardRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';box-shadow:', escapeHtml(theme.shadow), ';font-family:', escapeHtml(theme.fontFamily), ';">',
+          '  <button id="drapix-close" type="button" aria-label="Close DrapixAI try-on" style="position:absolute;z-index:3;top:16px;right:18px;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border-radius:999px;border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';cursor:pointer;font-size:22px;line-height:1;box-shadow:0 8px 22px rgba(15,23,42,0.08);font-family:', escapeHtml(theme.fontFamily), ';display:inline-flex;align-items:center;justify-content:center;text-align:center;">&times;</button>',
           '  <div style="position:relative;padding:26px;">',
           '    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">',
-          '      <div style="display:flex;width:40px;height:40px;border-radius:14px;align-items:center;justify-content:center;background:', escapeHtml(config.primaryGradient), ';font-weight:800;letter-spacing:0.02em;">D</div>',
+          '      <div style="display:flex;width:40px;height:40px;border-radius:', escapeHtml(theme.buttonRadius), ';align-items:center;justify-content:center;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:800;letter-spacing:0.02em;">D</div>',
           '      <div>',
-          '        <div style="font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:#dbeafe;">DrapixAI</div>',
-          '        <div style="font-size:12px;color:#94a3b8;">Premium virtual try-on preview</div>',
+          '        <div style="font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:', escapeHtml(theme.primary), ';">DrapixAI</div>',
+          '        <div style="font-size:12px;color:', escapeHtml(theme.mutedText), ';">Premium virtual try-on preview</div>',
           '      </div>',
           '    </div>',
           '    <div style="font-size:24px;font-weight:700;line-height:1.2;margin-bottom:8px;">', escapeHtml(config.modalTitle), '</div>',
-          '    <div style="font-size:13px;line-height:1.6;color:#9fb0c7;max-width:560px;margin-bottom:20px;">', escapeHtml(config.modalSubtitle), '</div>',
+          '    <div style="font-size:13px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';max-width:560px;margin-bottom:20px;">', escapeHtml(config.modalSubtitle), '</div>',
           '    <div style="display:grid;gap:18px;">',
-          '      <div id="drapix-dropzone" class="drapix-dropzone" style="position:relative;border:1px dashed rgba(255,255,255,0.16);border-radius:22px;padding:24px;background:rgba(255,255,255,0.03);transition:all .2s ease;">',
+          '      <div id="drapix-dropzone" class="drapix-dropzone" style="position:relative;border:1px dashed ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.cardRadius), ';padding:24px;background:', escapeHtml(theme.softSurface), ';transition:all .2s ease;">',
           '        <input id="drapix-person" type="file" accept="image/*" style="display:none;" />',
           '        <div id="drapix-upload-state">',
-          '          <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:18px;background:rgba(255,255,255,0.06);margin-bottom:14px;">',
-          '            <span style="font-size:22px;">&#8593;</span>',
+          '          <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.pageSurface), ';margin-bottom:14px;">',
+          '            <span style="font-size:22px;color:', escapeHtml(theme.text), ';">&#8593;</span>',
           '          </div>',
           '          <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Upload your front-facing image or drop it here</div>',
-          '          <div style="font-size:13px;color:#94a3b8;line-height:1.6;">Clear lighting and a straight-facing pose produce the strongest DrapixAI try-on previews.</div>',
+          '          <div style="font-size:13px;color:', escapeHtml(theme.mutedText), ';line-height:1.6;">Clear lighting and a straight-facing pose produce the strongest DrapixAI try-on previews.</div>',
           '        </div>',
           '        <div id="drapix-preview-shell" style="display:none;">',
           '          <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:center;">',
-          '            <img id="drapix-preview" alt="Preview" style="width:160px;height:200px;object-fit:cover;border-radius:18px;border:1px solid rgba(255,255,255,0.08);background:#081226;" />',
+          '            <img id="drapix-preview" alt="Preview" style="width:160px;height:200px;object-fit:cover;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.softSurface), ';" />',
           '            <div>',
           '              <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Ready to proceed</div>',
-          '              <div id="drapix-file-name" style="font-size:13px;color:#cbd5e1;margin-bottom:10px;"></div>',
-          '              <div style="font-size:12px;line-height:1.6;color:#94a3b8;">If you want a different photo, use Reset and upload another front-facing image before starting the virtual try-on process.</div>',
+          '              <div id="drapix-file-name" style="font-size:13px;color:', escapeHtml(theme.text), ';margin-bottom:10px;"></div>',
+          '              <div style="font-size:12px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';">If you want a different photo, use Reset and upload another front-facing image before starting the virtual try-on process.</div>',
           '            </div>',
           '          </div>',
           '        </div>',
           '      </div>',
           '      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;">',
-          '        <label style="font-size:12px;color:#cbd5e1;display:flex;gap:10px;align-items:flex-start;max-width:390px;">',
-          '          <input id="drapix-consent" type="checkbox" style="accent-color:#22d3ee;margin-top:2px;" />',
+          '        <label style="font-size:12px;color:', escapeHtml(theme.mutedText), ';display:flex;gap:10px;align-items:flex-start;max-width:390px;">',
+          '          <input id="drapix-consent" type="checkbox" style="accent-color:', escapeHtml(theme.primary), ';margin-top:2px;" />',
           '          <span>I confirm I have permission to upload this image for DrapixAI try-on preview processing.</span>',
           '        </label>',
           '        <div style="display:flex;gap:10px;flex-wrap:wrap;">',
-          '          <button id="drapix-reset" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#e2e8f0;font-weight:600;cursor:pointer;">Reset</button>',
-          '          <button id="drapix-run" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:14px;border:none;background:', escapeHtml(config.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 18px 40px rgba(34,211,238,0.16);">Proceed</button>',
+          '          <button id="drapix-reset" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:600;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Reset</button>',
+          '          <button id="drapix-run" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">Proceed</button>',
           '        </div>',
           '      </div>',
           '      <div id="drapix-progress" style="display:none;">',
-          '        <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden;">',
-          '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', escapeHtml(config.primaryGradient), ';transition:width .25s ease;"></div>',
+          '        <div style="height:8px;border-radius:999px;background:', escapeHtml(theme.pageSurface), ';overflow:hidden;">',
+          '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', escapeHtml(theme.primaryGradient), ';transition:width .25s ease;"></div>',
           '        </div>',
           '      </div>',
-          '      <div id="drapix-status" style="font-size:13px;color:#a7b8cc;min-height:20px;"></div>',
-          '      <div id="drapix-result-shell" style="display:none;border:1px solid rgba(255,255,255,0.08);border-radius:24px;padding:18px;background:rgba(255,255,255,0.03);">',
+          '      <div id="drapix-status" style="font-size:13px;color:', escapeHtml(theme.mutedText), ';min-height:20px;"></div>',
+          '      <div id="drapix-result-shell" style="display:none;border:1px solid ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.cardRadius), ';padding:18px;background:', escapeHtml(theme.surface), ';">',
           '        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;">',
           '          <div>',
           '            <div style="font-size:18px;font-weight:700;">Your try-on preview is ready</div>',
-          '            <div style="font-size:12px;color:#94a3b8;margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
+          '            <div style="font-size:12px;color:', escapeHtml(theme.mutedText), ';margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
           '          </div>',
           '          <div style="display:flex;gap:10px;flex-wrap:wrap;">',
-          '            <button id="drapix-download" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:none;background:', escapeHtml(config.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;">Download</button>',
-          '            <button id="drapix-share" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:#fff;font-weight:600;cursor:pointer;">Share</button>',
+          '            <button id="drapix-buy" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">', escapeHtml(config.buyButtonText), '</button>',
+          '            <button id="drapix-download" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:700;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Download</button>',
+          '            <button id="drapix-share" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:600;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Share</button>',
           '          </div>',
           '        </div>',
-          '        <img id="drapix-result" alt="DrapixAI Result" style="width:100%;display:block;border-radius:18px;background:#081226;border:1px solid rgba(255,255,255,0.06);" />',
+          '        <img id="drapix-result" alt="DrapixAI Result" style="width:100%;display:block;border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.softSurface), ';border:1px solid ', escapeHtml(theme.border), ';" />',
           '      </div>',
-          '      <div style="font-size:11px;color:#7f91a8;">', escapeHtml(config.footerText), '</div>',
+          '      <div style="font-size:11px;color:', escapeHtml(theme.mutedText), ';">', escapeHtml(config.footerText), '</div>',
           '    </div>',
           '  </div>',
           '</div>'
@@ -291,19 +380,37 @@
         var result = modal.querySelector('#drapix-result');
         var progress = modal.querySelector('#drapix-progress');
         var progressBar = modal.querySelector('#drapix-progress-bar');
+        var closeBtn = modal.querySelector('#drapix-close');
+        var buyBtn = modal.querySelector('#drapix-buy');
         var downloadBtn = modal.querySelector('#drapix-download');
         var shareBtn = modal.querySelector('#drapix-share');
         var activePreviewUrl = '';
         var activeResultUrl = '';
+        var activeController = null;
+        var isClosed = false;
 
         function closeModal() {
+          if (isClosed) {
+            return;
+          }
+          isClosed = true;
+          if (activeController) {
+            activeController.abort();
+          }
           if (activePreviewUrl) {
             URL.revokeObjectURL(activePreviewUrl);
           }
           if (activeResultUrl) {
             URL.revokeObjectURL(activeResultUrl);
           }
+          document.removeEventListener('keydown', handleEscape);
           modal.remove();
+        }
+
+        function handleEscape(event) {
+          if (event.key === 'Escape') {
+            closeModal();
+          }
         }
 
         function updatePreview(file) {
@@ -386,12 +493,37 @@
           }
         }
 
-        modal.querySelector('#drapix-close').addEventListener('click', closeModal);
+        function handleBuy() {
+          var resolvedProductId = productId || config.productId;
+          var detail = { productId: resolvedProductId, buyUrl: buyUrl || undefined };
+
+          if (typeof options.onBuy === 'function') {
+            options.onBuy(detail);
+          }
+          window.dispatchEvent(new CustomEvent('drapixai:buy', { detail: detail }));
+
+          if (buyUrl) {
+            window.location.href = buyUrl;
+            return;
+          }
+
+          status.textContent = 'Buy action sent for this item.';
+        }
+
+        closeBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeModal();
+        });
         modal.addEventListener('click', function (event) {
           if (event.target === modal) {
             closeModal();
           }
         });
+        modal.querySelector('#drapix-card').addEventListener('click', function (event) {
+          event.stopPropagation();
+        });
+        document.addEventListener('keydown', handleEscape);
 
         dropzone.addEventListener('click', function () {
           personInput.click();
@@ -427,6 +559,7 @@
         resetBtn.addEventListener('click', function () {
           resetState();
         });
+        buyBtn.addEventListener('click', handleBuy);
         downloadBtn.addEventListener('click', handleDownload);
         shareBtn.addEventListener('click', handleShare);
 
@@ -467,15 +600,15 @@
             form.append('garment_type', config.garmentType);
 
             var startedAt = Date.now();
-            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-            var timeoutId = controller ? setTimeout(function () {
-              controller.abort();
+            activeController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            var timeoutId = activeController ? setTimeout(function () {
+              activeController.abort();
             }, config.timeoutMs) : null;
             var res = await fetch(config.baseUrl + '/sdk/tryon', {
               method: 'POST',
               headers: { 'Authorization': 'Bearer ' + config.apiKey },
               body: form,
-              signal: controller ? controller.signal : undefined
+              signal: activeController ? activeController.signal : undefined
             });
             if (timeoutId) {
               clearTimeout(timeoutId);
@@ -504,6 +637,9 @@
             progressBar.style.width = '100%';
             status.textContent = 'Your DrapixAI try-on is ready.';
           } catch (error) {
+            if (isClosed) {
+              return;
+            }
             var message = error && error.name === 'AbortError'
               ? 'TRY_ON_TIMEOUT'
               : (error && error.message ? error.message : 'Try-on failed.');
@@ -514,7 +650,11 @@
             progressBar.style.width = '0%';
             resultShell.style.display = 'none';
           } finally {
+            activeController = null;
             clearInterval(progressTimer);
+            if (isClosed) {
+              return;
+            }
             setTimeout(function () {
               progress.style.display = 'none';
               progressBar.style.width = '14%';
@@ -540,7 +680,7 @@
             return;
           }
           var wrapper = document.createElement('div');
-          wrapper.innerHTML = createLauncherMarkup(productId);
+          wrapper.innerHTML = createLauncherMarkup(productId, resolveBrandTheme(node, options, config));
           var launcher = wrapper.firstElementChild;
           targetNode.appendChild(launcher);
           if (launcher) {
@@ -568,7 +708,7 @@
         return;
       }
 
-      container.innerHTML = createLauncherMarkup(config.productId);
+      container.innerHTML = createLauncherMarkup(config.productId, resolveBrandTheme(container, options, config));
       var openBtn = container.querySelector('[data-drapix-launcher="true"]');
       bindLauncher(openBtn, config.productId);
     }

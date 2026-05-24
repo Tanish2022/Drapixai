@@ -38,7 +38,7 @@ def is_upper_body(image_bytes: bytes) -> Tuple[bool, str]:
     if bottom_edges == 0:
         return True, "OK"
 
-    if top_edges / bottom_edges < settings.upper_body_edge_ratio:
+    if top_edges / bottom_edges < settings.upper_body_edge_ratio and settings.upper_body_reject_edge_ratio:
         return False, "EDGE_RATIO"
 
     return True, "OK"

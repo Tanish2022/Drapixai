@@ -40,12 +40,15 @@ class TryOnScorer:
         texture_similarity = self._texture_similarity(garment_rgb, candidate_rgb)
         edge_quality = self._edge_quality(candidate_rgb)
         artifact_score = self._artifact_score(candidate_rgb)
+        rectangular_artifact_score = self._rectangular_artifact_score(candidate_rgb)
+        background_cast_score = self._background_cast_score(person_rgb, garment_rgb, candidate_rgb)
         realism_score = self._realism_score(candidate_rgb)
         garment_structure = self._garment_structure_score(garment_rgb, candidate_rgb)
         hem_quality = self._hem_quality(candidate_rgb)
         untucked_hem_presence = self._untucked_hem_presence(garment_rgb, candidate_rgb)
         long_sleeve_preservation = self._long_sleeve_preservation(garment_rgb, candidate_rgb)
         pose_preservation = self._pose_preservation(person_rgb, candidate_rgb)
+        garment_coverage = self._garment_coverage_score(garment_rgb, candidate_rgb)
 
         score = (
             0.19 * face_similarity
@@ -59,8 +62,11 @@ class TryOnScorer:
             + 0.06 * long_sleeve_preservation
             + 0.03 * hem_quality
             + 0.03 * artifact_score
+            + 0.03 * rectangular_artifact_score
+            + 0.03 * background_cast_score
             + 0.01 * realism_score
         )
+        score *= 0.72 + 0.28 * garment_coverage
         score = float(max(0.0, min(1.0, score)))
 
         warnings: list[str] = []
@@ -76,6 +82,10 @@ class TryOnScorer:
             warnings.append("EDGE_ARTIFACT_RISK")
         if artifact_score < 0.55:
             warnings.append("IMAGE_ARTIFACT_RISK")
+        if rectangular_artifact_score < 0.72:
+            warnings.append("RECTANGULAR_BLEND_ARTIFACT_RISK")
+        if background_cast_score < 0.72:
+            warnings.append("BACKGROUND_COLOR_CAST_RISK")
         if realism_score < 0.50:
             warnings.append("LOW_REALISM_RISK")
         if garment_structure < 0.48:
@@ -86,6 +96,8 @@ class TryOnScorer:
             warnings.append("GARMENT_TUCKED_HEM_RISK")
         if long_sleeve_preservation < 0.45:
             warnings.append("GARMENT_SLEEVE_LENGTH_DRIFT")
+        if garment_coverage < 0.72:
+            warnings.append("GARMENT_COVERAGE_INCOMPLETE")
 
         return TryOnScore(
             score=score,
@@ -97,12 +109,15 @@ class TryOnScorer:
                 "garment_texture_similarity": texture_similarity,
                 "edge_quality": edge_quality,
                 "artifact_score": artifact_score,
+                "rectangular_artifact_score": rectangular_artifact_score,
+                "background_cast_score": background_cast_score,
                 "overall_realism": realism_score,
                 "garment_structure": garment_structure,
                 "hem_quality": hem_quality,
                 "untucked_hem_presence": untucked_hem_presence,
                 "long_sleeve_preservation": long_sleeve_preservation,
                 "pose_preservation": pose_preservation,
+                "garment_coverage": garment_coverage,
             },
         )
 
@@ -411,6 +426,24 @@ class TryOnScorer:
             return 0.640
         return 0.755
 
+    def _garment_coverage_score(self, garment: Image.Image, candidate: Image.Image) -> float:
+        garment_color = np.median(self._foreground_pixels(garment), axis=0)
+        arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = arr.shape[:2]
+        yy, xx = np.mgrid[0:h, 0:w]
+        torso = (yy > h * 0.32) & (yy < h * 0.82) & (xx > w * 0.20) & (xx < w * 0.80)
+        left_sleeve = (yy > h * 0.36) & (yy < h * 0.76) & (xx > w * 0.08) & (xx < w * 0.32)
+        right_sleeve = (yy > h * 0.36) & (yy < h * 0.76) & (xx > w * 0.68) & (xx < w * 0.92)
+        region = torso | left_sleeve | right_sleeve
+        if not region.any():
+            return 0.45
+        pixels = arr[region]
+        color_distance = np.linalg.norm(pixels - garment_color, axis=1)
+        close = color_distance < 0.30
+        coverage = float(close.mean())
+        mean_similarity = 1.0 - min(1.0, float(np.linalg.norm(np.median(pixels, axis=0) - garment_color)) * 1.4)
+        return float(max(0.0, min(1.0, 0.70 * min(1.0, coverage * 1.65) + 0.30 * mean_similarity)))
+
     @staticmethod
     def _edge_quality(candidate: Image.Image) -> float:
         edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
@@ -430,6 +463,66 @@ class TryOnScorer:
         return float(1.0 - penalty)
 
     @staticmethod
+    def _rectangular_artifact_score(candidate: Image.Image) -> float:
+        arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = arr.shape[:2]
+        gray = arr.mean(axis=2)
+        vertical_jump = np.abs(np.diff(gray, axis=1))
+        horizontal_jump = np.abs(np.diff(gray, axis=0))
+        x_profile = vertical_jump.mean(axis=0)
+        y_profile = horizontal_jump.mean(axis=1)
+
+        def profile_penalty(profile: np.ndarray) -> float:
+            if profile.size == 0:
+                return 0.0
+            center = profile[int(profile.size * 0.08) : int(profile.size * 0.92)]
+            if center.size == 0:
+                return 0.0
+            baseline = float(np.median(center)) + 1e-6
+            threshold = baseline * 2.8 + 0.018
+            strong = np.where(center > threshold)[0]
+            if strong.size < 2:
+                return 0.0
+            span = int(strong.max() - strong.min())
+            paired_edges = 1.0 if span > profile.size * 0.34 else 0.45
+            strength = min(1.0, float((center[strong].mean() - threshold) / max(0.025, threshold)))
+            return paired_edges * strength
+
+        penalty = max(profile_penalty(x_profile), profile_penalty(y_profile))
+        border_band = max(4, min(h, w) // 90)
+        border_contrast = float(
+            np.mean(
+                [
+                    vertical_jump[:, max(0, int(w * 0.12) - border_band) : int(w * 0.12) + border_band].mean(),
+                    vertical_jump[:, max(0, int(w * 0.88) - border_band) : min(w - 1, int(w * 0.88) + border_band)].mean(),
+                    horizontal_jump[max(0, int(h * 0.16) - border_band) : int(h * 0.16) + border_band, :].mean(),
+                    horizontal_jump[max(0, int(h * 0.88) - border_band) : min(h - 1, int(h * 0.88) + border_band), :].mean(),
+                ]
+            )
+        )
+        penalty = max(penalty, min(1.0, max(0.0, border_contrast - 0.035) * 8.0))
+        return float(max(0.0, min(1.0, 1.0 - penalty)))
+
+    @staticmethod
+    def _background_cast_score(person: Image.Image, garment: Image.Image, candidate: Image.Image) -> float:
+        person_arr = np.asarray(person.convert("RGB")).astype(np.float32) / 255.0
+        candidate_arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        garment_color = np.median(TryOnScorer._foreground_pixels(garment), axis=0)
+        h, w = candidate_arr.shape[:2]
+        yy, xx = np.mgrid[0:h, 0:w]
+        background_region = (yy < h * 0.18) | (xx < w * 0.10) | (xx > w * 0.90)
+        if not background_region.any():
+            return 0.85
+        garment_chroma = TryOnScorer._normalized_color(garment_color)
+        candidate_chroma = TryOnScorer._rgb_chroma_float(candidate_arr)
+        person_chroma = TryOnScorer._rgb_chroma_float(person_arr)
+        candidate_to_garment = np.linalg.norm(candidate_chroma - garment_chroma, axis=2)
+        person_to_garment = np.linalg.norm(person_chroma - garment_chroma, axis=2)
+        cast = (person_to_garment - candidate_to_garment)[background_region]
+        cast_amount = float(np.maximum(0.0, cast).mean())
+        return float(max(0.0, min(1.0, 1.0 - cast_amount * 8.0)))
+
+    @staticmethod
     def _realism_score(candidate: Image.Image) -> float:
         gray = np.asarray(candidate.convert("L")).astype(np.float32) / 255.0
         mean = float(gray.mean())
@@ -437,3 +530,13 @@ class TryOnScorer:
         exposure = 1.0 - min(1.0, abs(mean - 0.52) * 2.0)
         contrast_score = 1.0 - min(1.0, abs(contrast - 0.22) * 2.2)
         return float(max(0.0, min(1.0, 0.55 * exposure + 0.45 * contrast_score)))
+
+    @staticmethod
+    def _normalized_color(color: np.ndarray) -> np.ndarray:
+        total = float(color.sum()) + 1e-6
+        return color / total
+
+    @staticmethod
+    def _rgb_chroma_float(arr: np.ndarray) -> np.ndarray:
+        total = arr.sum(axis=2, keepdims=True) + 1e-6
+        return arr / total

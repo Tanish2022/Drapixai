@@ -136,17 +136,28 @@ ensure_env_file() {
   upsert_env "DRAPIXAI_MODEL_DIR" "$APP_ROOT/models/catvton"
   upsert_env "DRAPIXAI_CATVTON_MODEL_DIR" "$APP_ROOT/models/catvton"
   upsert_env "DRAPIXAI_GARMENT_CACHE_DIR" "$APP_ROOT/runtime/garments"
+  upsert_env "DRAPIXAI_GARMENT_CACHE_VERSION" "v3-1024x1365"
+  upsert_env "DRAPIXAI_GARMENT_TARGET_WIDTH" "1024"
+  upsert_env "DRAPIXAI_GARMENT_TARGET_HEIGHT" "1365"
   upsert_env "DRAPIXAI_RUNTIME_CACHE_ROOT" "$APP_ROOT/runtime/cache"
   upsert_env "DRAPIXAI_INPUT_MAX_SIDE" "640"
+  upsert_env "DRAPIXAI_UPPER_BODY_REJECT_EDGE_RATIO" "0"
   upsert_env "DRAPIXAI_INFERENCE_STEPS" "22"
   upsert_env "DRAPIXAI_GUIDANCE_SCALE" "2.5"
   upsert_env "DRAPIXAI_TARGET_TRYON_MS" "12000"
   upsert_env "DRAPIXAI_ENABLE_GARMENT_COLOR_FIX" "1"
   upsert_env "DRAPIXAI_GARMENT_COLOR_FIX_STRENGTH" "0.94"
+  upsert_env "DRAPIXAI_GARMENT_COLOR_FIX_EDGE_GUARD" "1"
+  upsert_env "DRAPIXAI_BACKGROUND_COLOR_CAST_THRESHOLD" "0.055"
   upsert_env "DRAPIXAI_ENABLE_NATURAL_LIGHTING_FIX" "1"
   upsert_env "DRAPIXAI_NATURAL_LIGHTING_STRENGTH" "0.55"
   upsert_env "DRAPIXAI_ENABLE_FASHION_POLISH" "1"
   upsert_env "DRAPIXAI_FASHION_POLISH_STRENGTH" "0.45"
+  upsert_env "DRAPIXAI_ENABLE_PERSON_CONTEXT_RESTORE" "0"
+  upsert_env "DRAPIXAI_PERSON_CONTEXT_RESTORE_STRENGTH" "0.92"
+  upsert_env "DRAPIXAI_GARMENT_FAST_PLAIN_BACKGROUND_MATTE" "0"
+  upsert_env "DRAPIXAI_CANDIDATE_COUNT" "1"
+  upsert_env "DRAPIXAI_MIN_QUALITY_SCORE" "0.90"
   upsert_env "DRAPIXAI_ENABLE_REFINEMENT" "0"
   upsert_env "DRAPIXAI_ENABLE_UPSCALE" "0"
   upsert_env "DRAPIXAI_PRELOAD_MODEL" "1"
@@ -157,6 +168,9 @@ ensure_env_file() {
   upsert_env "DRAPIXAI_OPENPOSE_DEVICE" "cuda"
   upsert_env "DRAPIXAI_LOW_VRAM" "0"
   upsert_env "DRAPIXAI_OUTPUT_FORMAT" "png"
+  upsert_env "DRAPIXAI_ENABLE_FINAL_OUTPUT_UPSCALE" "1"
+  upsert_env "DRAPIXAI_OUTPUT_WIDTH" "1024"
+  upsert_env "DRAPIXAI_OUTPUT_HEIGHT" "1365"
 
   local current_token
   current_token="$(grep '^DRAPIXAI_ADMIN_TOKEN=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
@@ -190,6 +204,16 @@ create_runtime_dirs() {
 install_python_stack() {
   log "Installing DrapixAI Python stack"
   cd "$APP_ROOT"
+  python - <<'PY'
+import sys
+
+if sys.version_info[:2] != (3, 11):
+    raise SystemExit(
+        f"Python {sys.version_info.major}.{sys.version_info.minor} detected. "
+        "Use RunPod image runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04 "
+        "for the DrapixAI production CatVTON stack."
+    )
+PY
   if [[ -f .gitmodules ]]; then
     git submodule update --init --recursive
   fi
