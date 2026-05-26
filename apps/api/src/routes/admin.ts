@@ -300,8 +300,16 @@ router.get('/ops', async (_req, res) => {
  */
 router.get('/garments', async (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined;
   const garments = await prisma.garment.findMany({
-    where: status ? { status } : undefined,
+    where: {
+      ...(status ? { status } : {}),
+      ...(filter === 'cache_failed' ? { rejectedReason: { startsWith: 'CACHE_REGEN_FAILED' } } : {}),
+      ...(filter === 'no_cache' ? { cacheKey: null } : {}),
+      ...(filter === 'ready' ? { status: 'ready' } : {}),
+      ...(filter === 'rejected' ? { status: 'rejected' } : {}),
+      ...(filter === 'pending' ? { status: 'pending' } : {}),
+    },
     orderBy: { updatedAt: 'desc' }
   });
   res.json({
@@ -386,18 +394,32 @@ router.get('/garments/:id/thumbnail', async (req, res) => {
  */
 router.get('/tryon-results', async (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined;
+  const minQuality = Number(req.query.minQuality || 0.9);
+  const maxLatencyMs = Number(req.query.maxLatencyMs || 12000);
   const results = await prisma.tryOnResult.findMany({
-    where: status ? { status } : undefined,
+    where: {
+      ...(status ? { status } : {}),
+      ...(filter === 'approved' ? { status: 'approved' } : {}),
+      ...(filter === 'rejected' ? { status: 'rejected' } : {}),
+      ...(filter === 'generated' ? { status: 'generated' } : {}),
+      ...(filter === 'low_quality' ? { qualityScore: { lt: minQuality } } : {}),
+      ...(filter === 'high_latency' ? { latencyMs: { gt: maxLatencyMs } } : {}),
+    },
     orderBy: { createdAt: 'desc' },
-    take: 100,
+    take: filter === 'warnings' ? 250 : 100,
     include: {
       user: { select: { email: true } },
       feedback: { orderBy: { createdAt: 'desc' }, take: 3 },
     },
   });
 
+  const filteredResults = filter === 'warnings'
+    ? results.filter((item) => Array.isArray(item.warnings) && item.warnings.length > 0)
+    : results;
+
   res.json({
-    items: results.map((item) => ({
+    items: filteredResults.map((item) => ({
       id: item.id,
       userId: item.userId,
       userEmail: item.user.email,

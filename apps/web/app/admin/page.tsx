@@ -77,6 +77,26 @@ interface AdminOps {
   dailyTraffic: { date: string; count: number }[];
 }
 
+type TryOnReviewFilter = 'generated' | 'low_quality' | 'high_latency' | 'warnings' | 'approved' | 'rejected';
+type GarmentReviewFilter = 'pending' | 'cache_failed' | 'no_cache' | 'ready' | 'rejected';
+
+const tryOnReviewFilters: { value: TryOnReviewFilter; label: string; description: string }[] = [
+  { value: 'generated', label: 'Generated', description: 'New results awaiting review' },
+  { value: 'low_quality', label: 'Low Quality', description: 'Score below 0.90' },
+  { value: 'high_latency', label: 'High Latency', description: 'Above 12 seconds' },
+  { value: 'warnings', label: 'Warnings', description: 'Any model or pipeline warning' },
+  { value: 'approved', label: 'Approved', description: 'Production examples' },
+  { value: 'rejected', label: 'Rejected', description: 'Failed review' },
+];
+
+const garmentReviewFilters: { value: GarmentReviewFilter; label: string; description: string }[] = [
+  { value: 'pending', label: 'Pending', description: 'Needs admin review' },
+  { value: 'cache_failed', label: 'Cache Failed', description: 'Regeneration failed' },
+  { value: 'no_cache', label: 'No Cache', description: 'Missing try-on asset' },
+  { value: 'ready', label: 'Ready', description: 'Approved cache assets' },
+  { value: 'rejected', label: 'Rejected', description: 'Blocked assets' },
+];
+
 export default function AdminDashboard() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [website, setWebsite] = useState<AdminWebsiteAnalytics | null>(null);
@@ -86,6 +106,8 @@ export default function AdminDashboard() {
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [tryOnResults, setTryOnResults] = useState<AdminTryOnResult[]>([]);
   const [tryOnImages, setTryOnImages] = useState<Record<string, string>>({});
+  const [tryOnFilter, setTryOnFilter] = useState<TryOnReviewFilter>('generated');
+  const [garmentFilter, setGarmentFilter] = useState<GarmentReviewFilter>('pending');
   const router = useRouter();
 
   useEffect(() => {
@@ -118,7 +140,7 @@ export default function AdminDashboard() {
         .then(data => setOps(data))
         .catch(console.error);
 
-      fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?status=generated`, {
+      fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?filter=generated`, {
         headers: { 'Authorization': `Bearer ${storedApiKey}` },
       })
         .then(res => res.json())
@@ -127,8 +149,8 @@ export default function AdminDashboard() {
     }
   }, [router]);
 
-  const fetchGarments = async () => {
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/garments?status=pending`, {
+  const fetchGarments = async (filter = garmentFilter) => {
+    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/garments?filter=${encodeURIComponent(filter)}`, {
       headers: { 'Authorization': `Bearer ${apiKey}` }
     });
     if (res.ok) {
@@ -137,8 +159,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchTryOnResults = async () => {
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?status=generated`, {
+  const fetchTryOnResults = async (filter = tryOnFilter) => {
+    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?filter=${encodeURIComponent(filter)}`, {
       headers: { 'Authorization': `Bearer ${apiKey}` }
     });
     if (res.ok) {
@@ -392,11 +414,30 @@ export default function AdminDashboard() {
               onClick={() => fetchTryOnResults()}
               className="px-4 py-2 bg-white/10 border border-white/10 rounded-lg hover:bg-white/20"
             >
-              Load Generated
+              Refresh
             </button>
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-5">
+            {tryOnReviewFilters.map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => {
+                  setTryOnFilter(filter.value);
+                  fetchTryOnResults(filter.value);
+                }}
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  tryOnFilter === filter.value
+                    ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100'
+                    : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{filter.label}</span>
+                <span className="block text-xs text-gray-500 mt-1">{filter.description}</span>
+              </button>
+            ))}
+          </div>
           {tryOnResults.length === 0 ? (
-            <p className="text-sm text-gray-400">No generated try-on results waiting for review.</p>
+            <p className="text-sm text-gray-400">No try-on results match the selected review filter.</p>
           ) : (
             <div className="space-y-5">
               {tryOnResults.slice(0, 12).map((item) => {
@@ -491,11 +532,30 @@ export default function AdminDashboard() {
               onClick={() => fetchGarments()}
               className="px-4 py-2 bg-white/10 border border-white/10 rounded-lg hover:bg-white/20"
             >
-              Load Pending Review
+              Refresh
             </button>
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-5">
+            {garmentReviewFilters.map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => {
+                  setGarmentFilter(filter.value);
+                  fetchGarments(filter.value);
+                }}
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  garmentFilter === filter.value
+                    ? 'border-cyan-400/50 bg-cyan-400/15 text-cyan-100'
+                    : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{filter.label}</span>
+                <span className="block text-xs text-gray-500 mt-1">{filter.description}</span>
+              </button>
+            ))}
+          </div>
           {garments.length === 0 ? (
-            <p className="text-sm text-gray-400">No pending garments.</p>
+            <p className="text-sm text-gray-400">No garments match the selected review filter.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {garments.map((g) => (

@@ -50,9 +50,11 @@ router.get('/summary', async (req, res) => {
   });
   const [
     uploadedGarmentCount,
+    cacheReadyGarmentCount,
     discoveredProductCount,
     suggestedMatchCount,
     confirmedMatchCount,
+    approvedTryOnResultCount,
   ] = await Promise.all([
     prisma.garment.count({
       where: {
@@ -62,6 +64,13 @@ router.get('/summary', async (req, res) => {
           { cacheKey: { not: null } },
           { thumbnailUrl: { not: null } },
         ],
+      },
+    }),
+    prisma.garment.count({
+      where: {
+        userId: validKey.userId,
+        status: 'ready',
+        cacheKey: { not: null },
       },
     }),
     prisma.catalogProduct.count({ where: { userId: validKey.userId } }),
@@ -76,6 +85,12 @@ router.get('/summary', async (req, res) => {
         userId: validKey.userId,
         status: 'confirmed',
         confirmedProductId: { not: null },
+      },
+    }),
+    prisma.tryOnResult.count({
+      where: {
+        userId: validKey.userId,
+        status: 'approved',
       },
     }),
   ]);
@@ -110,9 +125,11 @@ router.get('/summary', async (req, res) => {
     catalogLastSyncedAt: user?.catalogLastSyncedAt ? user.catalogLastSyncedAt.toISOString() : null,
     catalogLastSyncStatus: user?.catalogLastSyncStatus || null,
     uploadedGarmentCount,
+    cacheReadyGarmentCount,
     discoveredProductCount,
     suggestedMatchCount,
     confirmedMatchCount,
+    approvedTryOnResultCount,
     dailyUsage: daily.map(d => ({ date: d.date.toISOString().slice(0, 10), count: d.count })),
     recentRenders: recentRenders.map((render) => ({
       id: render.id,

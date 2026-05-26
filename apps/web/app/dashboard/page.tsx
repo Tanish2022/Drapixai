@@ -31,9 +31,11 @@ interface UsageData {
   catalogLastSyncedAt?: string | null;
   catalogLastSyncStatus?: string | null;
   uploadedGarmentCount?: number;
+  cacheReadyGarmentCount?: number;
   discoveredProductCount?: number;
   suggestedMatchCount?: number;
   confirmedMatchCount?: number;
+  approvedTryOnResultCount?: number;
   dailyUsage?: { date: string; count: number }[];
   recentRenders?: { id: number; status: string; productId?: string | null; error?: string | null; outputUrl?: string | null; createdAt: string }[];
 }
@@ -532,10 +534,13 @@ export default function Dashboard() {
   const hasVerifiedStore = Boolean(usage.storeVerified);
   const hasCatalogSynced = (usage.discoveredProductCount || 0) > 0;
   const hasGarments = (usage.uploadedGarmentCount || garments.length) > 0;
+  const hasCacheReady = (usage.cacheReadyGarmentCount || 0) > 0 || garments.some((g) => Boolean(g.cacheKey) && g.status === 'ready');
   const hasSuggestedMatches = (usage.suggestedMatchCount || 0) > 0;
   const hasConfirmedMappings = (usage.confirmedMatchCount || 0) > 0;
+  const hasSdkPreviewResult = (usage.recentRenders || []).some((render) => render.status === 'complete') || usage.rendersUsed > 0;
+  const hasApprovedTryOnResult = (usage.approvedTryOnResultCount || 0) > 0;
   const readyForPreview = hasConfirmedMappings;
-  const readyForGoLive = hasVerifiedStore && hasConfirmedMappings;
+  const readyForGoLive = hasVerifiedStore && hasConfirmedMappings && hasCacheReady && hasApprovedTryOnResult;
   const isQuotaExhausted = usage.quotaRemaining <= 0;
   const isQuotaLow = !isQuotaExhausted && usage.quotaRemaining <= Math.max(50, Math.ceil(usage.quota * 0.1));
 
@@ -591,6 +596,51 @@ export default function Dashboard() {
   const completedOnboardingSteps = onboardingSteps.filter((step) => step.done).length;
   const onboardingProgress = Math.round((completedOnboardingSteps / onboardingSteps.length) * 100);
   const currentOnboardingStep = onboardingSteps.find((step) => !step.done) || onboardingSteps[onboardingSteps.length - 1];
+  const brandLaunchChecklist = [
+    {
+      label: 'Upload garment assets',
+      done: hasGarments,
+      detail: `${usage.uploadedGarmentCount || garments.length || 0} garment asset(s) uploaded`,
+      href: '#garment-onboarding',
+    },
+    {
+      label: 'Cache ready',
+      done: hasCacheReady,
+      detail: `${usage.cacheReadyGarmentCount || garments.filter((g) => Boolean(g.cacheKey) && g.status === 'ready').length || 0} ready cached asset(s)`,
+      href: '#garment-onboarding',
+    },
+    {
+      label: 'Sync product catalog',
+      done: hasCatalogSynced,
+      detail: `${usage.discoveredProductCount || 0} product(s) discovered`,
+      href: '#garment-onboarding',
+    },
+    {
+      label: 'Confirm mappings',
+      done: hasConfirmedMappings,
+      detail: `${usage.confirmedMatchCount || 0} confirmed product mapping(s)`,
+      href: '#mapping-flow',
+    },
+    {
+      label: 'Test SDK preview',
+      done: hasSdkPreviewResult,
+      detail: hasSdkPreviewResult ? 'At least one preview request has run' : 'Run one internal preview before live install',
+      href: '#plugin-demo',
+    },
+    {
+      label: 'Approve first results',
+      done: hasApprovedTryOnResult,
+      detail: `${usage.approvedTryOnResultCount || 0} approved try-on result(s)`,
+      href: '/admin',
+    },
+    {
+      label: 'Install live SDK',
+      done: readyForGoLive,
+      detail: readyForGoLive ? 'Ready for controlled storefront rollout' : 'Wait until cache, mappings, preview, and approval are complete',
+      href: '/sdk-install',
+    },
+  ];
+  const completedLaunchChecklist = brandLaunchChecklist.filter((item) => item.done).length;
 
   return (
     <div className={pageClass}>
@@ -675,6 +725,37 @@ export default function Dashboard() {
             </p>
           </div>
         ) : null}
+
+        <section className={`${cardClass} mb-8`}>
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-5">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <CheckCircle2 className="w-6 h-6 text-cyan-400" />
+                <h2 className="text-xl font-bold">Brand launch checklist</h2>
+              </div>
+              <p className={`text-sm ${mutedTextClass}`}>
+                Use this as the brand onboarding gate before live customer traffic. It keeps the launch path simple and makes missing work visible.
+              </p>
+            </div>
+            <div className={`${panelClass} min-w-[180px]`}>
+              <p className={`text-sm ${mutedTextClass}`}>Launch readiness</p>
+              <p className={`text-2xl font-bold ${strongTextClass}`}>{completedLaunchChecklist} / {brandLaunchChecklist.length}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {brandLaunchChecklist.map((item) => (
+              <Link key={item.label} href={item.href} className={`${panelClass} block transition-transform hover:-translate-y-0.5`}>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className={`w-5 h-5 mt-0.5 ${item.done ? 'text-emerald-400' : 'text-gray-600'}`} />
+                  <div>
+                    <p className={`text-sm font-semibold ${item.done ? strongTextClass : mutedTextClass}`}>{item.label}</p>
+                    <p className={`text-xs mt-1 ${mutedTextClass}`}>{item.detail}</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 mb-8">
           <section className={cardClass}>
@@ -772,7 +853,7 @@ export default function Dashboard() {
               {[
                 { label: 'Garments uploaded', done: hasGarments },
                 { label: 'Preprocessing complete', done: garments.some((g) => g.status !== 'missing') },
-                { label: 'Try-on cache ready', done: garments.some((g) => Boolean(g.cacheKey) && g.status === 'ready') },
+                { label: 'Try-on cache ready', done: hasCacheReady },
                 { label: 'Catalog discovery connected', done: hasCatalogSynced },
                 { label: 'Suggested matches available', done: hasSuggestedMatches },
                 { label: 'Confirmed pairings ready', done: hasConfirmedMappings },
