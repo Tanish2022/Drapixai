@@ -104,6 +104,10 @@
       processingMs: parseNumber(response.headers.get('x-drapixai-processing-ms')),
       latencyMs: parseNumber(response.headers.get('x-drapixai-latency-ms')),
       latencyTargetMs: parseNumber(response.headers.get('x-drapixai-latency-target-ms')),
+      qualityMode: response.headers.get('x-drapixai-quality-mode') || undefined,
+      garmentSource: response.headers.get('x-drapixai-garment-source') || undefined,
+      garmentCacheStatus: response.headers.get('x-drapixai-garment-cache-status') || undefined,
+      garmentCacheVersion: response.headers.get('x-drapixai-garment-cache-version') || undefined,
       timings: parseJsonObject(response.headers.get('x-drapixai-timing-json')),
       warnings: warnings ? warnings.split(',').map(function (item) { return item.trim(); }).filter(Boolean) : []
     };

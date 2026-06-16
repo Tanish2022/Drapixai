@@ -167,11 +167,12 @@ def main() -> None:
         entry["status"] = "pending"
         entry["settings"] = {
             "engine": settings.tryon_engine,
-            "candidate_count": settings.candidate_count,
+            "quality": "standard",
+            "candidate_count": 1,
             "min_quality_score": settings.min_quality_score,
             "input_max_side": settings.input_max_side,
-            "enhanced_steps": settings.enhanced_inference_steps,
-            "enhanced_guidance": settings.enhanced_guidance_scale,
+            "inference_steps": settings.inference_steps,
+            "guidance_scale": settings.guidance_scale,
         }
         try:
             person_bytes = _load_image_bytes(case, "person")
@@ -217,9 +218,10 @@ def main() -> None:
             result_with_metadata = pipeline.run_tryon_with_metadata(
                 person,
                 cloth,
-                inference_steps=settings.enhanced_inference_steps,
-                guidance_scale=settings.enhanced_guidance_scale,
+                inference_steps=settings.inference_steps,
+                guidance_scale=settings.guidance_scale,
                 garment_type="upper",
+                quality="standard",
             )
             result = result_with_metadata.image
             result.save(case_dir / "result.png", format="PNG")

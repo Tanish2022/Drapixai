@@ -152,6 +152,7 @@ class Settings:
     garment_cache_ttl_seconds: int = int(os.getenv("DRAPIXAI_GARMENT_CACHE_TTL", "7776000"))  # 90 days
     garment_cache_version: str = os.getenv("DRAPIXAI_GARMENT_CACHE_VERSION", "v3-1024x1365")
     admin_token: str = os.getenv("DRAPIXAI_ADMIN_TOKEN", "")
+    ai_service_token: str = os.getenv("DRAPIXAI_AI_SERVICE_TOKEN", "")
     garment_cache_backend: str = os.getenv("DRAPIXAI_GARMENT_CACHE_BACKEND", "local")
     garment_fast_plain_background_matte: bool = os.getenv("DRAPIXAI_GARMENT_FAST_PLAIN_BACKGROUND_MATTE", "0") == "1"
     s3_endpoint: str = os.getenv("DRAPIXAI_S3_ENDPOINT", "")

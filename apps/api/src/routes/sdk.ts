@@ -93,6 +93,7 @@ const s3 = createStorageClient();
 const BUCKET = STORAGE_BUCKET;
 const SINGLE_DOMAIN_REQUIRED = true;
 const MAX_UPLOAD_BYTES = Number(process.env.DRAPIXAI_MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
+const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
 
 // Configure multer for file uploads
 const upload = multer({
@@ -109,6 +110,10 @@ const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1'
 const GARMENT_APPROVAL_REQUIRED = (process.env.DRAPIXAI_GARMENT_APPROVAL_REQUIRED || '0') === '1';
 const TRYON_LATENCY_TARGET_MS = Number(process.env.DRAPIXAI_TARGET_TRYON_MS || 12000);
 const SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON = (process.env.DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON || '0') === '1';
+const SDK_GENERATION_SOURCE = (process.env.DRAPIXAI_SDK_GENERATION_SOURCE || 'original_verified').toLowerCase();
+const EXPECTED_GARMENT_CACHE_VERSION = process.env.DRAPIXAI_GARMENT_CACHE_VERSION || 'v3-1024x1365';
+const EXPECTED_GARMENT_CACHE_WIDTH = Number(process.env.DRAPIXAI_GARMENT_TARGET_WIDTH || 1024);
+const EXPECTED_GARMENT_CACHE_HEIGHT = Number(process.env.DRAPIXAI_GARMENT_TARGET_HEIGHT || 1365);
 
 const parseNumberHeader = (value: string | null): number | null => {
   if (!value) return null;
@@ -120,6 +125,38 @@ const parseWarningsHeader = (value: string | null): string[] => {
   if (!value) return [];
   return value.split(',').map((item) => item.trim()).filter(Boolean);
 };
+
+const normalizeSdkQuality = (value: unknown) => {
+  const requested = String(value || 'standard').trim().toLowerCase();
+  if (!requested || requested === 'standard') return 'standard';
+  return null;
+};
+
+const isExpectedCacheKey = (cacheKey: string | undefined | null) => {
+  return Boolean(cacheKey && cacheKey.startsWith(`${EXPECTED_GARMENT_CACHE_VERSION}:`));
+};
+
+const getCacheImageInfo = async (cacheKey: string) => {
+  const response = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(cacheKey)}`, {
+    headers: getAiHeaders()
+  });
+  const width = Number(response.headers.get('x-drapixai-cache-width') || 0);
+  const height = Number(response.headers.get('x-drapixai-cache-height') || 0);
+  const version = response.headers.get('x-drapixai-cache-version') || '';
+  return {
+    ok: response.ok,
+    width,
+    height,
+    version,
+    matchesExpectedSize: width === EXPECTED_GARMENT_CACHE_WIDTH && height === EXPECTED_GARMENT_CACHE_HEIGHT,
+    matchesExpectedVersion: version === EXPECTED_GARMENT_CACHE_VERSION || isExpectedCacheKey(cacheKey),
+  };
+};
+
+const getAiHeaders = (headers: Record<string, string> = {}) => ({
+  ...headers,
+  ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
+});
 
 const getImageExtension = (contentType: string) => {
   if (contentType.includes('jpeg') || contentType.includes('jpg')) return '.jpg';
@@ -713,7 +750,94 @@ router.post('/tryon', authMiddleware, upload.fields([
           clothFile.mimetype || 'image/png'
         );
       }
-      const selectedQuality = req.body.quality || plan.quality;
+      const selectedQuality = normalizeSdkQuality(req.body.quality || plan.quality);
+      if (!selectedQuality) {
+        return res.status(400).json({
+          error: 'INVALID_QUALITY',
+          message: 'DrapixAI storefront SDK supports Standard quality for production try-on.'
+        });
+      }
+
+      let finalCacheKey = cacheKey || undefined;
+      let garmentCacheStatus = finalCacheKey ? 'verified' : 'direct_upload';
+      const sdkQualityWarnings: string[] = [];
+      let generationGarmentSource = finalCacheKey ? 'cache' : 'direct_upload';
+
+      const regenerateCacheFromOriginal = async (reason: string) => {
+        if (!garmentRecord?.originalUrl || !actualGarmentId) return false;
+        const originalBytes = await fetchOriginalGarment(garmentRecord.originalUrl);
+        if (!originalBytes) return false;
+        const regenPayload = {
+          cloth_image_base64: originalBytes.toString('base64'),
+          brand_id: String(user.id),
+          garment_id: actualGarmentId,
+          category: garmentRecord.category || undefined,
+          product_name: garmentRecord.productName || garmentRecord.displayName || undefined,
+          admin_bypass: false
+        };
+        const regenRes = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+          method: 'POST',
+          headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(regenPayload)
+        });
+        if (!regenRes.ok) return false;
+        const regen = await regenRes.json() as GarmentPreprocessResponse;
+        if (!regen.cache_key || !isExpectedCacheKey(regen.cache_key)) return false;
+        finalCacheKey = regen.cache_key as string;
+        garmentCacheStatus = reason;
+        sdkQualityWarnings.push(reason.toUpperCase());
+        await prisma.garment.update({
+          where: { userId_garmentId: { userId: user.id, garmentId: actualGarmentId } },
+          data: { cacheKey: finalCacheKey, status: 'ready' }
+        });
+        return true;
+      };
+
+      if (finalCacheKey) {
+        if (!isExpectedCacheKey(finalCacheKey)) {
+          const regenerated = await regenerateCacheFromOriginal('garment_cache_regenerated_stale_version');
+          if (!regenerated) {
+            return res.status(409).json({
+              error: 'GARMENT_CACHE_STALE',
+              message: `Regenerate this garment cache with ${EXPECTED_GARMENT_CACHE_VERSION} before storefront try-on.`
+            });
+          }
+        }
+
+        const cacheInfo = await getCacheImageInfo(finalCacheKey);
+        if (!cacheInfo.ok) {
+          const regenerated = await regenerateCacheFromOriginal('garment_cache_regenerated_miss');
+          if (!regenerated) {
+            return res.status(409).json({
+              error: 'GARMENT_CACHE_MISS',
+              message: 'The cached garment asset is missing. Regenerate this product cache before storefront try-on.'
+            });
+          }
+        } else if (!cacheInfo.matchesExpectedSize || !cacheInfo.matchesExpectedVersion) {
+          const regenerated = await regenerateCacheFromOriginal('garment_cache_regenerated_quality_mismatch');
+          if (!regenerated) {
+            return res.status(409).json({
+              error: 'GARMENT_CACHE_QUALITY_MISMATCH',
+              message: `Regenerate this garment cache at ${EXPECTED_GARMENT_CACHE_WIDTH}x${EXPECTED_GARMENT_CACHE_HEIGHT} before storefront try-on.`
+            });
+          }
+        }
+      }
+
+      if (
+        finalCacheKey
+        && SDK_GENERATION_SOURCE === 'original_verified'
+        && garmentRecord?.originalUrl
+      ) {
+        const originalBytes = originalGarmentBytes || await fetchOriginalGarment(garmentRecord.originalUrl);
+        if (originalBytes && originalBytes.length <= MAX_UPLOAD_BYTES) {
+          clothBase64 = originalBytes.toString('base64');
+          generationGarmentSource = 'original_verified_cache_gate';
+        } else {
+          generationGarmentSource = 'cache';
+          sdkQualityWarnings.push('ORIGINAL_GENERATION_SOURCE_UNAVAILABLE');
+        }
+      }
 
       const payload = {
         user_id: String(user.id),
@@ -721,44 +845,13 @@ router.post('/tryon', authMiddleware, upload.fields([
         cloth_image_base64: clothBase64,
         quality: selectedQuality,
         garment_type: garmentType,
-        cloth_cache_key: cacheKey || undefined
+        cloth_cache_key: generationGarmentSource === 'cache' ? finalCacheKey : undefined
       };
-
-      let finalCacheKey = cacheKey || undefined;
-      if (finalCacheKey) {
-        const cacheCheck = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(finalCacheKey)}`);
-        if (!cacheCheck.ok && garmentRecord?.originalUrl) {
-          const originalBytes = await fetchOriginalGarment(garmentRecord.originalUrl);
-          if (originalBytes) {
-            const regenPayload = {
-              cloth_image_base64: originalBytes.toString('base64'),
-              brand_id: String(user.id),
-              garment_id: actualGarmentId,
-              category: garmentRecord.category || undefined,
-              product_name: garmentRecord.productName || garmentRecord.displayName || undefined,
-              admin_bypass: false
-            };
-            const regenRes = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(regenPayload)
-            });
-            if (regenRes.ok && actualGarmentId) {
-              const regen = await regenRes.json() as GarmentPreprocessResponse;
-              finalCacheKey = regen.cache_key as string;
-              await prisma.garment.update({
-                where: { userId_garmentId: { userId: user.id, garmentId: actualGarmentId } },
-                data: { cacheKey: finalCacheKey, status: 'ready' }
-              });
-            }
-          }
-        }
-      }
 
       const aiResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, cloth_cache_key: finalCacheKey })
+        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
       });
 
       if (!aiResponse.ok) {
@@ -774,11 +867,14 @@ router.post('/tryon', authMiddleware, upload.fields([
       const warnings = aiResponse.headers.get('x-drapixai-warnings') || '';
       const processingMs = aiResponse.headers.get('x-drapixai-processing-ms') || '';
       const timingJson = aiResponse.headers.get('x-drapixai-timing-json') || '';
+      const qualityMode = aiResponse.headers.get('x-drapixai-quality-mode') || selectedQuality;
+      const garmentSource = generationGarmentSource || aiResponse.headers.get('x-drapixai-garment-source') || (finalCacheKey ? 'cache' : 'direct_upload');
       const parsedTimingJson = parseJsonSafe<Record<string, unknown>>(timingJson);
       const latencyMs = Date.now() - requestStartedAt;
+      const combinedWarnings = [...parseWarningsHeader(warnings), ...sdkQualityWarnings];
       const latencyWarnings = latencyMs > TRYON_LATENCY_TARGET_MS
-        ? [...parseWarningsHeader(warnings), `LATENCY_OVER_${TRYON_LATENCY_TARGET_MS}MS`]
-        : parseWarningsHeader(warnings);
+        ? [...combinedWarnings, `LATENCY_OVER_${TRYON_LATENCY_TARGET_MS}MS`]
+        : combinedWarnings;
       const personReviewUrl = await uploadReviewImage(
         user.id,
         requestId,
@@ -842,6 +938,10 @@ router.post('/tryon', authMiddleware, upload.fields([
       res.setHeader('x-drapixai-latency-ms', String(latencyMs));
       res.setHeader('x-drapixai-latency-target-ms', String(TRYON_LATENCY_TARGET_MS));
       if (timingJson) res.setHeader('x-drapixai-timing-json', timingJson);
+      res.setHeader('x-drapixai-quality-mode', qualityMode);
+      res.setHeader('x-drapixai-garment-source', garmentSource);
+      res.setHeader('x-drapixai-garment-cache-status', garmentCacheStatus);
+      res.setHeader('x-drapixai-garment-cache-version', EXPECTED_GARMENT_CACHE_VERSION);
       res.send(buffer);
     } finally {
       if (personFile?.path && fs.existsSync(personFile.path)) fs.unlinkSync(personFile.path);
@@ -930,10 +1030,10 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
 
     const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
       method: 'POST',
-      headers: {
+      headers: getAiHeaders({
         'Content-Type': 'application/json',
         ...(adminBypass && ADMIN_TOKEN ? { 'x-admin-token': ADMIN_TOKEN } : {})
-      },
+      }),
       body: JSON.stringify(payload)
     });
 
@@ -1034,7 +1134,7 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
       };
       const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
       });
       if (!aiResponse.ok) {
@@ -1309,7 +1409,9 @@ router.get('/garments/:garmentId/image', authMiddleware, async (req: any, res: a
     if (!garment || !garment.cacheKey) {
       return res.status(404).json({ error: 'GARMENT_NOT_READY' });
     }
-    const aiRes = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(garment.cacheKey)}`);
+    const aiRes = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(garment.cacheKey)}`, {
+      headers: getAiHeaders()
+    });
     if (!aiRes.ok) {
       return res.status(404).json({ error: 'GARMENT_CACHE_MISS' });
     }

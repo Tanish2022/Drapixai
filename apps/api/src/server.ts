@@ -47,6 +47,11 @@ const allowedOrigins = Array.from(
 
 const allowAnyOrigin = allowedOrigins.includes('*');
 const trustProxy = (process.env.DRAPIXAI_TRUST_PROXY || '').trim();
+const exposeReadyDetails = process.env.NODE_ENV !== 'production' || process.env.DRAPIXAI_EXPOSE_READY_DETAILS === '1';
+const aiServiceHeaders: Record<string, string> = {};
+if (process.env.DRAPIXAI_AI_SERVICE_TOKEN) {
+  aiServiceHeaders['x-drapixai-service-token'] = process.env.DRAPIXAI_AI_SERVICE_TOKEN;
+}
 const sdkExposedHeaders = [
   'x-drapixai-tryon-result-id',
   'x-drapixai-engine',
@@ -57,6 +62,10 @@ const sdkExposedHeaders = [
   'x-drapixai-latency-ms',
   'x-drapixai-latency-target-ms',
   'x-drapixai-timing-json',
+  'x-drapixai-quality-mode',
+  'x-drapixai-garment-source',
+  'x-drapixai-garment-cache-status',
+  'x-drapixai-garment-cache-version',
 ];
 
 app.disable('x-powered-by');
@@ -109,7 +118,10 @@ app.get('/ready', async (req, res) => {
 
   if (aiBaseUrl) {
     try {
-      const response = await fetch(`${aiBaseUrl}/ready`, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(`${aiBaseUrl}/ready`, {
+        headers: aiServiceHeaders,
+        signal: AbortSignal.timeout(5000)
+      });
       aiStatus = await response.json() as ({ status?: string } & Record<string, unknown>);
       aiReady = response.ok && aiStatus?.status === 'ready';
     } catch (error: any) {
@@ -122,7 +134,7 @@ app.get('/ready', async (req, res) => {
   }
 
   const ready = databaseReady && redisReady && aiReady;
-  res.status(ready ? 200 : 503).json({
+  const payload = exposeReadyDetails ? {
     status: ready ? 'ready' : 'not_ready',
     checks: {
       database: {
@@ -133,7 +145,15 @@ app.get('/ready', async (req, res) => {
       ai: aiStatus,
       storage: getStorageSummary(),
     },
-  });
+  } : {
+    status: ready ? 'ready' : 'not_ready',
+    checks: {
+      database: databaseReady,
+      redis: redisReady,
+      ai: aiReady,
+    },
+  };
+  res.status(ready ? 200 : 503).json(payload);
 });
 
 cron.schedule('0 0 * * *', async () => {

@@ -8,6 +8,11 @@ const router = Router();
 const prisma = new PrismaClient();
 const MAX_UPLOAD_BYTES = Number(process.env.DRAPIXAI_MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
 const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
+const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
+const getAiHeaders = (headers: Record<string, string> = {}) => ({
+  ...headers,
+  ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
+});
 
 const upload = multer({
   dest: 'uploads/',
@@ -120,7 +125,7 @@ router.post(
 
       const preprocessResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           cloth_image_base64: clothBytes.toString('base64'),
           brand_id: 'public-demo',
@@ -145,7 +150,7 @@ router.post(
 
       const tryOnResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           user_id: 'public-demo',
           person_image_base64: personBytes.toString('base64'),

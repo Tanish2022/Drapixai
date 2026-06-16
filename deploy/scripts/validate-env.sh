@@ -32,11 +32,48 @@ reject_placeholder() {
   [[ -z "$value" ]] && return 0
 
   case "$value" in
-    replace-with-a-long-random-secret|http://RUNPOD_POD_IP:8080|postgresql://USERNAME:PASSWORD@HOST:5432/drapixai)
+    replace-with-*|*RUNPOD_POD_IP*|*USERNAME:PASSWORD*|*your-api-key*|*your-product-id*)
       echo "Environment variable still contains a placeholder value: $name" >&2
       exit 1
       ;;
   esac
+}
+
+require_equals() {
+  local name="$1"
+  local expected="$2"
+  local value="${!name:-}"
+  if [[ "$value" != "$expected" ]]; then
+    echo "Environment variable must be $expected: $name" >&2
+    exit 1
+  fi
+}
+
+require_not_equals() {
+  local name="$1"
+  local disallowed="$2"
+  local value="${!name:-}"
+  if [[ "$value" == "$disallowed" ]]; then
+    echo "Environment variable has unsafe production value: $name=$disallowed" >&2
+    exit 1
+  fi
+}
+
+require_number_at_least() {
+  local name="$1"
+  local minimum="$2"
+  local value="${!name:-}"
+  python3 - "$name" "$value" "$minimum" <<'PY'
+import sys
+
+name, value, minimum = sys.argv[1], sys.argv[2], float(sys.argv[3])
+try:
+    parsed = float(value)
+except ValueError:
+    raise SystemExit(f"Environment variable must be numeric: {name}")
+if parsed < minimum:
+    raise SystemExit(f"Environment variable {name} must be at least {minimum:g}")
+PY
 }
 
 require_pair_or_none() {
@@ -63,6 +100,7 @@ case "$profile" in
       REDIS_URL
       JWT_SECRET
       DRAPIXAI_AI_URL
+      DRAPIXAI_AI_SERVICE_TOKEN
       DRAPIXAI_CORS_ORIGINS
       DRAPIXAI_ADMIN_TOKEN
       DRAPIXAI_ADMIN_PASSWORD
@@ -98,6 +136,7 @@ case "$profile" in
       DRAPIXAI_CATVTON_MODEL_DIR
       DRAPIXAI_GARMENT_CACHE_DIR
       DRAPIXAI_ADMIN_TOKEN
+      DRAPIXAI_AI_SERVICE_TOKEN
       DRAPIXAI_S3_BUCKET
       DRAPIXAI_S3_REGION
       DRAPIXAI_S3_ACCESS_KEY_ID
@@ -121,6 +160,25 @@ if [[ "$profile" == "web" ]]; then
     require_var GOOGLE_CLIENT_ID
     require_var GOOGLE_CLIENT_SECRET
   fi
+fi
+
+if [[ "$profile" == "api" ]]; then
+  require_not_equals DRAPIXAI_CORS_ORIGINS "*"
+  require_equals DRAPIXAI_REQUIRE_GARMENT_CACHE "1"
+  require_equals DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON "0"
+  require_equals DRAPIXAI_SDK_GENERATION_SOURCE "original_verified"
+fi
+
+if [[ "$profile" == "ai" ]]; then
+  require_equals DRAPIXAI_TRYON_ENGINE "catvton"
+  require_equals DRAPIXAI_CANDIDATE_COUNT "1"
+  require_number_at_least DRAPIXAI_MIN_QUALITY_SCORE "0.9"
+  require_equals DRAPIXAI_GARMENT_CACHE_VERSION "v3-1024x1365"
+  require_equals DRAPIXAI_GARMENT_TARGET_WIDTH "1024"
+  require_equals DRAPIXAI_GARMENT_TARGET_HEIGHT "1365"
+  require_equals DRAPIXAI_ENABLE_FINAL_OUTPUT_UPSCALE "1"
+  require_equals DRAPIXAI_OUTPUT_WIDTH "1024"
+  require_equals DRAPIXAI_OUTPUT_HEIGHT "1365"
 fi
 
 echo "Environment validation passed for profile: $profile"

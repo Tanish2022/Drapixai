@@ -213,23 +213,23 @@ export default function Home() {
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0b1120]/80 border border-white/[0.08] mb-8">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-sm text-gray-300">AI Virtual Try-On Infrastructure</span>
+            <span className="text-sm text-gray-300">Standard upper-body AI try-on infrastructure</span>
           </div>
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight tracking-tight">
-            Increase eCommerce Conversions<br />
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">With AI Virtual Try-On</span>
+            Launch Upper-Body AI Try-On<br />
+            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">With Brand-Controlled Quality</span>
           </h1>
           <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Boost product page engagement, increase add-to-cart rates, and reduce returns using photorealistic AI try-on technology. Works with any platform via a universal JavaScript SDK.
+            DrapixAI helps fashion brands add Standard-quality upper-body try-on for shirts, t-shirts, polos, blouses, tops, hoodies, and short kurtis using confirmed product mappings and cached garment assets.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
             <Link href={showDashboardCta ? '/dashboard' : '/auth/login'} className="px-8 py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(6,182,212,0.2)]">{showDashboardCta ? 'Dashboard' : 'Sign In'}</Link>
             <Link href="/demo" className="px-8 py-4 text-lg font-medium rounded-xl border border-white/[0.1] hover:bg-white/[0.05] transition-colors flex items-center gap-2"><Play className="w-5 h-5" />See Live Demo</Link>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Setup in under 5 minutes</span>
-            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Cancel anytime</span>
-            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Enterprise-ready</span>
+            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Upper-body launch scope</span>
+            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Cached garment onboarding</span>
+            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />10-12s warm latency target</span>
           </div>
         </div>
       </section>
@@ -270,7 +270,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <h2 className="text-4xl font-bold text-center mb-16">How It Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-            {[{ step: '01', title: 'Upload Product Image', desc: 'Upload your garment images to the dashboard. We process and optimize them automatically.' }, { step: '02', title: 'AI Generates Try-On', desc: 'Our AI detects body pose and generates photorealistic virtual try-on images.' }, { step: '03', title: 'Embed with 1 Line', desc: 'Add a single script tag to your site. Users see try-on right on your product pages.' }].map((item, i) => (<div key={i} className="relative p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm hover:border-white/[0.1] transition-colors"><span className="text-6xl font-bold text-white/[0.04] absolute top-4 right-6">{item.step}</span><h3 className="text-xl font-semibold mb-3">{item.title}</h3><p className="text-gray-400">{item.desc}</p></div>))}
+            {[{ step: '01', title: 'Upload Garment Assets', desc: 'Upload garment-only upper-body assets. DrapixAI validates, cleans, and caches high-quality try-on inputs during onboarding.' }, { step: '02', title: 'Confirm Product Mapping', desc: 'Match each storefront product to an approved cached garment so shoppers always use a controlled brand asset.' }, { step: '03', title: 'Embed the SDK', desc: 'Add the script to your storefront. The SDK sends the shopper photo and product id, then returns image bytes with quality, latency, and warning metadata.' }].map((item, i) => (<div key={i} className="relative p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm hover:border-white/[0.1] transition-colors"><span className="text-6xl font-bold text-white/[0.04] absolute top-4 right-6">{item.step}</span><h3 className="text-xl font-semibold mb-3">{item.title}</h3><p className="text-gray-400">{item.desc}</p></div>))}
           </div>
 
 
@@ -289,7 +289,8 @@ export default function Home() {
 <script>
   DrapixAI.init({
     apiKey: 'your-api-key',
-    productId: 'your-product-id',
+    productId: 'confirmed-product-id',
+    quality: 'standard',
     garmentType: 'upper'
   });
 </script>`}
@@ -302,9 +303,9 @@ export default function Home() {
       {/* ENTERPRISE FEATURES */}
       <section className="py-24 px-6 relative z-10">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16"><h2 className="text-4xl font-bold mb-4">Built for Enterprise Commerce</h2><p className="text-xl text-gray-400">Infrastructure-grade AI that scales with your revenue.</p></div>
+          <div className="text-center mb-16"><h2 className="text-4xl font-bold mb-4">Built for Controlled Commerce Rollout</h2><p className="text-xl text-gray-400">The current launch stack is focused on reliable Standard upper-body try-on, cache readiness, and reviewable quality signals.</p></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[{ icon: Globe, title: 'Universal Integration', desc: 'Works with Shopify, WooCommerce, Magento, custom builds.' }, { icon: Gauge, title: 'Sub-10s AI Rendering', desc: 'GPU accelerated pipeline with CDN delivery.' }, { icon: Shield, title: 'Enterprise Security', desc: 'Domain validation, API keys, GDPR compliant, automatic image deletion.' }, { icon: BarChart3, title: 'Revenue Analytics', desc: 'Track conversion uplift and AI-driven sales impact.' }, { icon: Code2, title: 'Developer First', desc: 'Clean APIs, TypeScript SDK, full documentation.' }, { icon: Eye, title: 'Real-Time Monitoring', desc: 'Usage dashboards, quota tracking, webhook support.' }].map((f, i) => (<div key={i} className="p-6 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm hover:border-cyan-500/20 hover:-translate-y-1 transition-all duration-300"><div className="w-12 h-12 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center justify-center mb-4"><f.icon className="w-6 h-6 text-white" /></div><h3 className="text-lg font-semibold mb-2">{f.title}</h3><p className="text-gray-400 text-sm">{f.desc}</p></div>))}
+            {[{ icon: Globe, title: 'Storefront SDK', desc: 'Works with confirmed product ids and cached garment assets on modern commerce storefronts.' }, { icon: Gauge, title: '10-12s Latency Target', desc: 'A100-backed Standard generation is tuned for warm shopper requests without trading away realism.' }, { icon: Shield, title: 'Launch Controls', desc: 'Domain validation, API keys, garment approval, cache readiness, and admin review before scale.' }, { icon: BarChart3, title: 'Quality Signals', desc: 'Track quality score, latency, warnings, approvals, and rejected examples for review.' }, { icon: Code2, title: 'Developer First', desc: 'Clean APIs, JavaScript SDK, and documented onboarding requirements.' }, { icon: Eye, title: 'Operational Monitoring', desc: 'Usage dashboards, quota tracking, readiness checks, and cache regeneration workflows.' }].map((f, i) => (<div key={i} className="p-6 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm hover:border-cyan-500/20 hover:-translate-y-1 transition-all duration-300"><div className="w-12 h-12 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center justify-center mb-4"><f.icon className="w-6 h-6 text-white" /></div><h3 className="text-lg font-semibold mb-2">{f.title}</h3><p className="text-gray-400 text-sm">{f.desc}</p></div>))}
           </div>
         </div>
       </section>
@@ -328,8 +329,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto">
           <h2 className="text-4xl font-bold text-center mb-16">Why Teams Choose Us</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="p-8 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 backdrop-blur-sm"><h3 className="text-2xl font-bold mb-6 text-cyan-400">DrapixAI</h3><ul className="space-y-4">{['No platform dependency', '5-minute setup', 'Transparent pricing', 'Developer-friendly APIs', 'Production-ready infrastructure', 'Session-based (no image storage)'].map((item, i) => (<li key={i} className="flex items-center gap-3"><Check className="w-5 h-5 text-cyan-400 flex-shrink-0" /><span>{item}</span></li>))}</ul></div>
-            <div className="p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm"><h3 className="text-2xl font-bold mb-6 text-gray-400">Traditional Solutions</h3><ul className="space-y-4">{['Requires specific platform', 'Weeks of integration', 'Hidden fees', 'Complex APIs', 'Self-hosted required', 'Stores customer photos'].map((item, i) => (<li key={i} className="flex items-center gap-3"><X className="w-5 h-5 text-gray-600 flex-shrink-0" /><span className="text-gray-400">{item}</span></li>))}</ul></div>
+            <div className="p-8 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 backdrop-blur-sm"><h3 className="text-2xl font-bold mb-6 text-cyan-400">DrapixAI</h3><ul className="space-y-4">{['Upper-body scope with clear launch rules', 'Confirmed product-to-garment mapping', 'Cached garment assets for repeatable quality', 'Quality, latency, and warning metadata', 'Admin review before wider rollout', 'Developer-friendly SDK and APIs'].map((item, i) => (<li key={i} className="flex items-center gap-3"><Check className="w-5 h-5 text-cyan-400 flex-shrink-0" /><span>{item}</span></li>))}</ul></div>
+            <div className="p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm"><h3 className="text-2xl font-bold mb-6 text-gray-400">Uncontrolled Try-On Rollouts</h3><ul className="space-y-4">{['Unclear supported garment scope', 'Raw product images sent at generation time', 'No cache readiness gate', 'No quality or warning headers', 'No approval workflow', 'Harder to debug brand-specific failures'].map((item, i) => (<li key={i} className="flex items-center gap-3"><X className="w-5 h-5 text-gray-600 flex-shrink-0" /><span className="text-gray-400">{item}</span></li>))}</ul></div>
           </div>
         </div>
       </section>
@@ -453,8 +454,8 @@ export default function Home() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[100px]" />
 
         <div className="max-w-3xl mx-auto text-center relative z-10">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">Ready to Increase Your Conversion Rate?</h2>
-          <p className="text-xl text-gray-400 mb-8">Start with a 300 try-on trial, validate quality on your own products, then roll out with the plan that fits your traffic.</p>
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">Ready to Validate Upper-Body Try-On?</h2>
+          <p className="text-xl text-gray-400 mb-8">Start with a 300 try-on trial, validate Standard quality on your own upper-body products, then roll out only when the workflow meets your brand bar.</p>
 
           <Link href={hasDashboardAccess ? '/dashboard' : '/auth/register'} className="inline-block px-10 py-4 text-xl font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(6,182,212,0.15)]">
           {hasDashboardAccess ? 'Open Dashboard' : 'Start Free Trial'}
@@ -479,7 +480,7 @@ export default function Home() {
               <span className="text-xl font-bold">DrapixAI</span>
             </div>
 
-            <p className="text-gray-500 text-sm">AI Revenue Infrastructure for Fashion Commerce</p>
+            <p className="text-gray-500 text-sm">Standard upper-body AI try-on infrastructure for fashion commerce</p>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-8 pt-8 border-t border-white/[0.06]">

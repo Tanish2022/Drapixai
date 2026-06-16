@@ -17,6 +17,32 @@ const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
 const CACHE_VERSION = process.env.DRAPIXAI_GARMENT_CACHE_VERSION || 'v3-1024x1365';
 const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const ADMIN_BYPASS = (process.env.DRAPIXAI_CACHE_REGEN_ADMIN_BYPASS || '0') === '1';
+const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
+const getAiHeaders = (headers: Record<string, string> = {}) => ({
+  ...headers,
+  ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
+});
+
+const isDatabaseConnectionError = (error: unknown) => {
+  const value = error as { code?: string; message?: string };
+  const message = String(value?.message || '');
+  return value?.code === 'P1001'
+    || message.includes("Can't reach database server")
+    || message.includes('ECONNREFUSED')
+    || message.includes('Connection refused');
+};
+
+const printDatabaseHelp = (error: unknown) => {
+  const value = error as { message?: string };
+  console.error('Cache regeneration cannot reach the DrapixAI database.');
+  console.error('Start Postgres before running this command, then retry:');
+  console.error('  docker-compose up -d postgres redis minio');
+  console.error('  npm --prefix apps/api run prisma:generate');
+  console.error('  npm --prefix apps/api run garments:regenerate-cache -- --dry-run');
+  console.error('');
+  console.error(`DATABASE_URL=${process.env.DATABASE_URL || '(not set)'}`);
+  console.error(`Original error: ${String(value?.message || error).split('\n')[0]}`);
+};
 
 const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
   if (!storedUrl) return null;
@@ -57,13 +83,23 @@ const main = async () => {
   const onlyUserIdArg = process.argv.find((arg) => arg.startsWith('--user-id='));
   const onlyUserId = onlyUserIdArg ? Number(onlyUserIdArg.split('=')[1]) : null;
 
-  const garments = await prisma.garment.findMany({
-    where: {
-      ...(onlyUserId ? { userId: onlyUserId } : {}),
-      originalUrl: { not: null },
-    },
-    orderBy: [{ userId: 'asc' }, { garmentId: 'asc' }],
-  });
+  let garments;
+  try {
+    garments = await prisma.garment.findMany({
+      where: {
+        ...(onlyUserId ? { userId: onlyUserId } : {}),
+        originalUrl: { not: null },
+      },
+      orderBy: [{ userId: 'asc' }, { garmentId: 'asc' }],
+    });
+  } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      printDatabaseHelp(error);
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
 
   const summary = {
     cacheVersion: CACHE_VERSION,
@@ -108,10 +144,10 @@ const main = async () => {
     try {
       const response = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
-        headers: {
+        headers: getAiHeaders({
           'Content-Type': 'application/json',
           ...(ADMIN_BYPASS && ADMIN_TOKEN ? { 'x-admin-token': ADMIN_TOKEN } : {}),
-        },
+        }),
         body: JSON.stringify({
           cloth_image_base64: originalBytes.toString('base64'),
           brand_id: String(garment.userId),

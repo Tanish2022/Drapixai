@@ -23,6 +23,9 @@ print("" if value is None else value)' "$field"
 EMAIL="${REGISTER_EMAIL:-deploy-smoke-$(date +%s)@example.com}"
 PASSWORD="${REGISTER_PASSWORD:-ChangeMe123!}"
 DOMAIN="${DOMAIN:-staging.drapixai.com}"
+ORIGIN_URL="${ORIGIN_URL:-https://${DOMAIN}}"
+GARMENT_ID="${GARMENT_ID:-smoke-upper-garment}"
+PRODUCT_ID="${PRODUCT_ID:-smoke-upper-product}"
 OUTPUT_FILE="${OUTPUT_FILE:-/tmp/drapixai-smoke.png}"
 
 echo "==> registering ${EMAIL}"
@@ -45,17 +48,52 @@ curl --fail --silent --show-error \
   -X POST "${API_URL%/}/sdk/validate" \
   -H "Authorization: Bearer ${api_key}" \
   -H "Content-Type: application/json" \
+  -H "Origin: ${ORIGIN_URL}" \
   -d "{\"domain\":\"${DOMAIN}\"}"
 echo
 
 if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
-  echo "==> running direct try-on"
+  echo "==> uploading garment and building cached try-on asset"
+  garment_json="$(curl --fail --silent --show-error \
+    -X POST "${API_URL%/}/sdk/garments" \
+    -H "Authorization: Bearer ${api_key}" \
+    -H "Origin: ${ORIGIN_URL}" \
+    -F "cloth_image=@${CLOTH_IMAGE}" \
+    -F "garment_id=${GARMENT_ID}" \
+    -F "product_name=DrapixAI Smoke Upper Garment" \
+    -F "category=shirt")"
+
+  cache_key="$(printf '%s' "$garment_json" | json_field cacheKey)"
+  if [[ -z "$cache_key" ]]; then
+    echo "Garment upload succeeded but cacheKey was missing." >&2
+    echo "$garment_json" >&2
+    exit 1
+  fi
+
+  echo "==> syncing and confirming product mapping"
+  curl --fail --silent --show-error \
+    -X POST "${API_URL%/}/sdk/catalog/sync" \
+    -H "Authorization: Bearer ${api_key}" \
+    -H "Content-Type: application/json" \
+    -H "Origin: ${ORIGIN_URL}" \
+    -d "{\"items\":[{\"productId\":\"${PRODUCT_ID}\",\"productName\":\"DrapixAI Smoke Product\",\"category\":\"shirt\",\"garmentType\":\"upper\"}]}" >/dev/null
+
+  curl --fail --silent --show-error \
+    -X POST "${API_URL%/}/sdk/matches/${GARMENT_ID}/confirm" \
+    -H "Authorization: Bearer ${api_key}" \
+    -H "Content-Type: application/json" \
+    -H "Origin: ${ORIGIN_URL}" \
+    -d "{\"productId\":\"${PRODUCT_ID}\"}" >/dev/null
+
+  echo "==> running SDK try-on through confirmed cached product mapping"
   curl --fail --silent --show-error \
     -X POST "${API_URL%/}/sdk/tryon" \
     -H "Authorization: Bearer ${api_key}" \
+    -H "Origin: ${ORIGIN_URL}" \
     -F "person_image=@${PERSON_IMAGE}" \
-    -F "cloth_image=@${CLOTH_IMAGE}" \
+    -F "productId=${PRODUCT_ID}" \
     -F "garment_type=upper" \
+    -F "quality=standard" \
     -o "$OUTPUT_FILE"
   test -s "$OUTPUT_FILE"
   echo "Saved try-on output to $OUTPUT_FILE"
@@ -64,4 +102,3 @@ else
 fi
 
 echo "Smoke test completed successfully."
-

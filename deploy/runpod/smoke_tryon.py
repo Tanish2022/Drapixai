@@ -28,8 +28,9 @@ def main() -> None:
     result = pipeline.run_tryon(
         person,
         cloth,
-        inference_steps=settings.enhanced_inference_steps,
-        guidance_scale=settings.enhanced_guidance_scale,
+        inference_steps=settings.inference_steps,
+        guidance_scale=settings.guidance_scale,
+        quality="standard",
     )
 
     output_path = base / "result_direct.png"

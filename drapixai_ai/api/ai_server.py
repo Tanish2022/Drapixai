@@ -9,8 +9,9 @@ import uuid
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Header
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from PIL import Image
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.queue.redis_queue import get_redis
@@ -60,6 +61,21 @@ def _decode_base64_image(value: Optional[str], field_name: str) -> bytes:
         raise HTTPException(status_code=400, detail=f"INVALID_{field_name.upper()}")
 
 
+def _image_size(image_bytes: bytes) -> tuple[int, int]:
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            return image.size
+    except Exception:
+        return (0, 0)
+
+
+def _quality_mode(value: Optional[str]) -> str:
+    requested = (value or "standard").strip().lower()
+    if requested != "standard":
+        raise HTTPException(status_code=400, detail="INVALID_QUALITY")
+    return "standard"
+
+
 def _model_ready() -> bool:
     engine = settings.tryon_engine.strip().lower().replace("-", "_")
     if engine not in {"catvton", "cat_vton"}:
@@ -77,6 +93,22 @@ def _is_admin(token: Optional[str]) -> bool:
 async def request_logger(request, call_next):
     request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
     request.state.request_id = request_id
+    if request.url.path.startswith("/ai/") and settings.ai_service_token:
+        token = request.headers.get("x-drapixai-service-token", "")
+        if token != settings.ai_service_token:
+            logger.warning(
+                "ai_service_token_rejected",
+                extra={
+                    "path": request.url.path,
+                    "method": request.method,
+                    "request_id": request_id,
+                },
+            )
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "AI_SERVICE_TOKEN_REQUIRED"},
+                headers={"x-request-id": request_id},
+            )
     start = time.time()
     response = await call_next(request)
     duration_ms = int((time.time() - start) * 1000)
@@ -118,13 +150,16 @@ async def tryon(
     garment_type: Optional[str] = Form(default=None),
     cloth_cache_key: Optional[str] = Form(default=None),
 ):
+    quality_mode = _quality_mode(quality)
     person_bytes = await person_image.read()
     cloth_bytes = b""
+    garment_source = "direct_upload"
     if cloth_cache_key:
         hit = garment_cache.get(cloth_cache_key)
         if not hit:
             raise HTTPException(status_code=404, detail="GARMENT_CACHE_MISS")
         cloth_bytes = hit.image_bytes
+        garment_source = "cache"
     elif cloth_image is not None:
         cloth_bytes = await cloth_image.read()
     else:
@@ -146,7 +181,7 @@ async def tryon(
             user_id=user_id,
             person_b64=base64.b64encode(person_bytes).decode("utf-8"),
             cloth_b64=base64.b64encode(cloth_bytes).decode("utf-8"),
-            quality=quality,
+            quality=quality_mode,
             request_id=getattr(request.state, "request_id", None),
             garment_type=garment_type,
         )
@@ -180,12 +215,15 @@ async def tryon(
         "x-drapixai-warnings": ",".join(result.get("warnings", [])),
         "x-drapixai-processing-ms": str(result.get("processing_ms", "")),
         "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
+        "x-drapixai-quality-mode": quality_mode,
+        "x-drapixai-garment-source": garment_source,
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
 
 @app.post("/ai/tryon/base64")
 async def tryon_base64(payload: TryOnBase64Request, request: Request):
+    quality_mode = _quality_mode(payload.quality)
     if payload.garment_type and payload.garment_type.lower() != "upper":
         raise HTTPException(status_code=400, detail="UPPER_BODY_ONLY")
 
@@ -199,6 +237,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
     cloth_b64 = payload.cloth_image_base64 or ""
+    garment_source = "direct_upload"
     if payload.cloth_cache_key:
         hit = garment_cache.get(payload.cloth_cache_key)
         if not hit:
@@ -206,6 +245,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         if len(hit.image_bytes) > settings.request_max_bytes:
             raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
         cloth_b64 = base64.b64encode(hit.image_bytes).decode("utf-8")
+        garment_source = "cache"
     else:
         cloth_bytes = _decode_base64_image(payload.cloth_image_base64, "cloth_image")
         if len(cloth_bytes) > settings.request_max_bytes:
@@ -217,7 +257,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
             user_id=payload.user_id,
             person_b64=payload.person_image_base64,
             cloth_b64=cloth_b64,
-            quality=payload.quality,
+            quality=quality_mode,
             request_id=getattr(request.state, "request_id", None),
             garment_type=payload.garment_type,
         )
@@ -251,6 +291,8 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         "x-drapixai-warnings": ",".join(result.get("warnings", [])),
         "x-drapixai-processing-ms": str(result.get("processing_ms", "")),
         "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
+        "x-drapixai-quality-mode": quality_mode,
+        "x-drapixai-garment-source": garment_source,
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
@@ -321,7 +363,14 @@ async def garment_cache_get(cache_key: str):
     hit = garment_cache.get(cache_key)
     if not hit:
         raise HTTPException(status_code=404, detail="GARMENT_CACHE_MISS")
-    return Response(content=hit.image_bytes, media_type="image/png")
+    width, height = _image_size(hit.image_bytes)
+    headers = {
+        "x-drapixai-cache-key": cache_key,
+        "x-drapixai-cache-version": cache_key.split(":", 1)[0] if ":" in cache_key else "",
+        "x-drapixai-cache-width": str(width),
+        "x-drapixai-cache-height": str(height),
+    }
+    return Response(content=hit.image_bytes, media_type="image/png", headers=headers)
 
 
 @app.get("/ai/garment/cache/health")
