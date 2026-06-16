@@ -27,6 +27,7 @@ ORIGIN_URL="${ORIGIN_URL:-https://${DOMAIN}}"
 GARMENT_ID="${GARMENT_ID:-smoke-upper-garment}"
 PRODUCT_ID="${PRODUCT_ID:-smoke-upper-product}"
 OUTPUT_FILE="${OUTPUT_FILE:-/tmp/drapixai-smoke.png}"
+HEADERS_FILE="${HEADERS_FILE:-/tmp/drapixai-smoke.headers}"
 
 echo "==> registering ${EMAIL}"
 register_json="$(curl --fail --silent --show-error \
@@ -94,9 +95,12 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -F "productId=${PRODUCT_ID}" \
     -F "garment_type=upper" \
     -F "quality=standard" \
+    -D "$HEADERS_FILE" \
     -o "$OUTPUT_FILE"
   test -s "$OUTPUT_FILE"
   echo "Saved try-on output to $OUTPUT_FILE"
+  echo "Saved response headers to $HEADERS_FILE"
+  grep -iE 'x-drapixai-(quality-score|latency-ms|processing-ms|warnings|candidate-count|garment-source|garment-cache-status|quality-mode)' "$HEADERS_FILE" || true
 else
   echo "Skipping try-on because PERSON_IMAGE and CLOTH_IMAGE were not provided."
 fi

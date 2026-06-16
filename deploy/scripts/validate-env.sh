@@ -137,11 +137,15 @@ case "$profile" in
       DRAPIXAI_GARMENT_CACHE_DIR
       DRAPIXAI_ADMIN_TOKEN
       DRAPIXAI_AI_SERVICE_TOKEN
-      DRAPIXAI_S3_BUCKET
-      DRAPIXAI_S3_REGION
-      DRAPIXAI_S3_ACCESS_KEY_ID
-      DRAPIXAI_S3_SECRET_ACCESS_KEY
     )
+    if [[ "${DRAPIXAI_GARMENT_CACHE_BACKEND:-local}" == "s3" ]]; then
+      required_vars+=(
+        DRAPIXAI_S3_BUCKET
+        DRAPIXAI_S3_REGION
+        DRAPIXAI_S3_ACCESS_KEY_ID
+        DRAPIXAI_S3_SECRET_ACCESS_KEY
+      )
+    fi
     ;;
   *)
     usage

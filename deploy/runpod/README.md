@@ -1,0 +1,139 @@
+# DrapixAI RunPod Launch Setup
+
+Use these scripts on Ubuntu GPU pods. They are designed for:
+
+- `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
+- A100 80GB preferred
+- Standard-only CatVTON generation
+- Garment cache `v3-1024x1365`
+- Final output `1024x1365`
+
+## Fresh Pod One-Command Setup
+
+```bash
+cd /workspace
+git clone --branch codex/catvton-runpod-clean https://github.com/Tanish2022/Drapixai.git drapixai
+cd /workspace/drapixai
+bash deploy/runpod/prepare-runpod-for-launch.sh
+```
+
+This prepares:
+
+- Python 3.11 path shim if the image default `python` points elsewhere
+- AI env with generated admin/service tokens
+- CatVTON models
+- Redis
+- AI API on `http://127.0.0.1:8080`
+- GPU worker
+- PostgreSQL
+- MinIO S3-compatible local storage
+- Node API/SDK backend on `http://127.0.0.1:8000`
+
+## Reusing A Pod With Existing Models
+
+```bash
+cd /workspace/drapixai
+DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD=1 bash deploy/runpod/prepare-runpod-for-launch.sh
+```
+
+## Run Direct + SDK Try-On Test
+
+Put the exact review images here:
+
+```bash
+/workspace/drapixai/runtime/test_assets/person.jpg
+/workspace/drapixai/runtime/test_assets/garment.jpg
+```
+
+Then run:
+
+```bash
+cd /workspace/drapixai
+bash deploy/runpod/run-launch-tryon-test.sh
+```
+
+Outputs are saved to:
+
+```bash
+/workspace/drapixai/runtime/launch_tryon_test/direct_standard.png
+/workspace/drapixai/runtime/launch_tryon_test/sdk_standard.png
+/workspace/drapixai/runtime/launch_tryon_test/summary.json
+```
+
+The summary compares:
+
+- direct quality score
+- SDK quality score
+- direct latency
+- SDK latency
+- candidate count
+- warnings
+- garment cache source/status
+
+The script fails if SDK quality is more than `0.03` below direct quality.
+
+## Health Checks
+
+```bash
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/ready
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/ready
+pgrep -af "redis-server|uvicorn|gpu_worker|rq worker|node .*dist/server.js|minio"
+nvidia-smi
+```
+
+## Logs
+
+```bash
+tail -n 200 /workspace/drapixai/runtime/logs/start-all.log
+tail -n 200 /workspace/drapixai/runtime/logs/api.log
+tail -n 200 /workspace/drapixai/runtime/logs/minio.log
+```
+
+## Common Fixes
+
+If `python` is not Python 3.11:
+
+```bash
+mkdir -p /tmp/drapixai-python311
+ln -sf /usr/bin/python3.11 /tmp/drapixai-python311/python
+export PATH=/tmp/drapixai-python311:$PATH
+```
+
+If Redis is down:
+
+```bash
+redis-server --daemonize yes
+```
+
+If the API stack is missing:
+
+```bash
+cd /workspace/drapixai
+bash deploy/runpod/setup-sdk-api-stack.sh
+```
+
+If only the AI stack is missing:
+
+```bash
+cd /workspace/drapixai
+DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD=1 bash deploy/runpod/setup-fresh-runpod.sh
+```
+
+If port `8080` or `8000` is busy:
+
+```bash
+fuser -k 8080/tcp || true
+fuser -k 8000/tcp || true
+```
+
+## Quality Rules
+
+For public-launch validation, accept only Standard mode:
+
+- `DRAPIXAI_CANDIDATE_COUNT=1`
+- `DRAPIXAI_INFERENCE_STEPS=22`
+- `DRAPIXAI_GUIDANCE_SCALE=2.5`
+- direct and SDK outputs should both preserve garment color, sleeve style, pose, hem, and lighting
+- direct and SDK quality scores should be close; investigate if SDK is more than `0.03` lower

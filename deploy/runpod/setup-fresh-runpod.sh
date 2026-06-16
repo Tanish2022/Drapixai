@@ -34,12 +34,12 @@ print_troubleshooting() {
   printf '6. Port 8080: ss -ltnp | grep %s\n' "$PORT"
   printf '7. Redis: redis-cli ping\n'
   printf '\nCommon fixes:\n'
-  printf '- If git clone failed, check network access and REPO_URL.\n'
-  printf '- If apt failed, run: apt-get update\n'
-  printf '- If pip/model download failed, check disk space and internet access.\n'
-  printf '- If preflight says model files are missing, rerun with DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD=0.\n'
-  printf '- If port %s is busy, run: fuser -k %s/tcp\n' "$PORT" "$PORT"
-  printf '- If Redis is down, run: redis-server --daemonize yes\n'
+  printf '%s\n' '- If git clone failed, check network access and REPO_URL.'
+  printf '%s\n' '- If apt failed, run: apt-get update'
+  printf '%s\n' '- If pip/model download failed, check disk space and internet access.'
+  printf '%s\n' '- If preflight says model files are missing, rerun with DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD=0.'
+  printf -- '- If port %s is busy, run: fuser -k %s/tcp\n' "$PORT" "$PORT"
+  printf '%s\n' '- If Redis is down, run: redis-server --daemonize yes'
   printf '\nRecent system context:\n'
   nvidia-smi || true
   df -h /workspace || true
@@ -177,6 +177,18 @@ ensure_env_file() {
   if [[ -z "$current_token" || "$current_token" == "replace-with-a-long-random-secret" ]]; then
     upsert_env "DRAPIXAI_ADMIN_TOKEN" "$(generate_secret)"
   fi
+
+  local current_ai_token
+  current_ai_token="$(grep '^DRAPIXAI_AI_SERVICE_TOKEN=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+  if [[ -z "$current_ai_token" || "$current_ai_token" == replace-with-* ]]; then
+    upsert_env "DRAPIXAI_AI_SERVICE_TOKEN" "$(generate_secret)"
+  fi
+
+  upsert_env "DRAPIXAI_GARMENT_CACHE_BACKEND" "${DRAPIXAI_GARMENT_CACHE_BACKEND:-local}"
+  upsert_env "DRAPIXAI_S3_BUCKET" "${DRAPIXAI_S3_BUCKET:-drapixai-runpod-local}"
+  upsert_env "DRAPIXAI_S3_REGION" "${DRAPIXAI_S3_REGION:-us-east-1}"
+  upsert_env "DRAPIXAI_S3_ACCESS_KEY_ID" "${DRAPIXAI_S3_ACCESS_KEY_ID:-local-runpod}"
+  upsert_env "DRAPIXAI_S3_SECRET_ACCESS_KEY" "${DRAPIXAI_S3_SECRET_ACCESS_KEY:-local-runpod}"
 }
 
 load_env() {
