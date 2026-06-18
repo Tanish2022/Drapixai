@@ -30,10 +30,25 @@ OUTPUT_FILE="${OUTPUT_FILE:-/tmp/drapixai-smoke.png}"
 HEADERS_FILE="${HEADERS_FILE:-/tmp/drapixai-smoke.headers}"
 
 echo "==> registering ${EMAIL}"
+otp="${REGISTER_OTP:-}"
+if [[ -z "$otp" ]]; then
+  otp_json="$(curl --fail --silent --show-error \
+    -X POST "${API_URL%/}/auth/register/request-otp" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"${EMAIL}\"}")"
+  otp="$(printf '%s' "$otp_json" | json_field debugOtp)"
+fi
+
+if [[ -z "$otp" ]]; then
+  echo "Registration OTP was not provided and API did not return debugOtp." >&2
+  echo "Set REGISTER_OTP for production-like smoke runs." >&2
+  exit 1
+fi
+
 register_json="$(curl --fail --silent --show-error \
   -X POST "${API_URL%/}/auth/register" \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\",\"companyName\":\"DrapixAI Smoke\"}")"
+  -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\",\"companyName\":\"DrapixAI Smoke\",\"otp\":\"${otp}\"}")"
 
 api_key="$(printf '%s' "$register_json" | json_field apiKey)"
 token="$(printf '%s' "$register_json" | json_field token)"
