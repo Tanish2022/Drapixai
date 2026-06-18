@@ -96,7 +96,7 @@ expected = {
     "python-multipart": "0.0.9",
     "requests": "2.32.3",
     "boto3": "1.34.131",
-    "accelerate": "0.31.0",
+    "accelerate": None,
     "transformers": "4.46.3",
     "diffusers": "0.31.0",
     "safetensors": None,
@@ -136,6 +136,14 @@ try:
         errors.append(f"huggingface_hub: found {hub_version}, expected >=0.34.0,<2.0")
 except metadata.PackageNotFoundError:
     errors.append("huggingface_hub: missing, expected >=0.34.0,<2.0")
+
+try:
+    accelerate_version = metadata.version("accelerate")
+    print(f"accelerate={accelerate_version}")
+    if not ((1, 1, 0) <= version_tuple(accelerate_version) < (2, 0)):
+        errors.append(f"accelerate: found {accelerate_version}, expected >=1.1.0,<2.0")
+except metadata.PackageNotFoundError:
+    errors.append("accelerate: missing, expected >=1.1.0,<2.0")
 
 try:
     peft_version = metadata.version("peft")
