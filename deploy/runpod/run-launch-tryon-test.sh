@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+
 APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 ASSET_DIR="${DRAPIXAI_TEST_ASSET_DIR:-$APP_ROOT/runtime/test_assets}"
 RESULT_DIR="${DRAPIXAI_TEST_RESULT_DIR:-$APP_ROOT/runtime/launch_tryon_test}"
