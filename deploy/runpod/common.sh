@@ -3,6 +3,19 @@ set -euo pipefail
 
 export DRAPIXAI_APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 
+if ! python - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)
+PY
+then
+  if command -v python3.11 >/dev/null 2>&1; then
+    DRAPIXAI_PYTHON_SHIM_DIR="${DRAPIXAI_PYTHON_SHIM_DIR:-/tmp/drapixai-python311}"
+    mkdir -p "$DRAPIXAI_PYTHON_SHIM_DIR"
+    ln -sf "$(command -v python3.11)" "$DRAPIXAI_PYTHON_SHIM_DIR/python"
+    export PATH="$DRAPIXAI_PYTHON_SHIM_DIR:$PATH"
+  fi
+fi
+
 DRAPIXAI_AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$DRAPIXAI_APP_ROOT/deploy/env/ai.production.env}"
 if [[ -f "$DRAPIXAI_AI_ENV_FILE" ]]; then
   set -a
