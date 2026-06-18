@@ -2,6 +2,15 @@
 set -euo pipefail
 
 export DRAPIXAI_APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
+
+DRAPIXAI_AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$DRAPIXAI_APP_ROOT/deploy/env/ai.production.env}"
+if [[ -f "$DRAPIXAI_AI_ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$DRAPIXAI_AI_ENV_FILE"
+  set +a
+fi
+
 export DRAPIXAI_TRYON_ENGINE="${DRAPIXAI_TRYON_ENGINE:-catvton}"
 export DRAPIXAI_CATVTON_MODEL_DIR="${DRAPIXAI_CATVTON_MODEL_DIR:-$DRAPIXAI_APP_ROOT/models/catvton}"
 export DRAPIXAI_MODEL_DIR="${DRAPIXAI_MODEL_DIR:-$DRAPIXAI_CATVTON_MODEL_DIR}"
