@@ -11,6 +11,7 @@ PERSON_IMAGE="${PERSON_IMAGE:-$ASSET_DIR/person.jpg}"
 CLOTH_IMAGE="${CLOTH_IMAGE:-$ASSET_DIR/garment.jpg}"
 API_URL="${API_URL:-http://127.0.0.1:8000}"
 AI_URL="${AI_URL:-http://127.0.0.1:8080}"
+PYTHON_BIN="${DRAPIXAI_PYTHON_BIN:-python}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -35,6 +36,25 @@ EOF
   fi
 }
 
+ensure_python_runtime() {
+  if "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)
+PY
+  then
+    return
+  fi
+
+  if command -v python3.11 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3.11)"
+    export PYTHON_BIN
+    return
+  fi
+
+  echo "Python 3.11 is required for DrapixAI CatVTON tests." >&2
+  exit 1
+}
+
 check_services() {
   log "Checking AI and API readiness"
   curl -fsS "${AI_URL%/}/health" >/dev/null
@@ -53,21 +73,21 @@ run_direct_tryon() {
     cp "$CLOTH_IMAGE" "$ASSET_DIR/garment.jpg"
   fi
   local started ended
-  started="$(python3 - <<'PY'
+  started="$("$PYTHON_BIN" - <<'PY'
 import time
 print(time.time())
 PY
 )"
   cd "$APP_ROOT"
-  python deploy/runpod/smoke_tryon.py
-  ended="$(python3 - <<'PY'
+  "$PYTHON_BIN" deploy/runpod/smoke_tryon.py
+  ended="$("$PYTHON_BIN" - <<'PY'
 import time
 print(time.time())
 PY
 )"
   cp "$ASSET_DIR/result_direct.png" "$RESULT_DIR/direct_standard.png"
   cp "$ASSET_DIR/result_direct.json" "$RESULT_DIR/direct_standard.json"
-  python3 - "$started" "$ended" "$RESULT_DIR/direct_standard.json" <<'PY'
+  "$PYTHON_BIN" - "$started" "$ended" "$RESULT_DIR/direct_standard.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -102,7 +122,7 @@ run_sdk_tryon() {
 
 write_summary() {
   log "Writing summary"
-  python3 - "$RESULT_DIR" <<'PY'
+  "$PYTHON_BIN" - "$RESULT_DIR" <<'PY'
 import json
 import re
 import sys
@@ -163,6 +183,7 @@ PY
 
 main() {
   mkdir -p "$ASSET_DIR" "$RESULT_DIR"
+  ensure_python_runtime
   require_file "$PERSON_IMAGE" "person image"
   require_file "$CLOTH_IMAGE" "garment image"
   check_services
