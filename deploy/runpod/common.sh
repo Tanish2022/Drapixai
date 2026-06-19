@@ -2,6 +2,7 @@
 set -euo pipefail
 
 export DRAPIXAI_APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
+export DRAPIXAI_VENV="${DRAPIXAI_VENV:-$DRAPIXAI_APP_ROOT/.venv}"
 
 if ! python - <<'PY' >/dev/null 2>&1
 import sys
@@ -14,6 +15,11 @@ then
     ln -sf "$(command -v python3.11)" "$DRAPIXAI_PYTHON_SHIM_DIR/python"
     export PATH="$DRAPIXAI_PYTHON_SHIM_DIR:$PATH"
   fi
+fi
+
+if [[ -x "$DRAPIXAI_VENV/bin/python" ]]; then
+  export VIRTUAL_ENV="$DRAPIXAI_VENV"
+  export PATH="$DRAPIXAI_VENV/bin:$PATH"
 fi
 
 DRAPIXAI_AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$DRAPIXAI_APP_ROOT/deploy/env/ai.production.env}"

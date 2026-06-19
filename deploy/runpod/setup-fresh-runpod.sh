@@ -3,13 +3,14 @@ set -Eeuo pipefail
 
 APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 REPO_URL="${DRAPIXAI_REPO_URL:-https://github.com/Tanish2022/Drapixai.git}"
-REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-main}"
+REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-}"
 ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.production.env}"
 PORT="${PORT:-8080}"
 RUN_START="${DRAPIXAI_SETUP_START_SERVICES:-1}"
 RUN_SMOKE="${DRAPIXAI_SETUP_RUN_SMOKE:-0}"
 SKIP_MODEL_DOWNLOAD="${DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD:-0}"
 LOG_FILE="/tmp/drapixai-fresh-runpod-setup.log"
+VENV_DIR="${DRAPIXAI_VENV:-$APP_ROOT/.venv}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -79,6 +80,9 @@ install_system_packages() {
     libxext6 \
     libxrender1 \
     redis-server
+  if command -v python3.11 >/dev/null 2>&1; then
+    "${APT_PREFIX[@]}" apt-get install -y --no-install-recommends python3.11-venv || true
+  fi
 }
 
 sync_repo() {
@@ -86,6 +90,9 @@ sync_repo() {
   mkdir -p "$(dirname "$APP_ROOT")"
   if [[ -d "$APP_ROOT/.git" ]]; then
     cd "$APP_ROOT"
+    if [[ -z "$REPO_BRANCH" ]]; then
+      REPO_BRANCH="$(git branch --show-current)"
+    fi
     git fetch origin "$REPO_BRANCH"
     git checkout "$REPO_BRANCH"
     git pull --ff-only origin "$REPO_BRANCH"
@@ -95,9 +102,26 @@ sync_repo() {
       log "Existing non-git path found. Moving it to $backup_path"
       mv "$APP_ROOT" "$backup_path"
     fi
+    REPO_BRANCH="${REPO_BRANCH:-main}"
     git clone --branch "$REPO_BRANCH" "$REPO_URL" "$APP_ROOT"
     cd "$APP_ROOT"
   fi
+}
+
+ensure_python_venv() {
+  log "Preparing Python 3.11 virtual environment"
+  cd "$APP_ROOT"
+  if ! command -v python3.11 >/dev/null 2>&1; then
+    echo "python3.11 is required for the DrapixAI CatVTON stack." >&2
+    exit 1
+  fi
+  if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    python3.11 -m venv "$VENV_DIR"
+  fi
+  # shellcheck disable=SC1091
+  source "$VENV_DIR/bin/activate"
+  export DRAPIXAI_VENV="$VENV_DIR"
+  python -m pip install --upgrade pip setuptools wheel
 }
 
 generate_secret() {
@@ -344,6 +368,7 @@ main() {
   create_runtime_dirs
   ensure_env_file
   load_env
+  ensure_python_venv
   install_python_stack
   load_env
   download_models_if_needed
