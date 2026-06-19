@@ -129,6 +129,7 @@ def analyze_garment(image: Image.Image) -> GarmentAnalysis:
     foreground_ratio = float(foreground.mean())
     bbox_ratio = _foreground_bbox_ratio(foreground)
     background_ratio = 1.0 - foreground_ratio
+    has_alpha_cutout = image.mode in ("RGBA", "LA") and float((alpha <= 16).mean()) >= 0.02
     pixels = arr[:, :, :3][foreground] if foreground.any() else arr[:, :, :3].reshape(-1, 3)
     dominant = tuple(int(v) for v in pixels.mean(axis=0))
 
@@ -137,9 +138,9 @@ def analyze_garment(image: Image.Image) -> GarmentAnalysis:
         warnings.append("GARMENT_LOW_RESOLUTION")
     if foreground_ratio < 0.08:
         warnings.append("GARMENT_SUBJECT_TOO_SMALL")
-    if foreground_ratio > 0.90 or bbox_ratio > 0.94:
+    if not has_alpha_cutout and (foreground_ratio > 0.90 or bbox_ratio > 0.94):
         warnings.append("GARMENT_BACKGROUND_DOMINANT")
-    if background_ratio < 0.08:
+    if not has_alpha_cutout and background_ratio < 0.08:
         warnings.append("GARMENT_NOT_ISOLATED")
     if bbox_ratio < 0.16:
         warnings.append("GARMENT_CROP_TOO_LOOSE")
