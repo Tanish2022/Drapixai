@@ -108,7 +108,10 @@
       garmentSource: response.headers.get('x-drapixai-garment-source') || undefined,
       garmentCacheStatus: response.headers.get('x-drapixai-garment-cache-status') || undefined,
       garmentCacheVersion: response.headers.get('x-drapixai-garment-cache-version') || undefined,
+      confidenceBadge: response.headers.get('x-drapixai-confidence-badge') || undefined,
+      productAccuracyReport: parseJsonObject(response.headers.get('x-drapixai-product-accuracy-json')),
       timings: parseJsonObject(response.headers.get('x-drapixai-timing-json')),
+      qualityMetrics: parseJsonObject(response.headers.get('x-drapixai-quality-json')),
       warnings: warnings ? warnings.split(',').map(function (item) { return item.trim(); }).filter(Boolean) : []
     };
   }
@@ -216,7 +219,7 @@
         buttonText: options.buttonText || 'Try On',
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
-        footerText: options.footerText || 'Your uploaded photo is processed only for the preview flow.',
+        footerText: options.footerText || 'Privacy: your photo is used only to create this try-on preview and is not shown publicly.',
         timeoutMs: Number(options.timeoutMs || 20000),
         adaptBrandTheme: options.adaptBrandTheme !== false,
         primaryGradient: options.primaryGradient || null,
@@ -343,6 +346,10 @@
           '          <button id="drapix-run" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">Proceed</button>',
           '        </div>',
           '      </div>',
+          '      <div style="display:flex;gap:10px;align-items:flex-start;border:1px solid ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.pageSurface), ';padding:12px 14px;">',
+          '        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:', escapeHtml(theme.primaryGradient), ';color:#fff;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:0 0 auto;">✓</span>',
+          '        <div style="font-size:12px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';">DrapixAI checks realism, garment accuracy, pose preservation, and latency before showing a storefront preview.</div>',
+          '      </div>',
           '      <div id="drapix-progress" style="display:none;">',
           '        <div style="height:8px;border-radius:999px;background:', escapeHtml(theme.pageSurface), ';overflow:hidden;">',
           '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', escapeHtml(theme.primaryGradient), ';transition:width .25s ease;"></div>',
@@ -353,7 +360,7 @@
           '        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;">',
           '          <div>',
           '            <div style="font-size:18px;font-weight:700;">Your try-on preview is ready</div>',
-          '            <div style="font-size:12px;color:', escapeHtml(theme.mutedText), ';margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
+          '            <div id="drapix-result-meta" style="font-size:12px;color:', escapeHtml(theme.mutedText), ';margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
           '          </div>',
           '          <div style="display:flex;gap:10px;flex-wrap:wrap;">',
           '            <button id="drapix-buy" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">', escapeHtml(config.buyButtonText), '</button>',
@@ -620,6 +627,9 @@
 
             if (!res.ok) {
               var err = await res.json().catch(function () { return {}; });
+              if (err && err.error === 'TRYON_RESULT_NOT_PUBLISHABLE') {
+                throw new Error(err.message || 'This preview did not pass DrapixAI quality checks. Please retry with a clearer front-facing photo.');
+              }
               throw new Error(err && (err.message || err.error) || 'TRY_ON_FAILED');
             }
 
@@ -637,6 +647,12 @@
             }
             activeResultUrl = URL.createObjectURL(blob);
             result.src = activeResultUrl;
+            var resultMeta = modal.querySelector('#drapix-result-meta');
+            if (resultMeta) {
+              var latencyText = metadata.latencyMs ? ' · ' + (metadata.latencyMs / 1000).toFixed(1) + 's' : '';
+              var scoreText = typeof metadata.qualityScore === 'number' ? ' · score ' + metadata.qualityScore.toFixed(2) : '';
+              resultMeta.textContent = (metadata.confidenceBadge || 'Review') + scoreText + latencyText + '. Download and Share exports include a small DrapixAI watermark.';
+            }
             resultShell.style.display = 'block';
             progressBar.style.width = '100%';
             status.textContent = 'Your DrapixAI try-on is ready.';

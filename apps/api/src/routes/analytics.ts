@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getPlanName, getPlanQuota, normalizePlanKey } from '../lib/plans';
+import { getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -47,6 +48,11 @@ router.get('/summary', async (req, res) => {
     where: { apiKeyId: validKey.id },
     orderBy: { createdAt: 'desc' },
     take: 8,
+  });
+  const recentTryOnResults = await prisma.tryOnResult.findMany({
+    where: { userId: validKey.userId },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
   });
   const [
     uploadedGarmentCount,
@@ -95,6 +101,20 @@ router.get('/summary', async (req, res) => {
     }),
   ]);
 
+  const warningFreeTryOnCount = recentTryOnResults.filter((result) => normalizeWarnings(result.warnings).length === 0).length;
+  const averageLatencyMs = recentTryOnResults.length
+    ? Math.round(recentTryOnResults.reduce((sum, result) => sum + (result.latencyMs || 0), 0) / recentTryOnResults.length)
+    : null;
+  const averageQualityScore = recentTryOnResults.length
+    ? Number((recentTryOnResults.reduce((sum, result) => sum + (result.qualityScore || 0), 0) / recentTryOnResults.length).toFixed(3))
+    : null;
+  const excellentTryOnCount = recentTryOnResults.filter((result) => getTryOnConfidenceBadge({
+    qualityScore: result.qualityScore,
+    latencyMs: result.latencyMs,
+    warnings: normalizeWarnings(result.warnings),
+    timingJson: result.timingJson as Record<string, unknown> | null,
+  }) === 'Excellent').length;
+
   const normalizedPlan = normalizePlanKey(user?.planType);
   const quota = getPlanQuota(normalizedPlan);
   const planName = getPlanName(normalizedPlan);
@@ -130,6 +150,10 @@ router.get('/summary', async (req, res) => {
     suggestedMatchCount,
     confirmedMatchCount,
     approvedTryOnResultCount,
+    warningFreeTryOnCount,
+    excellentTryOnCount,
+    averageLatencyMs,
+    averageQualityScore,
     dailyUsage: daily.map(d => ({ date: d.date.toISOString().slice(0, 10), count: d.count })),
     recentRenders: recentRenders.map((render) => ({
       id: render.id,

@@ -8,6 +8,7 @@ import { sendGarmentApprovalEmail } from '../services/emailer';
 import { createStorageClient, getStorageSummary } from '../lib/storage';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { formatPlanLabel } from '../lib/plans';
+import { buildProductAccuracyReport, getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -317,11 +318,15 @@ router.get('/garments', async (req, res) => {
       id: g.id,
       userId: g.userId,
       garmentId: g.garmentId,
+      displayName: g.displayName,
+      productName: g.productName,
+      category: g.category,
       status: g.status,
       cacheKey: g.cacheKey,
       thumbnailUrl: g.thumbnailUrl,
       updatedAt: g.updatedAt,
-      rejectedReason: g.rejectedReason
+      rejectedReason: g.rejectedReason,
+      certification: g.status === 'ready' && g.cacheKey ? 'DrapixAI-ready' : 'Not certified',
     }))
   });
 });
@@ -415,7 +420,7 @@ router.get('/tryon-results', async (req, res) => {
   });
 
   const filteredResults = filter === 'warnings'
-    ? results.filter((item) => Array.isArray(item.warnings) && item.warnings.length > 0)
+    ? results.filter((item) => normalizeWarnings(item.warnings).length > 0)
     : results;
 
   res.json({
@@ -434,7 +439,19 @@ router.get('/tryon-results', async (req, res) => {
       processingMs: item.processingMs,
       latencyMs: item.latencyMs,
       timingJson: item.timingJson,
-      warnings: item.warnings,
+      warnings: normalizeWarnings(item.warnings),
+      confidenceBadge: getTryOnConfidenceBadge({
+        qualityScore: item.qualityScore,
+        latencyMs: item.latencyMs,
+        warnings: normalizeWarnings(item.warnings),
+        timingJson: item.timingJson as Record<string, unknown> | null,
+      }),
+      productAccuracyReport: buildProductAccuracyReport({
+        qualityScore: item.qualityScore,
+        latencyMs: item.latencyMs,
+        warnings: normalizeWarnings(item.warnings),
+        timingJson: item.timingJson as Record<string, unknown> | null,
+      }),
       status: item.status,
       feedback: item.feedback,
       createdAt: item.createdAt.toISOString(),

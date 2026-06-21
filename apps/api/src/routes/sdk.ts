@@ -33,6 +33,11 @@ import {
   isInactivePlan,
   normalizePlanKey,
 } from '../lib/plans';
+import {
+  buildProductAccuracyReport,
+  getTryOnConfidenceBadge,
+  shouldAutoRejectTryOn,
+} from '../lib/tryon-quality';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -109,6 +114,7 @@ const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
 const GARMENT_APPROVAL_REQUIRED = (process.env.DRAPIXAI_GARMENT_APPROVAL_REQUIRED || '0') === '1';
 const TRYON_LATENCY_TARGET_MS = Number(process.env.DRAPIXAI_TARGET_TRYON_MS || 12000);
+const AUTO_REJECT_BAD_RESULTS = (process.env.DRAPIXAI_AUTO_REJECT_BAD_RESULTS || '1') === '1';
 const SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON = (process.env.DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON || '0') === '1';
 const SDK_GENERATION_SOURCE = (process.env.DRAPIXAI_SDK_GENERATION_SOURCE || 'original_verified').toLowerCase();
 const EXPECTED_GARMENT_CACHE_VERSION = process.env.DRAPIXAI_GARMENT_CACHE_VERSION || 'v3-1024x1365';
@@ -867,9 +873,15 @@ router.post('/tryon', authMiddleware, upload.fields([
       const warnings = aiResponse.headers.get('x-drapixai-warnings') || '';
       const processingMs = aiResponse.headers.get('x-drapixai-processing-ms') || '';
       const timingJson = aiResponse.headers.get('x-drapixai-timing-json') || '';
+      const qualityJson = aiResponse.headers.get('x-drapixai-quality-json') || '';
       const qualityMode = aiResponse.headers.get('x-drapixai-quality-mode') || selectedQuality;
       const garmentSource = generationGarmentSource || aiResponse.headers.get('x-drapixai-garment-source') || (finalCacheKey ? 'cache' : 'direct_upload');
       const parsedTimingJson = parseJsonSafe<Record<string, unknown>>(timingJson);
+      const parsedQualityJson = parseJsonSafe<Record<string, unknown>>(qualityJson);
+      const storedTimingJson = {
+        ...(parsedTimingJson || {}),
+        ...(parsedQualityJson ? { metrics: parsedQualityJson } : {}),
+      };
       const latencyMs = Date.now() - requestStartedAt;
       const combinedWarnings = [...parseWarningsHeader(warnings), ...sdkQualityWarnings];
       const latencyWarnings = latencyMs > TRYON_LATENCY_TARGET_MS
@@ -889,6 +901,27 @@ router.post('/tryon', authMiddleware, upload.fields([
         buffer,
         contentType
       );
+      const parsedQualityScore = parseNumberHeader(qualityScore);
+      const confidenceBadge = getTryOnConfidenceBadge({
+        qualityScore: parsedQualityScore,
+        latencyMs,
+        warnings: latencyWarnings,
+        timingJson: storedTimingJson,
+      });
+      const productAccuracyReport = buildProductAccuracyReport({
+        qualityScore: parsedQualityScore,
+        latencyMs,
+        warnings: latencyWarnings,
+        timingJson: storedTimingJson,
+      });
+      const resultStatus = AUTO_REJECT_BAD_RESULTS && shouldAutoRejectTryOn({
+        qualityScore: parsedQualityScore,
+        latencyMs,
+        warnings: latencyWarnings,
+        timingJson: storedTimingJson,
+      })
+        ? 'rejected'
+        : 'generated';
 
       const tryOnResult = await prisma.tryOnResult.create({
         data: {
@@ -901,15 +934,29 @@ router.post('/tryon', authMiddleware, upload.fields([
           garmentImageUrl: garmentReviewUrl,
           resultImageUrl: resultReviewUrl,
           engine: engine || 'unknown',
-          qualityScore: parseNumberHeader(qualityScore),
+          qualityScore: parsedQualityScore,
           candidateCount: parseNumberHeader(candidateCount) || 1,
-          timingJson: parsedTimingJson ? parsedTimingJson as Prisma.InputJsonValue : undefined,
+          timingJson: Object.keys(storedTimingJson).length > 0 ? storedTimingJson as Prisma.InputJsonValue : undefined,
           processingMs: parseNumberHeader(processingMs),
           latencyMs,
           warnings: latencyWarnings,
-          status: 'generated'
+          status: resultStatus,
+          rejectedAt: resultStatus === 'rejected' ? new Date() : undefined,
         }
       });
+
+      if (resultStatus === 'rejected') {
+        return res.status(422).json({
+          error: 'TRYON_RESULT_NOT_PUBLISHABLE',
+          message: 'DrapixAI could not produce a storefront-safe try-on for this photo and product. Please retry with a clearer front-facing photo.',
+          tryOnResultId: tryOnResult.id,
+          confidenceBadge,
+          qualityScore: parsedQualityScore,
+          latencyMs,
+          warnings: latencyWarnings,
+          productAccuracyReport,
+        });
+      }
 
       if (usage) {
         await prisma.usage.update({
@@ -938,6 +985,9 @@ router.post('/tryon', authMiddleware, upload.fields([
       res.setHeader('x-drapixai-latency-ms', String(latencyMs));
       res.setHeader('x-drapixai-latency-target-ms', String(TRYON_LATENCY_TARGET_MS));
       if (timingJson) res.setHeader('x-drapixai-timing-json', timingJson);
+      if (qualityJson) res.setHeader('x-drapixai-quality-json', qualityJson);
+      res.setHeader('x-drapixai-confidence-badge', confidenceBadge);
+      res.setHeader('x-drapixai-product-accuracy-json', JSON.stringify(productAccuracyReport));
       res.setHeader('x-drapixai-quality-mode', qualityMode);
       res.setHeader('x-drapixai-garment-source', garmentSource);
       res.setHeader('x-drapixai-garment-cache-status', garmentCacheStatus);

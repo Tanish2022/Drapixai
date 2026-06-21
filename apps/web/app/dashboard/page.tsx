@@ -36,6 +36,10 @@ interface UsageData {
   suggestedMatchCount?: number;
   confirmedMatchCount?: number;
   approvedTryOnResultCount?: number;
+  warningFreeTryOnCount?: number;
+  excellentTryOnCount?: number;
+  averageLatencyMs?: number | null;
+  averageQualityScore?: number | null;
   dailyUsage?: { date: string; count: number }[];
   recentRenders?: { id: number; status: string; productId?: string | null; error?: string | null; outputUrl?: string | null; createdAt: string }[];
 }
@@ -539,8 +543,9 @@ export default function Dashboard() {
   const hasConfirmedMappings = (usage.confirmedMatchCount || 0) > 0;
   const hasSdkPreviewResult = (usage.recentRenders || []).some((render) => render.status === 'complete') || usage.rendersUsed > 0;
   const hasApprovedTryOnResult = (usage.approvedTryOnResultCount || 0) > 0;
+  const hasWarningFreeExamples = (usage.warningFreeTryOnCount || 0) > 0;
   const readyForPreview = hasConfirmedMappings;
-  const readyForGoLive = hasVerifiedStore && hasConfirmedMappings && hasCacheReady && hasApprovedTryOnResult;
+  const readyForGoLive = hasVerifiedStore && hasConfirmedMappings && hasCacheReady && hasApprovedTryOnResult && hasWarningFreeExamples;
   const isQuotaExhausted = usage.quotaRemaining <= 0;
   const isQuotaLow = !isQuotaExhausted && usage.quotaRemaining <= Math.max(50, Math.ceil(usage.quota * 0.1));
 
@@ -634,9 +639,15 @@ export default function Dashboard() {
       href: '/admin',
     },
     {
+      label: 'Warning-free examples',
+      done: hasWarningFreeExamples,
+      detail: `${usage.warningFreeTryOnCount || 0} warning-free recent example(s)`,
+      href: '/admin',
+    },
+    {
       label: 'Install live SDK',
       done: readyForGoLive,
-      detail: readyForGoLive ? 'Ready for controlled storefront rollout' : 'Wait until cache, mappings, preview, and approval are complete',
+      detail: readyForGoLive ? 'Ready for controlled storefront rollout' : 'Wait until cache, mappings, preview, approval, and warning-free examples are complete',
       href: '/sdk-install',
     },
   ];
@@ -754,6 +765,24 @@ export default function Dashboard() {
                 </div>
               </Link>
             ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-5">
+            <div className={panelClass}>
+              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Avg quality</p>
+              <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{typeof usage.averageQualityScore === 'number' ? usage.averageQualityScore.toFixed(2) : 'n/a'}</p>
+            </div>
+            <div className={panelClass}>
+              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Avg latency</p>
+              <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{typeof usage.averageLatencyMs === 'number' ? `${(usage.averageLatencyMs / 1000).toFixed(1)}s` : 'n/a'}</p>
+            </div>
+            <div className={panelClass}>
+              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Warning-free</p>
+              <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{usage.warningFreeTryOnCount || 0}</p>
+            </div>
+            <div className={panelClass}>
+              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Excellent</p>
+              <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{usage.excellentTryOnCount || 0}</p>
+            </div>
           </div>
         </section>
 

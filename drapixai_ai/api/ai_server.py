@@ -208,6 +208,29 @@ async def tryon(
         },
     )
     image_bytes = base64.b64decode(result["image_base64"])
+    metadata = result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {}
+    quality_metrics = {
+        key: value
+        for key, value in metadata.items()
+        if key
+        in {
+            "face_preservation",
+            "body_preservation",
+            "garment_color_similarity",
+            "garment_texture_similarity",
+            "edge_quality",
+            "artifact_score",
+            "rectangular_artifact_score",
+            "background_cast_score",
+            "overall_realism",
+            "garment_structure",
+            "hem_quality",
+            "untucked_hem_presence",
+            "long_sleeve_preservation",
+            "pose_preservation",
+            "garment_coverage",
+        }
+    }
     headers = {
         "x-drapixai-engine": str(result.get("engine", "")),
         "x-drapixai-quality-score": str(result.get("quality_score", "")),
@@ -215,6 +238,7 @@ async def tryon(
         "x-drapixai-warnings": ",".join(result.get("warnings", [])),
         "x-drapixai-processing-ms": str(result.get("processing_ms", "")),
         "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
+        "x-drapixai-quality-json": json.dumps(quality_metrics, separators=(",", ":")),
         "x-drapixai-quality-mode": quality_mode,
         "x-drapixai-garment-source": garment_source,
     }
@@ -284,6 +308,29 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         },
     )
     image_bytes = base64.b64decode(result["image_base64"])
+    metadata = result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {}
+    quality_metrics = {
+        key: value
+        for key, value in metadata.items()
+        if key
+        in {
+            "face_preservation",
+            "body_preservation",
+            "garment_color_similarity",
+            "garment_texture_similarity",
+            "edge_quality",
+            "artifact_score",
+            "rectangular_artifact_score",
+            "background_cast_score",
+            "overall_realism",
+            "garment_structure",
+            "hem_quality",
+            "untucked_hem_presence",
+            "long_sleeve_preservation",
+            "pose_preservation",
+            "garment_coverage",
+        }
+    }
     headers = {
         "x-drapixai-engine": str(result.get("engine", "")),
         "x-drapixai-quality-score": str(result.get("quality_score", "")),
@@ -291,6 +338,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         "x-drapixai-warnings": ",".join(result.get("warnings", [])),
         "x-drapixai-processing-ms": str(result.get("processing_ms", "")),
         "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
+        "x-drapixai-quality-json": json.dumps(quality_metrics, separators=(",", ":")),
         "x-drapixai-quality-mode": quality_mode,
         "x-drapixai-garment-source": garment_source,
     }

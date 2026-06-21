@@ -8,11 +8,15 @@ interface AdminGarment {
   id: number;
   userId: number;
   garmentId: string;
+  displayName?: string | null;
+  productName?: string | null;
+  category?: string | null;
   status: string;
   cacheKey?: string | null;
   thumbnailUrl?: string;
   updatedAt: string;
   rejectedReason?: string | null;
+  certification?: string;
 }
 
 interface AdminTryOnResult {
@@ -30,6 +34,8 @@ interface AdminTryOnResult {
   processingMs?: number | null;
   latencyMs?: number | null;
   warnings?: string[] | null;
+  confidenceBadge?: 'Excellent' | 'Review' | 'Not publishable';
+  productAccuracyReport?: Record<string, 'Excellent' | 'Review' | 'Not publishable'> | null;
   status: string;
   createdAt: string;
 }
@@ -96,6 +102,17 @@ const garmentReviewFilters: { value: GarmentReviewFilter; label: string; descrip
   { value: 'ready', label: 'Ready', description: 'Approved cache assets' },
   { value: 'rejected', label: 'Rejected', description: 'Blocked assets' },
 ];
+
+const confidenceClass = (badge?: string) => {
+  if (badge === 'Excellent') return 'bg-green-500/20 border-green-500/30 text-green-200';
+  if (badge === 'Not publishable') return 'bg-red-500/20 border-red-500/30 text-red-200';
+  return 'bg-amber-500/20 border-amber-500/30 text-amber-100';
+};
+
+const accuracyLabel = (key: string) =>
+  key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (char) => char.toUpperCase());
 
 export default function AdminDashboard() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
@@ -449,6 +466,14 @@ export default function AdminDashboard() {
                         <p className="text-sm font-semibold text-white">Result #{item.id}</p>
                         <p className="text-xs text-gray-400">{item.userEmail} / {new Date(item.createdAt).toLocaleString()}</p>
                         <p className="text-xs text-gray-500 mt-1">Product: {item.productId || 'not linked'} / Garment: {item.garmentId || 'not linked'}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <span className={`px-2 py-1 rounded-md border text-xs font-semibold ${confidenceClass(item.confidenceBadge)}`}>
+                            {item.confidenceBadge || 'Review'}
+                          </span>
+                          <span className="px-2 py-1 rounded-md bg-white/10 border border-white/10 text-xs text-gray-300">
+                            {item.status}
+                          </span>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                         <div className="px-3 py-2 rounded-md bg-black/30 border border-white/10">
@@ -492,6 +517,16 @@ export default function AdminDashboard() {
                         ))}
                       </div>
                     )}
+                    {item.productAccuracyReport ? (
+                      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+                        {Object.entries(item.productAccuracyReport).map(([key, value]) => (
+                          <div key={key} className={`px-3 py-2 rounded-md border text-xs ${confidenceClass(value)}`}>
+                            <p className="font-semibold">{accuracyLabel(key)}</p>
+                            <p className="mt-1 opacity-80">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={async () => {
@@ -562,6 +597,7 @@ export default function AdminDashboard() {
                 <div key={g.id} className="p-4 bg-white/5 border border-white/10 rounded-lg">
                   <p className="text-xs text-gray-400">User ID: {g.userId}</p>
                   <p className="text-base font-mono">{g.garmentId}</p>
+                  <p className="text-xs text-gray-500 mt-1">{g.productName || g.displayName || 'Unnamed garment'}{g.category ? ` / ${g.category}` : ''}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="px-2 py-1 rounded-md bg-white/10 border border-white/10 text-xs">garment uploaded</span>
                     <span className={g.cacheKey ? 'px-2 py-1 rounded-md bg-green-500/20 border border-green-500/30 text-xs text-green-200' : 'px-2 py-1 rounded-md bg-amber-500/20 border border-amber-500/30 text-xs text-amber-200'}>
@@ -569,6 +605,9 @@ export default function AdminDashboard() {
                     </span>
                     <span className={g.status === 'rejected' ? 'px-2 py-1 rounded-md bg-red-500/20 border border-red-500/30 text-xs text-red-200' : g.status === 'ready' ? 'px-2 py-1 rounded-md bg-green-500/20 border border-green-500/30 text-xs text-green-200' : 'px-2 py-1 rounded-md bg-amber-500/20 border border-amber-500/30 text-xs text-amber-200'}>
                       {g.status === 'ready' ? 'approved' : g.status === 'rejected' ? 'rejected' : 'pending review'}
+                    </span>
+                    <span className={g.certification === 'DrapixAI-ready' ? 'px-2 py-1 rounded-md bg-cyan-500/20 border border-cyan-500/30 text-xs text-cyan-100' : 'px-2 py-1 rounded-md bg-white/10 border border-white/10 text-xs text-gray-300'}>
+                      {g.certification || 'Not certified'}
                     </span>
                   </div>
                   {g.rejectedReason ? <p className="text-xs text-amber-200 mt-2">{g.rejectedReason}</p> : null}
