@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 REPO_URL="${DRAPIXAI_REPO_URL:-https://github.com/Tanish2022/Drapixai.git}"
-REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-}"
+REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-codex/catvton-runpod-clean}"
 ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.production.env}"
 PORT="${PORT:-8080}"
 RUN_START="${DRAPIXAI_SETUP_START_SERVICES:-1}"
@@ -102,7 +102,7 @@ sync_repo() {
       log "Existing non-git path found. Moving it to $backup_path"
       mv "$APP_ROOT" "$backup_path"
     fi
-    REPO_BRANCH="${REPO_BRANCH:-main}"
+    REPO_BRANCH="${REPO_BRANCH:-codex/catvton-runpod-clean}"
     git clone --branch "$REPO_BRANCH" "$REPO_URL" "$APP_ROOT"
     cd "$APP_ROOT"
   fi

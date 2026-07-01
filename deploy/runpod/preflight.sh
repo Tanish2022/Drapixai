@@ -15,6 +15,31 @@ fi
 
 bash "$SCRIPT_DIR/../scripts/validate-env.sh" ai
 
+echo "== Repo Version =="
+if [[ -d "$DRAPIXAI_APP_ROOT/.git" ]]; then
+  git -C "$DRAPIXAI_APP_ROOT" status -sb
+  echo "branch=$(git -C "$DRAPIXAI_APP_ROOT" branch --show-current)"
+  echo "commit=$(git -C "$DRAPIXAI_APP_ROOT" rev-parse --short=12 HEAD)"
+  if [[ -n "${DRAPIXAI_EXPECTED_GIT_REF:-}" ]]; then
+    expected_commit="$(git -C "$DRAPIXAI_APP_ROOT" rev-parse "${DRAPIXAI_EXPECTED_GIT_REF}^{commit}" 2>/dev/null || true)"
+    current_commit="$(git -C "$DRAPIXAI_APP_ROOT" rev-parse HEAD)"
+    if [[ -z "$expected_commit" ]]; then
+      echo "Could not resolve DRAPIXAI_EXPECTED_GIT_REF=${DRAPIXAI_EXPECTED_GIT_REF}" >&2
+      exit 1
+    fi
+    if [[ "$expected_commit" != "$current_commit" ]]; then
+      echo "Repo is not at expected launch ref ${DRAPIXAI_EXPECTED_GIT_REF}." >&2
+      echo "Expected: $expected_commit" >&2
+      echo "Current:  $current_commit" >&2
+      exit 1
+    fi
+  fi
+else
+  echo "Missing git repository at $DRAPIXAI_APP_ROOT" >&2
+  exit 1
+fi
+
+echo
 echo "== GPU =="
 nvidia-smi || true
 

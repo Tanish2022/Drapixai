@@ -480,11 +480,17 @@ assertIncludes(localStart, 'RedirectStandardError', 'Local stack starter must ca
 assertIncludes(localStart, 'local-preflight.ps1', 'Local stack starter must run preflight after startup');
 assertIncludes(localStart, 'drapixai_ai.api.ai_server:app', 'Local stack starter must start the AI API service');
 assertIncludes(runpodPreflight, 'bash -n "$script"', 'RunPod preflight must syntax-check launch shell scripts');
+assertIncludes(runpodPreflight, 'DRAPIXAI_EXPECTED_GIT_REF', 'RunPod preflight must support exact launch commit verification');
+assertIncludes(runpodPreflight, '== Repo Version ==', 'RunPod preflight must print repo branch and commit');
 assertIncludes(runpodPreflight, 'deploy/scripts/smoke-test.sh', 'RunPod preflight must include deployment smoke shell syntax check');
 assertIncludes(runpodPreflight, 'deploy/runpod/run-launch-tryon-test.sh', 'RunPod preflight must include launch try-on shell syntax check');
 assertIncludes(runLaunchTryon, 'API_ENV_FILE=', 'RunPod launch try-on test must know where the API env file lives');
 assertIncludes(runLaunchTryon, 'read_env_value DRAPIXAI_DASHBOARD_PROXY_TOKEN "$API_ENV_FILE"', 'RunPod launch try-on test must load dashboard proxy token from API env');
 assertIncludes(runLaunchTryon, 'DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token"', 'RunPod launch try-on test must pass dashboard proxy token to SDK smoke flow');
+assertIncludes(read('deploy/runpod/setup-fresh-runpod.sh'), 'codex/catvton-runpod-clean', 'RunPod setup-fresh-runpod.sh must default to launch branch');
+assertIncludes(read('deploy/runpod/prepare-runpod-for-launch.sh'), 'codex/catvton-runpod-clean', 'RunPod prepare wrapper must default to launch branch');
+assertIncludes(read('deploy/runpod/README.md'), 'DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE', 'RunPod README must document strict launch quality gates');
+assertIncludes(read('deploy/runpod/README.md'), 'DRAPIXAI_EXPECTED_GIT_REF', 'RunPod README must document optional exact commit pinning');
 
 assertIncludes(homePage, 'Standard upper-body AI try-on infrastructure', 'Homepage must state current Standard upper-body scope');
 assertIncludes(homePage, 'confirmed-product-id', 'Homepage SDK snippet must use confirmed product mapping');

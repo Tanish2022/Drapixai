@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 PYTHON_SHIM_DIR="${DRAPIXAI_PYTHON_SHIM_DIR:-/tmp/drapixai-python311}"
-REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-$(git -C "$APP_ROOT" branch --show-current 2>/dev/null || printf 'main')}"
+CURRENT_BRANCH="$(git -C "$APP_ROOT" branch --show-current 2>/dev/null || true)"
+REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-${CURRENT_BRANCH:-codex/catvton-runpod-clean}}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
