@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 import {
   Check, Shield, BarChart3, Code2, Eye, ArrowRight,
   Globe, Gauge, CreditCard, X, Play, Layers3, Sparkles, ChevronDown, LogOut, Settings2, UserCircle2
@@ -21,15 +20,12 @@ export default function Home() {
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const sessionApiKey = ((session as any)?.apiKey || '').trim();
     const sessionUserName = ((session as any)?.user?.name || '').trim();
     const sessionUserEmail = ((session as any)?.user?.email || '').trim();
 
-    const loadProfileSummary = async (apiKey: string) => {
+    const loadProfileSummary = async () => {
       try {
-        const response = await fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, {
-          headers: { Authorization: `Bearer ${apiKey}` },
-        });
+        const response = await fetch('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' });
         const payload = (await response.json().catch(() => null)) as { companyName?: string | null; email?: string | null } | null;
         const preferredName = payload?.companyName?.trim()
           || sessionUserName
@@ -47,12 +43,6 @@ export default function Home() {
       }
     };
 
-    if (sessionApiKey) {
-      setHasDashboardAccess(true);
-      void loadProfileSummary(sessionApiKey);
-      return;
-    }
-
     if (sessionStatus === 'loading') {
       return;
     }
@@ -63,11 +53,7 @@ export default function Home() {
         if (active) {
           setHasDashboardAccess(response.ok);
           if (response.ok) {
-            const payload = (await response.json().catch(() => null)) as { apiKey?: string } | null;
-            const apiKey = payload?.apiKey?.trim();
-            if (apiKey) {
-              void loadProfileSummary(apiKey);
-            }
+            void loadProfileSummary();
           } else {
             setProfileName('Profile');
             setProfileSubtitle('Manage your account, plan, and dashboard access.');
@@ -104,7 +90,6 @@ export default function Home() {
     fetch('/api/dashboard/session', { method: 'DELETE' })
       .catch(() => undefined)
       .finally(() => {
-        localStorage.removeItem('apiKey');
         setHasDashboardAccess(false);
         setProfileOpen(false);
         signOut({ redirect: false }).catch(() => undefined).finally(() => {

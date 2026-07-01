@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { PrismaClient } from '@prisma/client';
@@ -18,6 +18,9 @@ import { ensureAdminUser } from './services/admin-bootstrap';
 const app = express();
 const prisma = new PrismaClient();
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+redis.on('error', (error) => {
+  console.error('Redis client error:', error);
+});
 redis.connect().catch((error) => {
   console.error('Redis connection error:', error);
 });
@@ -27,6 +30,43 @@ const configuredOrigins = (process.env.DRAPIXAI_CORS_ORIGINS || '*')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const requireProductionConfig = () => {
+  if (process.env.NODE_ENV !== 'production') return;
+
+  const missing: string[] = [];
+  const weak: string[] = [];
+
+  if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
+  if (!process.env.REDIS_URL) missing.push('REDIS_URL');
+  const requireSecret = (name: string, minLength: number) => {
+    const value = (process.env[name] || '').trim();
+    if (!value) {
+      missing.push(name);
+      return;
+    }
+    if (value.length < minLength) {
+      weak.push(`${name} must be at least ${minLength} characters`);
+    }
+  };
+
+  requireSecret('JWT_SECRET', 32);
+  requireSecret('DRAPIXAI_AUTH_SYNC_TOKEN', 32);
+  requireSecret('DRAPIXAI_DASHBOARD_PROXY_TOKEN', 32);
+  requireSecret('DRAPIXAI_AI_SERVICE_TOKEN', 32);
+  requireSecret('DRAPIXAI_ADMIN_TOKEN', 32);
+  requireSecret('DRAPIXAI_ADMIN_PASSWORD', 12);
+
+  if (configuredOrigins.length === 0 || configuredOrigins.includes('*')) {
+    weak.push('DRAPIXAI_CORS_ORIGINS must list explicit production origins');
+  }
+
+  if (missing.length > 0 || weak.length > 0) {
+    throw new Error(`PRODUCTION_CONFIG_INVALID missing=${missing.join(',') || 'none'} weak=${weak.join(';') || 'none'}`);
+  }
+};
+
+requireProductionConfig();
 
 const localDevOrigins = [
   'http://localhost:3000',
@@ -157,6 +197,34 @@ app.get('/ready', async (req, res) => {
     },
   };
   res.status(ready ? 200 : 503).json(payload);
+});
+
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: 'NOT_FOUND' });
+});
+
+app.use((error: Error & { status?: number; statusCode?: number; type?: string }, req: Request, res: Response, _next: NextFunction) => {
+  const rawStatus = Number(error.status || error.statusCode || 500);
+  let status = rawStatus >= 400 && rawStatus < 600 ? rawStatus : 500;
+
+  let code = status >= 500 ? 'INTERNAL_SERVER_ERROR' : 'REQUEST_FAILED';
+  if (error.message === 'CORS_ORIGIN_NOT_ALLOWED') {
+    code = 'CORS_ORIGIN_NOT_ALLOWED';
+    status = 403;
+  }
+  if (error.type === 'entity.parse.failed') code = 'INVALID_JSON';
+  if (error.type === 'entity.too.large') code = 'REQUEST_TOO_LARGE';
+
+  if (status >= 500) {
+    console.error('API request failed:', {
+      code,
+      path: req.path,
+      method: req.method,
+      message: error.message,
+    });
+  }
+
+  res.status(status).json({ error: code });
 });
 
 cron.schedule('0 0 * * *', async () => {

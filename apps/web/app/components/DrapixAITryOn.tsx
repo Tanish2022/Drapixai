@@ -16,6 +16,7 @@ type DrapixAITryOnProps = {
   footerText?: string;
   timeoutMs?: number;
   primaryGradient?: string;
+  logoUrl?: string;
   onResult?: DrapixAIInitOptions['onResult'];
   onError?: DrapixAIInitOptions['onError'];
 };
@@ -34,6 +35,7 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     footerText,
     timeoutMs,
     primaryGradient,
+    logoUrl,
     onResult,
     onError,
   } = props;
@@ -56,6 +58,7 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
           footerText,
           timeoutMs,
           primaryGradient,
+          logoUrl,
           onResult,
           onError,
         });
@@ -90,6 +93,7 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     footerText,
     timeoutMs,
     primaryGradient,
+    logoUrl,
     onResult,
     onError,
   ]);

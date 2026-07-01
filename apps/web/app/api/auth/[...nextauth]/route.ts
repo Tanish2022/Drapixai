@@ -2,6 +2,7 @@ import NextAuth from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
 const API_BASE_URL = process.env.DRAPIXAI_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+const AUTH_SYNC_TOKEN = process.env.DRAPIXAI_AUTH_SYNC_TOKEN || '';
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -24,7 +25,10 @@ const handler = NextAuth({
       try {
         const res = await fetch(`${API_BASE_URL}/auth/oauth/google`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(AUTH_SYNC_TOKEN ? { 'x-drapixai-auth-sync-token': AUTH_SYNC_TOKEN } : {}),
+          },
           body: JSON.stringify({ email: user.email, name: user.name, issueNewKey: true })
         });
         if (res.ok) {
@@ -42,8 +46,7 @@ const handler = NextAuth({
       }
       return token;
     },
-    async session({ session, token }) {
-      (session as any).apiKey = (token as any).apiKey || null;
+    async session({ session }) {
       return session;
     }
   }

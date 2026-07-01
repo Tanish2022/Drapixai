@@ -6,7 +6,6 @@ import { Router } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import fs from 'fs';
@@ -15,6 +14,9 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { processWithWatermark } from '../services/watermark';
 import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { resolveActiveApiKey } from '../lib/api-key-auth';
+import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { CatalogSyncInputItem, isSupportedUpperBodyItem, normalizeCatalogItem } from '../lib/catalog-feed';
 import {
   buildGarmentAssetId,
@@ -38,6 +40,14 @@ import {
   getTryOnConfidenceBadge,
   shouldAutoRejectTryOn,
 } from '../lib/tryon-quality';
+import {
+  buildUploadPath,
+  getUploadRoot,
+  isAllowedImageUpload,
+  readLocalUploadFile,
+  sanitizePathSegment,
+  sanitizeUpstreamError,
+} from '../lib/security';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -89,6 +99,9 @@ const getGarmentValidationMessage = (code: string) => {
 
 // Initialize Redis client
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+redis.on('error', (error) => {
+  console.error('SDK Redis client error:', error);
+});
 redis.connect().catch((error) => {
   console.error('Redis connection error:', error);
 });
@@ -101,14 +114,15 @@ const MAX_UPLOAD_BYTES = Number(process.env.DRAPIXAI_MAX_UPLOAD_BYTES || 10 * 10
 const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
 
 // Configure multer for file uploads
+const UPLOAD_ROOT = getUploadRoot();
 const upload = multer({
-  dest: 'uploads/',
+  dest: UPLOAD_ROOT,
   limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (_req, file, callback) => {
-    callback(null, file.mimetype.startsWith('image/'));
+    callback(null, isAllowedImageUpload(file));
   }
 });
-if (!fs.existsSync('uploads')) fs.mkdirSync('uploads', { recursive: true });
+if (!fs.existsSync(UPLOAD_ROOT)) fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
 const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
 const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
@@ -188,7 +202,7 @@ const uploadReviewImage = async (
     }));
     return `s3://${BUCKET}/${key}`;
   } catch {
-    const localDir = path.join('uploads', 'tryon-review', String(userId), requestId);
+    const localDir = buildUploadPath('tryon-review', userId, requestId);
     fs.mkdirSync(localDir, { recursive: true });
     const localPath = path.join(localDir, `${kind}${extension}`);
     fs.writeFileSync(localPath, imageBytes);
@@ -216,7 +230,8 @@ const uploadOriginalGarment = async (
 ): Promise<string> => {
   const fileContent = fs.readFileSync(filePath);
   const fileExtension = path.extname(filePath) || '.png';
-  const key = `garments/originals/${userId}/${garmentId}/${uuidv4()}${fileExtension}`;
+  const storageGarmentId = sanitizePathSegment(garmentId, 'garment');
+  const key = `garments/originals/${userId}/${storageGarmentId}/${uuidv4()}${fileExtension}`;
   try {
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
@@ -226,7 +241,7 @@ const uploadOriginalGarment = async (
     }));
     return `s3://${BUCKET}/${key}`;
   } catch {
-    const localDir = path.join('uploads', 'garments', String(userId), garmentId);
+    const localDir = buildUploadPath('garments', userId, storageGarmentId);
     fs.mkdirSync(localDir, { recursive: true });
     const localPath = path.join(localDir, `${uuidv4()}${fileExtension}`);
     fs.writeFileSync(localPath, fileContent);
@@ -236,9 +251,7 @@ const uploadOriginalGarment = async (
 
 const fetchOriginalGarment = async (originalUrl: string): Promise<Buffer | null> => {
   if (originalUrl.startsWith('local:')) {
-    const localPath = originalUrl.replace('local:', '');
-    if (!fs.existsSync(localPath)) return null;
-    return fs.readFileSync(localPath);
+    return readLocalUploadFile(originalUrl);
   }
   if (originalUrl.startsWith('s3://')) {
     const rest = originalUrl.replace('s3://', '');
@@ -262,7 +275,8 @@ const uploadThumbnail = async (
   imageBytes: Buffer
 ): Promise<string> => {
   const thumb = await sharp(imageBytes).resize(256, 256, { fit: 'contain', background: '#00000000' }).png().toBuffer();
-  const key = `garments/thumbs/${userId}/${garmentId}/${uuidv4()}.png`;
+  const storageGarmentId = sanitizePathSegment(garmentId, 'garment');
+  const key = `garments/thumbs/${userId}/${storageGarmentId}/${uuidv4()}.png`;
   try {
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
@@ -272,7 +286,7 @@ const uploadThumbnail = async (
     }));
     return `s3://${BUCKET}/${key}`;
   } catch {
-    const localDir = path.join('uploads', 'garments', String(userId), garmentId, 'thumbs');
+    const localDir = buildUploadPath('garments', userId, storageGarmentId, 'thumbs');
     fs.mkdirSync(localDir, { recursive: true });
     const localPath = path.join(localDir, `${uuidv4()}.png`);
     fs.writeFileSync(localPath, thumb);
@@ -330,39 +344,22 @@ const listGarmentsWithMatchState = async (userId: number) => {
  */
 const authMiddleware = async (req: any, res: any, next: any) => {
   try {
-    const apiKeyHeader = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!apiKeyHeader) {
-      return res.status(401).json({ 
-        error: 'API key required',
-        message: 'Please provide your API key in the Authorization header'
-      });
-    }
-
-    // Find all active API keys
-    const keys = await prisma.apiKey.findMany({ 
-      where: { isActive: true },
-      include: { user: true }
-    });
-    
-    let validKey: any = null;
-    let validUser: any = null;
-    
-    for (const key of keys) {
-      if (await bcrypt.compare(apiKeyHeader, key.keyHash)) {
-        validKey = key;
-        validUser = key.user;
-        break;
-      }
-    }
-    
-    if (!validKey || !validUser) {
+    const validKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+    if (!validKey) {
       return res.status(401).json({ 
         error: 'Invalid API key',
         message: 'The provided API key is invalid or has been revoked'
       });
     }
-    
+
+    const validUser = await prisma.user.findUnique({ where: { id: validKey.userId } });
+    if (!validUser) {
+      return res.status(401).json({
+        error: 'Invalid API key',
+        message: 'The API key is not attached to an active DrapixAI account'
+      });
+    }
+
     req.apiKey = validKey;
     req.user = validUser;
     
@@ -410,6 +407,19 @@ const enforceSingleDomain = async (apiKeyId: number, current: string | null, dom
   return domainWhitelist;
 };
 
+const enforceSdkRequestDomain = async (req: any, res: any) => {
+  const apiKey = req.apiKey;
+  const requestDomain = getRequestDomain(req);
+  const finalWhitelist = await enforceSingleDomain(apiKey.id, requestDomain, apiKey.domainWhitelist);
+  if (SINGLE_DOMAIN_REQUIRED && !isDomainAllowed(finalWhitelist, requestDomain)) {
+    res.status(403).json({
+      error: 'Domain not allowed',
+      message: `This API key is not authorized for domain: ${requestDomain || 'unknown'}`
+    });
+    return false;
+  }
+  return true;
+};
 const incrementDailyUsage = async (apiKeyId: number) => {
   const now = new Date();
   const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -419,6 +429,8 @@ const incrementDailyUsage = async (apiKeyId: number) => {
     create: { apiKeyId, date: utcDate, count: 1 }
   });
 };
+
+router.use(createRateLimitMiddleware(600, 15 * 60 * 1000));
 
 /**
  * POST /sdk/validate
@@ -766,7 +778,7 @@ router.post('/tryon', authMiddleware, upload.fields([
 
       let finalCacheKey = cacheKey || undefined;
       let garmentCacheStatus = finalCacheKey ? 'verified' : 'direct_upload';
-      const sdkQualityWarnings: string[] = [];
+      const sdkOperationalWarnings: string[] = [];
       let generationGarmentSource = finalCacheKey ? 'cache' : 'direct_upload';
 
       const regenerateCacheFromOriginal = async (reason: string) => {
@@ -791,7 +803,7 @@ router.post('/tryon', authMiddleware, upload.fields([
         if (!regen.cache_key || !isExpectedCacheKey(regen.cache_key)) return false;
         finalCacheKey = regen.cache_key as string;
         garmentCacheStatus = reason;
-        sdkQualityWarnings.push(reason.toUpperCase());
+        sdkOperationalWarnings.push(reason.toUpperCase());
         await prisma.garment.update({
           where: { userId_garmentId: { userId: user.id, garmentId: actualGarmentId } },
           data: { cacheKey: finalCacheKey, status: 'ready' }
@@ -841,7 +853,7 @@ router.post('/tryon', authMiddleware, upload.fields([
           generationGarmentSource = 'original_verified_cache_gate';
         } else {
           generationGarmentSource = 'cache';
-          sdkQualityWarnings.push('ORIGINAL_GENERATION_SOURCE_UNAVAILABLE');
+          sdkOperationalWarnings.push('ORIGINAL_GENERATION_SOURCE_UNAVAILABLE');
         }
       }
 
@@ -862,7 +874,11 @@ router.post('/tryon', authMiddleware, upload.fields([
 
       if (!aiResponse.ok) {
         const errText = await aiResponse.text();
-        return res.status(aiResponse.status).json({ error: errText || 'AI service error' });
+        const safeError = sanitizeUpstreamError('AI_TRYON_FAILED', errText);
+        return res.status(aiResponse.status).json({
+          error: safeError,
+          message: 'DrapixAI could not complete this try-on. Please retry with a clearer front-facing photo and a ready garment.',
+        });
       }
 
       const buffer = Buffer.from(await aiResponse.arrayBuffer());
@@ -883,10 +899,11 @@ router.post('/tryon', authMiddleware, upload.fields([
         ...(parsedQualityJson ? { metrics: parsedQualityJson } : {}),
       };
       const latencyMs = Date.now() - requestStartedAt;
-      const combinedWarnings = [...parseWarningsHeader(warnings), ...sdkQualityWarnings];
+      const combinedWarnings = parseWarningsHeader(warnings);
       const latencyWarnings = latencyMs > TRYON_LATENCY_TARGET_MS
         ? [...combinedWarnings, `LATENCY_OVER_${TRYON_LATENCY_TARGET_MS}MS`]
         : combinedWarnings;
+      const storedWarnings = [...latencyWarnings, ...sdkOperationalWarnings];
       const personReviewUrl = await uploadReviewImage(
         user.id,
         requestId,
@@ -939,7 +956,7 @@ router.post('/tryon', authMiddleware, upload.fields([
           timingJson: Object.keys(storedTimingJson).length > 0 ? storedTimingJson as Prisma.InputJsonValue : undefined,
           processingMs: parseNumberHeader(processingMs),
           latencyMs,
-          warnings: latencyWarnings,
+          warnings: storedWarnings,
           status: resultStatus,
           rejectedAt: resultStatus === 'rejected' ? new Date() : undefined,
         }
@@ -1009,6 +1026,7 @@ router.post('/tryon', authMiddleware, upload.fields([
  */
 router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
   try {
+    if (!(await enforceSdkRequestDomain(req, res))) return;
     const user = req.user;
     const tryOnResultId = Number(req.body?.tryOnResultId || req.body?.try_on_result_id || 0);
     if (!tryOnResultId) {
@@ -1047,7 +1065,7 @@ router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
  * POST /sdk/garments
  * Upload + preprocess garment, store cache key
  */
-router.post('/garments', authMiddleware, upload.single('cloth_image'), async (req: any, res: any) => {
+router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('cloth_image'), async (req: any, res: any) => {
   try {
     const user = req.user;
     const requestedGarmentId = String(req.body.garment_id || req.body.productId || '').trim();
@@ -1155,7 +1173,7 @@ router.post('/garments', authMiddleware, upload.single('cloth_image'), async (re
  * POST /sdk/garments/bulk
  * Bulk upload garments as standalone assets
  */
-router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), async (req: any, res: any) => {
+router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.array('cloth_images', 20), async (req: any, res: any) => {
   try {
     const user = req.user;
     const files = req.files as Express.Multer.File[];
@@ -1260,7 +1278,7 @@ router.post('/garments/bulk', authMiddleware, upload.array('cloth_images', 20), 
  * GET /sdk/garments/:garmentId
  * Get cached garment info
  */
-router.get('/garments/:garmentId', authMiddleware, async (req: any, res: any) => {
+router.get('/garments/:garmentId', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const garmentId = String(req.params.garmentId || '').trim();
@@ -1302,7 +1320,7 @@ router.get('/garments/:garmentId', authMiddleware, async (req: any, res: any) =>
  * GET /sdk/garments
  * List garments for current user
  */
-router.get('/garments', authMiddleware, async (req: any, res: any) => {
+router.get('/garments', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const items = await listGarmentsWithMatchState(user.id);
@@ -1317,7 +1335,7 @@ router.get('/garments', authMiddleware, async (req: any, res: any) => {
  * GET /sdk/catalog
  * List discovered catalog products
  */
-router.get('/catalog', authMiddleware, async (req: any, res: any) => {
+router.get('/catalog', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const items = await prisma.catalogProduct.findMany({
@@ -1384,19 +1402,19 @@ const syncCatalogHandler = async (req: any, res: any) => {
  * POST /sdk/catalog/sync
  * Discover catalog products for matching
  */
-router.post('/catalog/sync', authMiddleware, syncCatalogHandler);
+router.post('/catalog/sync', authMiddleware, requireDashboardProxy, syncCatalogHandler);
 
 /**
  * POST /sdk/garments/sync
  * Backward-compatible alias for catalog discovery
  */
-router.post('/garments/sync', authMiddleware, syncCatalogHandler);
+router.post('/garments/sync', authMiddleware, requireDashboardProxy, syncCatalogHandler);
 
 /**
  * POST /sdk/matches/:garmentId/confirm
  * Confirm a garment-to-product pairing
  */
-router.post('/matches/:garmentId/confirm', authMiddleware, async (req: any, res: any) => {
+router.post('/matches/:garmentId/confirm', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const garmentId = String(req.params.garmentId || '').trim();
@@ -1428,7 +1446,7 @@ router.post('/matches/:garmentId/confirm', authMiddleware, async (req: any, res:
  * DELETE /sdk/matches/:garmentId/confirm
  * Clear a confirmed garment-to-product pairing
  */
-router.delete('/matches/:garmentId/confirm', authMiddleware, async (req: any, res: any) => {
+router.delete('/matches/:garmentId/confirm', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const garmentId = String(req.params.garmentId || '').trim();
@@ -1448,7 +1466,7 @@ router.delete('/matches/:garmentId/confirm', authMiddleware, async (req: any, re
  * GET /sdk/garments/:garmentId/image
  * Proxy cached garment image
  */
-router.get('/garments/:garmentId/image', authMiddleware, async (req: any, res: any) => {
+router.get('/garments/:garmentId/image', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const garmentId = String(req.params.garmentId || '').trim();
@@ -1478,7 +1496,7 @@ router.get('/garments/:garmentId/image', authMiddleware, async (req: any, res: a
  * GET /sdk/garments/:garmentId/thumbnail
  * Proxy garment thumbnail
  */
-router.get('/garments/:garmentId/thumbnail', authMiddleware, async (req: any, res: any) => {
+router.get('/garments/:garmentId/thumbnail', authMiddleware, requireDashboardProxy, async (req: any, res: any) => {
   try {
     const user = req.user;
     const garmentId = String(req.params.garmentId || '').trim();
@@ -1490,9 +1508,8 @@ router.get('/garments/:garmentId/thumbnail', authMiddleware, async (req: any, re
       return res.status(404).json({ error: 'THUMBNAIL_NOT_READY' });
     }
     if (garment.thumbnailUrl.startsWith('local:')) {
-      const localPath = garment.thumbnailUrl.replace('local:', '');
-      if (!fs.existsSync(localPath)) return res.status(404).json({ error: 'THUMBNAIL_NOT_FOUND' });
-      const buffer = fs.readFileSync(localPath);
+      const buffer = readLocalUploadFile(garment.thumbnailUrl);
+      if (!buffer) return res.status(404).json({ error: 'THUMBNAIL_NOT_FOUND' });
       res.setHeader('Content-Type', 'image/png');
       return res.send(buffer);
     }
@@ -1519,6 +1536,7 @@ router.get('/garments/:garmentId/thumbnail', authMiddleware, async (req: any, re
  */
 router.get('/status/:jobId', authMiddleware, async (req: any, res: any) => {
   try {
+    if (!(await enforceSdkRequestDomain(req, res))) return;
     const jobId = parseInt(req.params.jobId);
     const apiKey = req.apiKey;
 
@@ -1573,6 +1591,7 @@ router.get('/status/:jobId', authMiddleware, async (req: any, res: any) => {
  */
 router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
   try {
+    if (!(await enforceSdkRequestDomain(req, res))) return;
     const jobId = parseInt(req.params.jobId);
     const apiKey = req.apiKey;
     const user = req.user;
@@ -1638,6 +1657,7 @@ router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
  */
 router.delete('/job/:jobId', authMiddleware, async (req: any, res: any) => {
   try {
+    if (!(await enforceSdkRequestDomain(req, res))) return;
     const jobId = parseInt(req.params.jobId);
     const apiKey = req.apiKey;
 

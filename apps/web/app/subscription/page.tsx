@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreditCard, ExternalLink, Gauge, ShieldCheck, Store, UserCircle2 } from 'lucide-react';
-import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 import { useThemePreference } from '@/app/lib/theme-client';
 
 type UsageData = {
@@ -39,16 +38,7 @@ export default function SubscriptionPage() {
         return;
       }
 
-      const sessionPayload = (await sessionResponse.json().catch(() => null)) as { apiKey?: string } | null;
-      const nextApiKey = sessionPayload?.apiKey?.trim() || '';
-      if (!nextApiKey) {
-        router.push('/auth/login');
-        return;
-      }
-
-      const summaryResponse = await fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, {
-        headers: { Authorization: `Bearer ${nextApiKey}` },
-      }).catch(() => null);
+      const summaryResponse = await fetch('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' }).catch(() => null);
 
       const summaryPayload = (await summaryResponse?.json().catch(() => null)) as UsageData | null;
       if (active) {

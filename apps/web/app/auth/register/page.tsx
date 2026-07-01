@@ -83,9 +83,6 @@ function RegisterPageContent() {
         return;
       }
 
-      if (data?.apiKey) {
-        localStorage.setItem('apiKey', data.apiKey);
-      }
       router.push('/');
       trackEvent('trial_signup', { metadata: { source: 'password' } });
     } catch {

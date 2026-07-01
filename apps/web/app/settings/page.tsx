@@ -19,7 +19,6 @@ import {
   UserCircle2,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
-import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
 type UsageData = {
   email?: string | null;
@@ -57,6 +56,7 @@ type AccountProfile = {
 };
 
 const THEME_STORAGE_KEY = 'drapixai-theme';
+const dashboardApiPath = (path: string) => '/api/dashboard/proxy/' + path.replace(/^\/+/, '');
 
 const applyTheme = (theme: 'dark' | 'light') => {
   document.documentElement.dataset.theme = theme;
@@ -110,12 +110,8 @@ export default function SettingsPage() {
         setApiKey(nextApiKey);
 
         const [summaryResponse, profileResponse] = await Promise.all([
-          fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, {
-            headers: { Authorization: `Bearer ${nextApiKey}` },
-          }),
-          fetch(`${PUBLIC_API_BASE_URL}/account/profile`, {
-            headers: { Authorization: `Bearer ${nextApiKey}` },
-          }),
+          fetch(dashboardApiPath('analytics/summary')),
+          fetch(dashboardApiPath('account/profile')),
         ]);
 
         if (!summaryResponse.ok || !profileResponse.ok) {
@@ -184,7 +180,6 @@ export default function SettingsPage() {
     fetch('/api/dashboard/session', { method: 'DELETE' })
       .catch(() => undefined)
       .finally(() => {
-        localStorage.removeItem('apiKey');
         signOut({ redirect: false }).catch(() => undefined).finally(() => {
           router.push('/');
         });
@@ -193,17 +188,16 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async () => {
     if (!apiKey) return;
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/profile`, {
+    const response = await fetch(dashboardApiPath('account/profile'), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         companyName,
         mobileNumber,
-        themePreference,
-      }),
+        themePreference
+    })
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as Partial<AccountProfile> | null;
@@ -217,7 +211,7 @@ export default function SettingsPage() {
       ...(current || ({} as AccountProfile)),
       companyName: payload?.companyName ?? companyName,
       mobileNumber: payload?.mobileNumber ?? mobileNumber,
-      themePreference,
+      themePreference
     }));
     setUsage((current) => (current ? { ...current, companyName } : current));
     setToast('Profile settings updated.');
@@ -234,16 +228,15 @@ export default function SettingsPage() {
       return;
     }
 
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/password`, {
+    const response = await fetch(dashboardApiPath('account/password'), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         currentPassword,
-        newPassword,
-      }),
+        newPassword
+    })
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as {
@@ -264,9 +257,8 @@ export default function SettingsPage() {
 
   const handleRotateApiKey = async () => {
     if (!apiKey) return;
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/analytics/api-key/rotate`, {
+    const response = await fetch(dashboardApiPath('analytics/api-key/rotate'), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as { apiKey?: string } | null;
@@ -277,28 +269,26 @@ export default function SettingsPage() {
     }
 
     setApiKey(nextApiKey);
-    localStorage.setItem('apiKey', nextApiKey);
     await fetch('/api/dashboard/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: nextApiKey }),
+      body: JSON.stringify({ apiKey: nextApiKey })
     }).catch(() => undefined);
     setToast('API key rotated successfully.');
   };
 
   const handleSaveStoreConnection = async () => {
     if (!apiKey) return;
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/store`, {
+    const response = await fetch(dashboardApiPath('account/store'), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         domain: storeDomain,
         syncSource: storeSyncSource,
-        feedUrl: storeFeedUrl,
-      }),
+        feedUrl: storeFeedUrl
+    })
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as {
@@ -350,9 +340,8 @@ export default function SettingsPage() {
 
   const handleVerifyStore = async () => {
     if (!apiKey) return;
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/store/verify`, {
+    const response = await fetch(dashboardApiPath('account/store/verify'), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as {
@@ -384,9 +373,8 @@ export default function SettingsPage() {
 
   const handleResyncCatalog = async () => {
     if (!apiKey) return;
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/store/resync`, {
+    const response = await fetch(dashboardApiPath('account/store/resync'), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as {
@@ -428,13 +416,12 @@ export default function SettingsPage() {
       return;
     }
 
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/email/request-change`, {
+    const response = await fetch(dashboardApiPath('account/email/request-change'), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ newEmail }),
+      body: JSON.stringify({ newEmail })
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as {
@@ -458,17 +445,16 @@ export default function SettingsPage() {
   const handleVerifyEmailChange = async () => {
     if (!apiKey) return;
 
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/account/email/verify-change`, {
+    const response = await fetch(dashboardApiPath('account/email/verify-change'), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         newEmail,
         currentEmailOtp,
-        newEmailOtp,
-      }),
+        newEmailOtp
+    })
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as { error?: string; email?: string } | null;

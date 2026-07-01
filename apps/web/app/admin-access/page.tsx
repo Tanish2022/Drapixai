@@ -21,10 +21,6 @@ export default function AdminAccess() {
       setStatus('Access denied.');
       return;
     }
-    const data = await res.json().catch(() => ({}));
-    if (data?.apiKey) {
-      localStorage.setItem('adminApiKey', data.apiKey);
-    }
     setStatus('Access granted.');
     router.push('/admin');
   };

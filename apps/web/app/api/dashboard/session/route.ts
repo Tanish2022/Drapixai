@@ -1,13 +1,12 @@
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
 import {
   createDashboardSessionToken,
   DASHBOARD_SESSION_COOKIE,
   DASHBOARD_SESSION_MAX_AGE_SECONDS,
   readDashboardSessionToken,
 } from '@/app/lib/dashboard-session';
-
-const API_BASE_URL = process.env.DRAPIXAI_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
+import { noStoreJson, rejectCrossOriginRequest } from '@/app/lib/request-guard';
 
 type DashboardSessionRequestBody = {
   mode?: 'login' | 'register';
@@ -18,6 +17,15 @@ type DashboardSessionRequestBody = {
   mobileNumber?: string | null;
   otp?: string;
   apiKey?: string;
+};
+
+const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
+
+const getDashboardValidationHeaders = (apiKey: string) => {
+  const headers = new Headers();
+  headers.set('Authorization', `Bearer ${apiKey}`);
+  if (dashboardProxyToken) headers.set('x-drapixai-dashboard-proxy-token', dashboardProxyToken);
+  return headers;
 };
 
 const persistDashboardCookie = async (apiKey: string) => {
@@ -33,28 +41,50 @@ const persistDashboardCookie = async (apiKey: string) => {
   });
 };
 
-export async function GET() {
+const validateApiKey = async (apiKey: string) => {
+  if (!dashboardProxyToken && process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  const response = await fetch(`${SERVER_API_BASE_URL}/analytics/summary`, {
+    headers: getDashboardValidationHeaders(apiKey),
+    cache: 'no-store',
+  }).catch(() => null);
+
+  return Boolean(response?.ok);
+};
+
+export async function GET(request: Request) {
+  const csrfRejection = rejectCrossOriginRequest(request);
+  if (csrfRejection) return csrfRejection;
+
   const cookieStore = await cookies();
   const session = await readDashboardSessionToken(cookieStore.get(DASHBOARD_SESSION_COOKIE)?.value);
 
   if (!session) {
-    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+    return noStoreJson({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  return NextResponse.json({ ok: true, apiKey: session.apiKey });
+  return noStoreJson({ ok: true, apiKey: session.apiKey });
 }
 
 export async function POST(request: Request) {
+  const csrfRejection = rejectCrossOriginRequest(request);
+  if (csrfRejection) return csrfRejection;
+
   const body = (await request.json().catch(() => null)) as DashboardSessionRequestBody | null;
   const directApiKey = body?.apiKey?.trim();
 
   if (directApiKey) {
+    if (!(await validateApiKey(directApiKey))) {
+      return noStoreJson({ error: 'INVALID_API_KEY' }, { status: 401 });
+    }
     await persistDashboardCookie(directApiKey);
-    return NextResponse.json({ ok: true, apiKey: directApiKey });
+    return noStoreJson({ ok: true, apiKey: directApiKey });
   }
 
   if (!body?.mode || !['login', 'register'].includes(body.mode)) {
-    return NextResponse.json({ error: 'INVALID_MODE' }, { status: 400 });
+    return noStoreJson({ error: 'INVALID_MODE' }, { status: 400 });
   }
 
   const endpoint = body.mode === 'register' ? '/auth/register' : '/auth/login';
@@ -74,7 +104,7 @@ export async function POST(request: Request) {
           issueNewKey: true,
         };
 
-  const authResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const authResponse = await fetch(`${SERVER_API_BASE_URL}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -83,19 +113,22 @@ export async function POST(request: Request) {
 
   const authPayload = (await authResponse.json().catch(() => null)) as { apiKey?: string; error?: string } | null;
   if (!authResponse.ok) {
-    return NextResponse.json({ error: authPayload?.error || 'AUTH_FAILED' }, { status: authResponse.status });
+    return noStoreJson({ error: authPayload?.error || 'AUTH_FAILED' }, { status: authResponse.status });
   }
 
   const apiKey = authPayload?.apiKey?.trim();
   if (!apiKey) {
-    return NextResponse.json({ error: 'API_KEY_NOT_ISSUED' }, { status: 500 });
+    return noStoreJson({ error: 'API_KEY_NOT_ISSUED' }, { status: 500 });
   }
 
   await persistDashboardCookie(apiKey);
-  return NextResponse.json({ ok: true, apiKey });
+  return noStoreJson({ ok: true, apiKey });
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  const csrfRejection = rejectCrossOriginRequest(request);
+  if (csrfRejection) return csrfRejection;
+
   const cookieStore = await cookies();
   cookieStore.set({
     name: DASHBOARD_SESSION_COOKIE,
@@ -107,5 +140,5 @@ export async function DELETE() {
     maxAge: 0,
   });
 
-  return NextResponse.json({ ok: true });
+  return noStoreJson({ ok: true });
 }

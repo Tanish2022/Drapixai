@@ -1,0 +1,288 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R] /Count 6 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 2893 >>
+stream
+BT /F2 28 Tf 1 0 0 1 52.00 742.00 Tm (DrapixAI) Tj ET
+BT /F1 13 Tf 1 0 0 1 52.00 700.00 Tm (Project dossier covering product, technology, deployment, launch) Tj ET
+BT /F1 13 Tf 1 0 0 1 52.00 683.00 Tm (readiness, and go-to-market context.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 648.00 Tm (Date: 2026-06-26) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 631.00 Tm (Audience: founder, sales, engineering, launch, and support) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 614.00 Tm (Current scope: upper-body AI try-on, standard quality only) Tj ET
+BT /F1 12 Tf 1 0 0 1 52.00 597.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 547.00 Tm (1. Executive Summary) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 518.00 Tm (DrapixAI is a B2B AI virtual try-on platform for fashion ecommerce. It is being) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 503.00 Tm (built as a controlled rollout product rather than a broad, hands-off consumer AI) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 488.00 Tm (tool.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 465.00 Tm (The current product focus is upper-body garments only. The system emphasizes garment) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 450.00 Tm (validation, confirmed product mapping, cached garment assets, quality controls, and) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 435.00 Tm (operational readiness before scale.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 412.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 378.00 Tm (2. What The Product Does) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 349.00 Tm (- Lets a brand create an account and obtain an API key.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 331.00 Tm (- Accepts isolated garment images and validates them before use.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 313.00 Tm (- Preprocesses garments into cached assets for repeatable try-on quality.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 295.00 Tm (- Syncs product catalog data and suggests garment-to-product matches.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 277.00 Tm (- Requires manual confirmation of final product mappings before storefront) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 262.00 Tm (traffic uses them.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 244.00 Tm (- Generates shopper try-on outputs from a shopper photo plus confirmed product) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 229.00 Tm (identifier.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 211.00 Tm (- Returns response metadata such as quality score, latency, warnings, engine, and) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 196.00 Tm (cache state.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 178.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 144.00 Tm (3. Current Launch Scope) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 115.00 Tm (Launch-ready categories are focused on upper-body garments. Stronger categories) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 100.00 Tm (include shirts, t-shirts, polos, blouses, and clean tops. Short kurtis, hoodies, and) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 85.00 Tm (sweatshirts are more cautious categories.) Tj ET
+BT /F1 10 Tf 1 0 0 1 473.00 24.00 Tm (Page 1 of 6) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 8 0 R >>
+endobj
+8 0 obj
+<< /Length 3344 >>
+stream
+BT /F1 11 Tf 1 0 0 1 52.00 782.00 Tm (The product should not currently promise full-body support, every apparel class, or) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 767.00 Tm (a universal cross-platform rollout. Full-body is positioned as future work rather) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 752.00 Tm (than part of the current public launch promise.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 729.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 695.00 Tm (4. Customer Workflow) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 666.00 Tm (- Create account and log in.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 648.00 Tm (- Receive or rotate API key.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 630.00 Tm (- Upload garment-only images.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 612.00 Tm (- Run garment validation and cache generation.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 594.00 Tm (- Sync catalog products into the dashboard.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 576.00 Tm (- Review suggested matches.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 558.00 Tm (- Confirm the correct garment-to-product pairings manually.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 540.00 Tm (- Install the browser SDK or call the REST API.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 522.00 Tm (- Send shopper photo plus confirmed product context.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 504.00 Tm (- Receive try-on image and metadata.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 486.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 452.00 Tm (5. Product Features) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 423.00 Tm (- Authentication: email/password signup, OTP verification, login, optional Google) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 408.00 Tm (OAuth.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 390.00 Tm (- Dashboard: usage visibility, analytics, account settings, and plan visibility.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 372.00 Tm (- API key controls: active key lifecycle, rotation, and domain-lock behavior.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 354.00 Tm (- Garment pipeline: upload, validation, preprocessing, cache generation,) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 339.00 Tm (thumbnails, and approval states.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 321.00 Tm (- Catalog flow: catalog sync, discovered products, suggested matches, and) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 306.00 Tm (confirmed mapping.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 288.00 Tm (- Try-on flow: SDK and REST API for standard-quality upper-body generation.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 270.00 Tm (- Operations: readiness endpoints, admin review flows, support contacts, and) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 255.00 Tm (email logging.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 237.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 203.00 Tm (6. Pricing And Commercial Shape) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 174.00 Tm (The commercial motion is designed to be low-risk: brands validate the workflow on) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 159.00 Tm (their own garments first, then move into paid usage only when the try-on flow is) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 144.00 Tm (trustworthy enough for live rollout.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 121.00 Tm (One practical note: pricing language and some backend quota values should be) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 106.00 Tm (reconciled before billing is treated as final.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 83.00 Tm (- Trial: 300 try-ons over 12 days.) Tj ET
+BT /F1 10 Tf 1 0 0 1 473.00 24.00 Tm (Page 2 of 6) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 10 0 R >>
+endobj
+10 0 obj
+<< /Length 2868 >>
+stream
+BT /F1 11 Tf 1 0 0 1 52.00 782.00 Tm (- Starter: entry paid plan for smaller brands.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 764.00 Tm (- Growth: higher-volume plan for stores with more usage.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 746.00 Tm (- Pro: shown as future-facing / coming soon.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 728.00 Tm (- Enterprise: sales-led custom path.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 710.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 676.00 Tm (7. Web Stack) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 647.00 Tm (- Framework: Next.js 16.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 629.00 Tm (- Frontend runtime: React 18.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 611.00 Tm (- Styling: Tailwind CSS.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 593.00 Tm (- Session/auth integration: NextAuth.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 575.00 Tm (- Public pages include homepage, pricing, help, contact, auth flows, dashboard,) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 560.00 Tm (admin, and settings-related views.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 542.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 508.00 Tm (8. Backend Stack) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 479.00 Tm (The API is organized around auth routes, SDK routes, analytics routes, admin routes,) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 464.00 Tm (account routes, and public routes. It also exposes health and ready checks for) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 449.00 Tm (operations.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 426.00 Tm (- Runtime: Node.js with Express and TypeScript.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 408.00 Tm (- ORM and schema layer: Prisma.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 390.00 Tm (- Primary data store: PostgreSQL.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 372.00 Tm (- Queue/cache coordination: Redis.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 354.00 Tm (- Email delivery: Nodemailer via SMTP.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 336.00 Tm (- Scheduled background work: node-cron.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 318.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 284.00 Tm (9. AI Stack) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 255.00 Tm (- Runtime: Python FastAPI service.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 237.00 Tm (- Core try-on engine: CatVTON pipeline.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 219.00 Tm (- Garment pipeline: preprocessing, validation, cache storage, and retrieval.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 201.00 Tm (- Request safety: internal service token for API-to-AI calls.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 183.00 Tm (- Upper-body enforcement and standard-quality enforcement in the live path.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 165.00 Tm (- Response metadata includes quality score, timings, warnings, candidate count,) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 150.00 Tm (and garment source.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 132.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 98.00 Tm (10. Deployment Topology) Tj ET
+BT /F1 10 Tf 1 0 0 1 473.00 24.00 Tm (Page 3 of 6) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 12 0 R >>
+endobj
+12 0 obj
+<< /Length 3445 >>
+stream
+BT /F1 11 Tf 1 0 0 1 52.00 782.00 Tm (The repo already contains Dockerfiles, environment templates, nginx config, RunPod) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 767.00 Tm (bootstrap scripts, environment validation scripts, smoke tests, and health-check) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 752.00 Tm (helpers.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 729.00 Tm (- Edge host: public web app, API, and nginx reverse proxy.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 711.00 Tm (- GPU host: RunPod A100 pod running AI API and worker.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 693.00 Tm (- Managed Postgres recommended for production.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 675.00 Tm (- Managed Redis recommended for production.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 657.00 Tm (- S3-compatible object storage used for uploads, outputs, and thumbnails.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 639.00 Tm (- SMTP provider used for OTP and transactional email.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 621.00 Tm (- Optional Google OAuth for sign-in.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 603.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 569.00 Tm (11. Recommended AI Runtime) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 540.00 Tm (Project docs explicitly say that Windows or local output should not be treated as) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 525.00 Tm (the final production quality gate. The production quality gate is the Linux RunPod) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 510.00 Tm (GPU path.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 487.00 Tm (- Preferred live environment: RunPod Ubuntu GPU stack.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 469.00 Tm (- Preferred GPU: A100 PCIe 80GB.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 451.00 Tm (- Base image: runpod/pytorch 2.4.0 with Python 3.11 and CUDA 12.4.1.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 433.00 Tm (- Preset path: DRAPIXAI_GPU_PRESET=runpod-a100.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 415.00 Tm (- Warm latency target: about 10 to 12 seconds.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 397.00 Tm (- Model preload is enabled on the A100 path to reduce cold-start impact.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 379.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 345.00 Tm (12. Core Data Model) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 316.00 Tm (- User: account, company, plan, trial, store verification, and catalog sync) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 301.00 Tm (metadata.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 283.00 Tm (- ApiKey: active key storage and domain whitelist.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 265.00 Tm (- Usage and UsageDaily: monthly and daily consumption tracking.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 247.00 Tm (- Garment: garment assets, cache keys, thumbnails, status, and source references.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 229.00 Tm (- CatalogProduct: discovered or synced product catalog items.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 211.00 Tm (- GarmentMatch: suggested and confirmed mapping between garment and product.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 193.00 Tm (- TryOnResult: generated result image, quality score, timing, warnings, and) Tj ET
+BT /F1 11 Tf 1 0 0 1 70.00 178.00 Tm (approval status.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 160.00 Tm (- TryOnFeedback: manual realism or defect review data.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 142.00 Tm (- EmailLog: OTP and transactional email tracking.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 124.00 Tm (- VerificationCode: OTP and email verification support.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 106.00 Tm () Tj ET
+BT /F1 10 Tf 1 0 0 1 473.00 24.00 Tm (Page 4 of 6) Tj ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 14 0 R >>
+endobj
+14 0 obj
+<< /Length 3004 >>
+stream
+BT /F2 17 Tf 1 0 0 1 52.00 770.00 Tm (13. Security And Operational Controls) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 741.00 Tm (- Helmet and CORS protections on the API.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 723.00 Tm (- JWT-based account auth.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 705.00 Tm (- Bcrypt hashing for passwords and API keys.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 687.00 Tm (- Single-domain enforcement behavior for API keys in the live SDK path.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 669.00 Tm (- Readiness checks across database, Redis, AI, and storage.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 651.00 Tm (- Admin review filters for low quality, high latency, warnings, and cache issues.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 633.00 Tm (- Email send logging for supportability.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 615.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 581.00 Tm (14. Marketing And Go-To-Market Assets) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 552.00 Tm (The repository already contains a substantial founder-led marketing pack. That means) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 537.00 Tm (the business side of launch has been prepared alongside the product and) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 522.00 Tm (infrastructure.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 499.00 Tm (- Go-to-market strategy document.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 481.00 Tm (- Video scripts and production kit.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 463.00 Tm (- Prelaunch partner brief.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 445.00 Tm (- Cold outbound email sequence and sender setup guide.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 427.00 Tm (- Growth experiments and omnichannel roadmap.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 409.00 Tm (- Segmented email templates for growth and enterprise accounts.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 391.00 Tm (- Lead templates and a marketing-agent operating framework.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 373.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 339.00 Tm (15. Launch Readiness) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 310.00 Tm (The codebase appears structurally close to launch. Deployment documentation,) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 295.00 Tm (environment templates, health checks, smoke-test scripts, AI presets, and support) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 280.00 Tm (playbooks are already in place.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 257.00 Tm (However, the project docs still call out a few live blockers that matter before) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 242.00 Tm (public launch.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 219.00 Tm (- Live RunPod A100 validation.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 201.00 Tm (- Real SMTP verification.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 183.00 Tm (- Optional Google OAuth verification if exposed publicly.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 165.00 Tm (- At least one successful end-to-end public try-on on the Linux GPU path.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 147.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 113.00 Tm (16. Practical Assessment) Tj ET
+BT /F1 10 Tf 1 0 0 1 473.00 24.00 Tm (Page 5 of 6) Tj ET
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 16 0 R >>
+endobj
+16 0 obj
+<< /Length 2308 >>
+stream
+BT /F1 11 Tf 1 0 0 1 52.00 782.00 Tm (DrapixAI should be understood as a controlled AI commerce system, not just an) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 767.00 Tm (image-generation feature. Its real value comes from combining garment preparation,) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 752.00 Tm (product mapping, AI generation, analytics, and launch operations into one commerce) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 737.00 Tm (workflow.) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 714.00 Tm (From the repository state, the project already shows serious product, engineering,) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 699.00 Tm (and go-to-market preparation. The main remaining work is live production proof on) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 684.00 Tm (the target A100 stack and finalizing the external infrastructure pieces needed for a) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 669.00 Tm (safe public launch.) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 646.00 Tm () Tj ET
+BT /F2 17 Tf 1 0 0 1 52.00 612.00 Tm (17. Source Snapshot Used For This Brief) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 583.00 Tm (- deploy.md) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 565.00 Tm (- deploy/production-readiness.md) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 547.00 Tm (- deploy/launch-support-playbook.md) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 529.00 Tm (- apps/web/app/page.tsx) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 511.00 Tm (- apps/web/app/pricing/page.tsx) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 493.00 Tm (- apps/web/app/help/page.tsx) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 475.00 Tm (- apps/web/app/contact/page.tsx) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 457.00 Tm (- apps/api/prisma/schema.prisma) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 439.00 Tm (- apps/api/src/server.ts) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 421.00 Tm (- apps/api/src/routes/auth.ts) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 403.00 Tm (- apps/api/src/routes/sdk.ts) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 385.00 Tm (- apps/api/src/routes/analytics.ts) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 367.00 Tm (- apps/api/src/services/emailer.ts) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 349.00 Tm (- drapixai_ai/api/ai_server.py) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 331.00 Tm (- drapixai_ai/configs/settings.py) Tj ET
+BT /F1 11 Tf 1 0 0 1 52.00 313.00 Tm (- marketing/README.md) Tj ET
+BT /F1 10 Tf 1 0 0 1 52.00 295.00 Tm () Tj ET
+BT /F1 10 Tf 1 0 0 1 473.00 24.00 Tm (Page 6 of 6) Tj ET
+endstream
+endobj
+xref
+0 17
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000148 00000 n 
+0000000218 00000 n 
+0000000293 00000 n 
+0000000429 00000 n 
+0000003374 00000 n 
+0000003510 00000 n 
+0000006906 00000 n 
+0000007043 00000 n 
+0000009964 00000 n 
+0000010102 00000 n 
+0000013600 00000 n 
+0000013738 00000 n 
+0000016795 00000 n 
+0000016933 00000 n 
+trailer
+<< /Size 17 /Root 1 0 R >>
+startxref
+19294
+%%EOF

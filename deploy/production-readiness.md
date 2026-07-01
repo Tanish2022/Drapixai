@@ -4,7 +4,7 @@ This file is the execution guide for the remaining launch work after local code/
 
 ## 1. Current Local State
 
-- Local Postgres is reachable on `localhost:5432`
+- Local Postgres is reachable on `localhost:5433` when `DRAPIXAI_POSTGRES_PORT=5433`
 - Local Redis is reachable on `localhost:6379`
 - Local MinIO is reachable on `localhost:9000`
 - Prisma schema has been pushed successfully to the clean local `drapixai` database
@@ -61,6 +61,9 @@ set -a
 source deploy/env/ai.production.env
 set +a
 bash deploy/scripts/validate-env.sh ai
+bash deploy/scripts/validate-production-env-set.sh
+# Windows equivalent:
+powershell -ExecutionPolicy Bypass -File deploy\scripts\validate-production-env-set.ps1
 ```
 
 ### Secret generation
@@ -86,7 +89,10 @@ Required:
 - `DATABASE_URL`
 - `REDIS_URL`
 - `JWT_SECRET`
+- `DRAPIXAI_AUTH_SYNC_TOKEN`
+- `DRAPIXAI_DASHBOARD_PROXY_TOKEN`
 - `DRAPIXAI_AI_URL`
+- `DRAPIXAI_AI_SERVICE_TOKEN`
 - `DRAPIXAI_CORS_ORIGINS`
 - `DRAPIXAI_ADMIN_TOKEN`
 - `DRAPIXAI_ADMIN_PASSWORD`
@@ -121,6 +127,9 @@ Required:
 - `NEXTAUTH_URL`
 - `NEXTAUTH_SECRET`
 - `ADMIN_SESSION_SECRET`
+- `DASHBOARD_SESSION_SECRET`
+- `DRAPIXAI_AUTH_SYNC_TOKEN`
+- `DRAPIXAI_DASHBOARD_PROXY_TOKEN`
 
 Required only if Google login is enabled:
 
@@ -137,6 +146,7 @@ Optional for the marketing/demo experience:
 Required:
 
 - `DRAPIXAI_GPU_PRESET=runpod-a100`
+- `DRAPIXAI_ENV=production`
 - `DRAPIXAI_DEVICE=cuda`
 - `DRAPIXAI_CUDA_DEVICE=0`
 - `DRAPIXAI_REDIS_URL`
@@ -144,6 +154,10 @@ Required:
 - `DRAPIXAI_TRYON_ENGINE=catvton`
 - `DRAPIXAI_GARMENT_CACHE_DIR=/workspace/drapixai/runtime/garments`
 - `DRAPIXAI_ADMIN_TOKEN`
+- `DRAPIXAI_AI_SERVICE_TOKEN`
+
+Required only when `DRAPIXAI_GARMENT_CACHE_BACKEND=s3`:
+
 - `DRAPIXAI_S3_BUCKET`
 - `DRAPIXAI_S3_REGION`
 - `DRAPIXAI_S3_ACCESS_KEY_ID`
@@ -157,6 +171,50 @@ Recommended defaults already match the A100 path:
 - `DRAPIXAI_ENABLE_CPU_OFFLOAD=0`
 - `DRAPIXAI_OPENPOSE_DEVICE=cuda`
 - `DRAPIXAI_PRELOAD_MODEL=1`
+
+## 2A. Security Gates
+
+These are hard launch gates, not recommendations:
+
+- `DRAPIXAI_CORS_ORIGINS` must list exact production origins. Never use `*` in production.
+- `JWT_SECRET`, `NEXTAUTH_SECRET`, `ADMIN_SESSION_SECRET`, `DASHBOARD_SESSION_SECRET`, `DRAPIXAI_ADMIN_TOKEN`, and `DRAPIXAI_AI_SERVICE_TOKEN` must be long random secrets.
+- `DRAPIXAI_AUTH_SYNC_TOKEN` must be the same long random secret on the web and API services so Google login sync is server-to-server only.
+- The same `DRAPIXAI_AI_SERVICE_TOKEN` must be configured on the API and AI service.
+- Run `bash deploy/scripts/validate-production-env-set.sh` after editing production env files to verify shared secrets match across API, web, and AI.
+- The AI service must run with `DRAPIXAI_ENV=production` on RunPod so missing service/admin tokens fail startup.
+- Public upload paths only accept `jpg`, `jpeg`, `png`, and `webp` images.
+- `/ready` must not expose detailed internal errors in production unless `DRAPIXAI_EXPOSE_READY_DETAILS=1` is intentionally set for staging.
+- The storefront SDK must use confirmed `productId` or a ready cache key; public production traffic should not rely on arbitrary shopper-provided garment uploads.
+- Admin dashboard traffic must go through the same-origin Next admin proxy. Do not expose admin API keys to browser JSON responses or `localStorage`.
+- Brand dashboard API keys may be displayed for SDK installation, but must not be persisted in browser `localStorage`; the encrypted httpOnly dashboard session, sealed with `DASHBOARD_SESSION_SECRET`, is the source of truth. Brand dashboard management calls must go through the same-origin Next dashboard proxy, which forwards the key plus `DRAPIXAI_DASHBOARD_PROXY_TOKEN` only server-side. Backend account, analytics, catalog, garment, and mapping management routes must reject direct storefront-key calls that do not include the proxy token. Dashboard session validation must also forward the same private proxy token when checking an existing key. Google OAuth may keep the issued API key in the server-side NextAuth JWT only; browser-visible NextAuth sessions must not expose it.
+- The public SDK must sanitize configurable CSS values and logo URLs before injecting generated markup into a brand storefront.
+- The web app must ship production security headers from `next.config.js`, including CSP, frame protection, no-sniff, referrer policy, and permissions policy.
+- Cookie-backed admin and dashboard routes must reject cross-origin session and proxy mutations using the configured web origin.
+- Session routes that create, clear, or reveal dashboard credentials must return explicit no-store JSON responses so browser/proxy caches do not retain API keys.
+
+Minimum security verification before launch:
+
+```bash
+set -a && source deploy/env/api.production.env && set +a
+bash deploy/scripts/validate-env.sh api
+
+set -a && source deploy/env/web.production.env && set +a
+bash deploy/scripts/validate-env.sh web
+
+set -a && source deploy/env/ai.production.env && set +a
+bash deploy/scripts/validate-env.sh ai
+bash deploy/scripts/validate-production-env-set.sh
+# Windows equivalent:
+powershell -ExecutionPolicy Bypass -File deploy\scripts\validate-production-env-set.ps1
+```
+
+Then verify:
+
+- unauthenticated `/sdk/tryon` returns `401`
+- wrong-origin `/sdk/validate` returns `403`
+- missing AI service token on `/ai/tryon/base64` returns `401`
+- public demo rejects non-image uploads before reaching the AI worker
+- admin routes reject non-admin API keys
 
 ## 3. Domain, DNS, And Reverse Proxy
 
@@ -315,7 +373,53 @@ Expected result:
 - `/health` returns `{"status":"ok"}`
 - `/ready` returns `{"status":"ready","model_ready":true}`
 
-## 8. Staging Checklist
+## 8. Local Stack Startup
+
+Use the idempotent local starter when you need the full Windows dev stack:
+
+```powershell
+npm run start:local
+```
+
+This starts or reuses:
+
+- Docker infra: Postgres, Redis, MinIO
+- API on `http://localhost:8000`
+- Web on `http://localhost:3000`
+- AI API on `http://localhost:8080`
+
+The starter checks whether ports are already listening before launching a service, writes separate stdout/stderr logs under `runtime/logs`, and runs `deploy/scripts/local-preflight.ps1` after startup.
+
+Then prove the local stack through the API. When image inputs are provided, `prove-live-stack.sh` can read `DRAPIXAI_DASHBOARD_PROXY_TOKEN` from `DRAPIXAI_API_ENV_FILE`, `apps/api/.env`, or `deploy/env/api.production.env` before it delegates to the SDK smoke flow:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy/scripts/prove-live-stack.ps1 -ApiUrl http://localhost:8000
+```
+
+## 9. Local SDK Smoke
+
+Use this on Windows/local to prove the storefront onboarding path without treating local CPU generation as a quality gate:
+
+```powershell
+$env:API_URL='http://localhost:8000'
+$env:DASHBOARD_PROXY_TOKEN=$env:DRAPIXAI_DASHBOARD_PROXY_TOKEN
+$env:PERSON_IMAGE='runtime/catalog_assets/cases/01_shirt/person.png'
+$env:CLOTH_IMAGE='runtime/catalog_assets/cases/01_shirt/garment.png'
+$env:DRAPIXAI_SMOKE_SKIP_TRYON='1'
+powershell -ExecutionPolicy Bypass -File deploy/scripts/smoke-test.ps1
+```
+
+This proves:
+
+- signup and API key creation
+- SDK key validation from the local storefront origin
+- garment upload and preprocessing/cache creation
+- catalog sync
+- confirmed garment-to-product mapping
+
+It intentionally skips final `/sdk/tryon`. Full image generation, quality score, warnings, and latency must still be proven on RunPod A100 with `DRAPIXAI_SMOKE_SKIP_TRYON` unset.
+
+## 10. Staging Checklist
 
 Before calling anything launch-ready, complete this list:
 
@@ -333,7 +437,7 @@ Before calling anything launch-ready, complete this list:
 12. One real `/sdk/tryon` call returns a real image
 13. Env validation passes for `api`, `web`, and `ai`
 
-## 9. Deploy / No-Deploy Gate
+## 10. Deploy / No-Deploy Gate
 
 ### Deploy only if all are true
 

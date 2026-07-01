@@ -20,18 +20,12 @@ function ThemeSync() {
 }
 
 function SessionSync() {
-  const { data: session } = useSession();
+  const { status } = useSession();
   useEffect(() => {
-    const apiKey = (session as any)?.apiKey;
-    if (apiKey) {
-      localStorage.setItem('apiKey', apiKey);
-      fetch('/api/dashboard/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey }),
-      }).catch(() => undefined);
+    if (status === 'authenticated') {
+      fetch('/api/dashboard/oauth-session', { method: 'POST' }).catch(() => undefined);
     }
-  }, [session]);
+  }, [status]);
   return null;
 }
 

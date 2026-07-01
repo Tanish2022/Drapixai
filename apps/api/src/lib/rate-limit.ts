@@ -8,14 +8,7 @@ type Entry = {
 const buckets = new Map<string, Entry>();
 
 const getClientKey = (req: Request) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  const ip = Array.isArray(forwarded)
-    ? forwarded[0]
-    : typeof forwarded === 'string'
-      ? forwarded.split(',')[0]
-      : req.ip || 'unknown';
-
-  return `${ip}:${req.path}`;
+  return `${req.ip || 'unknown'}:${req.path}`;
 };
 
 export const createRateLimitMiddleware = (maxRequests: number, windowMs: number) => {
@@ -39,3 +32,10 @@ export const createRateLimitMiddleware = (maxRequests: number, windowMs: number)
     next();
   };
 };
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of buckets.entries()) {
+    if (entry.resetAt <= now) buckets.delete(key);
+  }
+}, 60 * 1000).unref();

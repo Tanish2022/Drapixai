@@ -12,11 +12,17 @@ CLOTH_IMAGE="${CLOTH_IMAGE:-$ASSET_DIR/garment.jpg}"
 API_URL="${API_URL:-http://127.0.0.1:8000}"
 AI_URL="${AI_URL:-http://127.0.0.1:8080}"
 PYTHON_BIN="${DRAPIXAI_PYTHON_BIN:-python}"
+API_ENV_FILE="${DRAPIXAI_API_ENV_FILE:-$APP_ROOT/apps/api/.env}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
-
+read_env_value() {
+  local key="$1"
+  local file="$2"
+  [[ -f "$file" ]] || return 0
+  grep -E "^${key}=" "$file" | tail -n 1 | cut -d= -f2- || true
+}
 require_file() {
   local path="$1"
   local label="$2"
@@ -108,7 +114,17 @@ PY
 run_sdk_tryon() {
   log "Running SDK/API Standard try-on through product mapping and cached garment"
   mkdir -p "$RESULT_DIR"
+  local dashboard_proxy_token="${DRAPIXAI_DASHBOARD_PROXY_TOKEN:-${DASHBOARD_PROXY_TOKEN:-}}"
+  if [[ -z "$dashboard_proxy_token" ]]; then
+    dashboard_proxy_token="$(read_env_value DRAPIXAI_DASHBOARD_PROXY_TOKEN "$API_ENV_FILE")"
+  fi
+  if [[ -z "$dashboard_proxy_token" ]]; then
+    echo "Missing DRAPIXAI_DASHBOARD_PROXY_TOKEN. Run deploy/runpod/setup-sdk-api-stack.sh or set DASHBOARD_PROXY_TOKEN before launch validation." >&2
+    exit 1
+  fi
+
   API_URL="$API_URL" \
+  DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token" \
   PERSON_IMAGE="$PERSON_IMAGE" \
   CLOTH_IMAGE="$CLOTH_IMAGE" \
   OUTPUT_FILE="$RESULT_DIR/sdk_standard.png" \

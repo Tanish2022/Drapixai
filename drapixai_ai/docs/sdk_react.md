@@ -18,6 +18,7 @@ export default function ProductPage() {
       footerText="We never store your photo."
       timeoutMs={20000}
       primaryGradient="linear-gradient(90deg,#22d3ee,#3b82f6)"
+      logoUrl="https://cdn.yourbrand.com/logo-mark.svg"
       onResult={(metadata) => console.log(metadata.qualityScore, metadata.latencyMs)}
       onError={(error) => console.warn(error.message)}
     />
@@ -38,6 +39,7 @@ export default function ProductPage() {
 - `footerText` (optional)
 - `timeoutMs` (optional, default `20000`; storefront should expect normal warm results in 10-12 seconds, with extra room for network variance)
 - `primaryGradient` (optional)
+- `logoUrl` (optional; override the delivered DrapixAI emblem with an approved co-branded mark)
 - `onResult` (optional metadata callback with result id, engine, quality score, candidate count, AI processing time, API latency, timing breakdown, and warnings)
 - `onError` (optional callback with a clean error message and product id)
 

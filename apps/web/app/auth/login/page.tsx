@@ -34,9 +34,6 @@ export default function LoginPage() {
         return;
       }
 
-      if (data?.apiKey) {
-        localStorage.setItem('apiKey', data.apiKey);
-      }
       router.push('/');
       trackEvent('user_login', { metadata: { source: 'password' } });
     } catch {

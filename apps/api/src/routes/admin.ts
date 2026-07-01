@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import fs from 'fs';
-import bcrypt from 'bcryptjs';
 import { createClient } from 'redis';
 import { sendGarmentApprovalEmail } from '../services/emailer';
 import { createStorageClient, getStorageSummary } from '../lib/storage';
+import { resolveActiveApiKey } from '../lib/api-key-auth';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { formatPlanLabel } from '../lib/plans';
 import { buildProductAccuracyReport, getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
+import { readLocalUploadFile } from '../lib/security';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -16,15 +16,16 @@ const ADMIN_EMAIL = process.env.DRAPIXAI_ADMIN_EMAIL || '';
 const ADMIN_USER_ID = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
 const s3 = createStorageClient();
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+redis.on('error', (error) => {
+  console.error('Admin Redis client error:', error);
+});
 redis.connect().catch(() => undefined);
 const adminRateLimit = createRateLimitMiddleware(60, 15 * 60 * 1000);
 
 const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
   if (!storedUrl) return null;
   if (storedUrl.startsWith('local:')) {
-    const localPath = storedUrl.replace('local:', '');
-    if (!fs.existsSync(localPath)) return null;
-    return fs.readFileSync(localPath);
+    return readLocalUploadFile(storedUrl);
   }
   if (storedUrl.startsWith('s3://')) {
     const rest = storedUrl.replace('s3://', '');
@@ -59,30 +60,20 @@ const sendStoredImage = async (res: any, storedUrl: string | null | undefined) =
 };
 
 const adminAuth = async (req: any, res: any, next: any) => {
-  const apiKeyHeader = req.headers.authorization?.replace('Bearer ', '');
-  if (!apiKeyHeader) {
-    return res.status(401).json({ error: 'API_KEY_REQUIRED' });
+  const activeKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+  if (!activeKey) {
+    return res.status(401).json({ error: 'INVALID_API_KEY' });
   }
 
-  const keys = await prisma.apiKey.findMany({
-    where: { isActive: true },
-    include: { user: true }
-  });
-
-  for (const key of keys) {
-    if (await bcrypt.compare(apiKeyHeader, key.keyHash)) {
-      const user = key.user;
-      const isAdmin = (ADMIN_EMAIL && user.email === ADMIN_EMAIL) || (ADMIN_USER_ID && user.id === ADMIN_USER_ID);
-      if (!isAdmin) {
-        return res.status(403).json({ error: 'ADMIN_REQUIRED' });
-      }
-      req.user = user;
-      req.apiKey = key;
-      return next();
-    }
+  const user = await prisma.user.findUnique({ where: { id: activeKey.userId } });
+  const isAdmin = Boolean(user && ((ADMIN_EMAIL && user.email === ADMIN_EMAIL) || (ADMIN_USER_ID && user.id === ADMIN_USER_ID)));
+  if (!user || !isAdmin) {
+    return res.status(403).json({ error: 'ADMIN_REQUIRED' });
   }
 
-  return res.status(401).json({ error: 'INVALID_API_KEY' });
+  req.user = user;
+  req.apiKey = activeKey;
+  return next();
 };
 
 router.use(adminRateLimit);
@@ -374,9 +365,8 @@ router.get('/garments/:id/thumbnail', async (req, res) => {
     return res.status(404).json({ error: 'THUMBNAIL_NOT_READY' });
   }
   if (garment.thumbnailUrl.startsWith('local:')) {
-    const localPath = garment.thumbnailUrl.replace('local:', '');
-    if (!fs.existsSync(localPath)) return res.status(404).json({ error: 'THUMBNAIL_NOT_FOUND' });
-    const buffer = fs.readFileSync(localPath);
+    const buffer = readLocalUploadFile(garment.thumbnailUrl);
+    if (!buffer) return res.status(404).json({ error: 'THUMBNAIL_NOT_FOUND' });
     res.setHeader('Content-Type', 'image/png');
     return res.send(buffer);
   }

@@ -31,3 +31,5 @@ runpod_smoke_*.py
 tmp_*
 *.pem
 deploy/env/*.production.env
+output/
+outputs/

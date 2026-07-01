@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrapixAI Project Dossier</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --page: #ffffff;
+      --ink: #101828;
+      --muted: #475467;
+      --line: #d0d5dd;
+      --brand: #0ea5e9;
+      --brand-dark: #075985;
+      --accent: #ecfeff;
+      --success: #027a48;
+      --warn: #b54708;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 20mm 18mm;
+      background: var(--page);
+    }
+
+    .hero {
+      padding: 18mm 0 12mm;
+      border-bottom: 2px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--brand-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-size: 32px;
+      line-height: 1.08;
+      margin: 0 0 14px;
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 22px 0 10px;
+      color: var(--brand-dark);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+
+    h3 {
+      font-size: 16px;
+      margin: 14px 0 8px;
+    }
+
+    p {
+      margin: 0 0 10px;
+    }
+
+    ul, ol {
+      margin: 8px 0 12px 20px;
+      padding: 0;
+    }
+
+    li {
+      margin: 0 0 6px;
+    }
+
+    .lede {
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 90%;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      background: #fafcff;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .banner {
+      background: var(--accent);
+      border-left: 4px solid var(--brand);
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin: 10px 0 16px;
+    }
+
+    .status {
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin: 10px 0 16px;
+      border: 1px solid var(--line);
+    }
+
+    .status.ready {
+      background: #ecfdf3;
+      border-color: #a6f4c5;
+    }
+
+    .status.warn {
+      background: #fff7ed;
+      border-color: #f9dbaf;
+    }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 16px;
+    }
+
+    .pill {
+      background: #eff8ff;
+      border: 1px solid #b2ddff;
+      color: #175cd3;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f8fafc;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .sheet {
+        width: auto;
+        min-height: auto;
+        margin: 0;
+        padding: 14mm 12mm;
+      }
+
+      h2, h3, .card, .status, .banner, table {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <section class="hero">
+      <div class="eyebrow">Project Dossier</div>
+      <h1>DrapixAI</h1>
+      <p class="lede">
+        DrapixAI is a fashion ecommerce AI try-on platform built for controlled storefront rollout. The current product is focused on upper-body virtual try-on, standard-quality generation, confirmed product mapping, garment caching, and launch-safe operations.
+      </p>
+      <div class="meta">
+        <div class="card">
+          <strong>Primary market</strong>
+          Fashion ecommerce brands and storefront teams
+        </div>
+        <div class="card">
+          <strong>Current launch scope</strong>
+          Upper-body garments only, standard quality only
+        </div>
+        <div class="card">
+          <strong>Deployment target</strong>
+          Edge web/API + RunPod A100 GPU AI runtime
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>1. Executive Summary</h2>
+      <p>
+        DrapixAI helps brands let shoppers preview clothing on themselves without needing a heavy storefront rebuild. The product is designed to be reliable before it is broad. That means the launch scope is intentionally narrow, the AI pipeline is guarded by validation rules, and brands are expected to confirm product-to-garment mappings before live shopper traffic uses the system.
+      </p>
+      <div class="banner">
+        <strong>Core positioning:</strong> AI virtual try-on for fashion ecommerce, starting with upper-body garments and a monitored rollout model.
+      </div>
+      <div class="pill-list">
+        <span class="pill">Upper-body only</span>
+        <span class="pill">Standard quality only</span>
+        <span class="pill">Confirmed mapping flow</span>
+        <span class="pill">Garment cache required</span>
+        <span class="pill">A100-ready deployment</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Product Overview</h2>
+      <h3>What the product does</h3>
+      <ul>
+        <li>Lets a brand upload isolated garment images.</li>
+        <li>Validates and preprocesses those garment images into reusable cached assets.</li>
+        <li>Syncs a product catalog and suggests garment-to-product matches.</li>
+        <li>Requires manual confirmation of the final mapping before storefront use.</li>
+        <li>Accepts a shopper photo plus a product identifier and returns a generated try-on image.</li>
+        <li>Returns operational metadata such as quality score, latency, warnings, engine, and cache state.</li>
+      </ul>
+
+      <h3>Launch-ready garment scope</h3>
+      <p>
+        The strongest current categories are shirts, t-shirts, polos, blouses, and clean tops. Short kurtis, hoodies, and sweatshirts are treated more carefully. Long kurtas, jackets, blazers, layered outerwear, and other broader full-body categories are outside the current public promise.
+      </p>
+
+      <h3>What DrapixAI is not promising yet</h3>
+      <ul>
+        <li>Full-body try-on is not part of the current live launch promise.</li>
+        <li>It should not be marketed as a universal solution for every garment class.</li>
+        <li>It should not be framed as a fully hands-off SaaS product yet.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>3. Customer Workflow</h2>
+      <ol>
+        <li>Create an account and receive an API key.</li>
+        <li>Upload garment-only images for validation and cache generation.</li>
+        <li>Discover or sync catalog products into the dashboard.</li>
+        <li>Review suggested matches and confirm the correct garment-to-product pairings.</li>
+        <li>Install the SDK or call the REST API with a shopper photo and confirmed product mapping.</li>
+        <li>Receive a try-on image plus metadata for analytics and quality review.</li>
+      </ol>
+
+      <div class="grid-2">
+        <div class="card">
+          <strong>Business benefit</strong>
+          Better product-page engagement, stronger purchase confidence, and a more controlled rollout path for brands testing AI commerce.
+        </div>
+        <div class="card">
+          <strong>Operational benefit</strong>
+          Cached garments, domain controls, review workflows, readiness checks, and analytics reduce launch risk.
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Product Features</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Current capability</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Authentication</td>
+            <td>Email/password signup, OTP verification, login, optional Google OAuth</td>
+          </tr>
+          <tr>
+            <td>Account controls</td>
+            <td>API key issuance and rotation, domain association, settings and subscription views</td>
+          </tr>
+          <tr>
+            <td>Garment pipeline</td>
+            <td>Upload validation, preprocessing, cached garment storage, thumbnails, approval support</td>
+          </tr>
+          <tr>
+            <td>Catalog mapping</td>
+            <td>Catalog sync, discovered products, suggested matches, confirmed product mapping</td>
+          </tr>
+          <tr>
+            <td>Try-on delivery</td>
+            <td>Storefront SDK and REST API with standard-quality upper-body try-on</td>
+          </tr>
+          <tr>
+            <td>Operations</td>
+            <td>Admin review, try-on analytics, quota tracking, email logs, readiness endpoints</td>
+          </tr>
+          <tr>
+            <td>Support</td>
+            <td>Support, sales, and privacy contact paths with launch playbooks</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>5. Pricing and Commercial Model</h2>
+      <ul>
+        <li>Free trial: 300 try-ons over 12 days.</li>
+        <li>Starter: entry paid plan for smaller brands.</li>
+        <li>Growth: higher-volume plan for growing stores.</li>
+        <li>Pro: shown as future-facing / coming soon.</li>
+        <li>Enterprise: custom commercial path through sales.</li>
+      </ul>
+      <p>
+        The commercial story is designed to be low-friction: brands try the workflow first, validate quality on their own garments, then move into paid volume only if the output and integration path are strong enough.
+      </p>
+      <div class="status warn">
+        <strong>Commercial note:</strong> the repo indicates a small mismatch between some pricing language and backend quota configuration, so pricing and quota values should be checked before public billing is treated as final.
+      </div>
+    </section>
+
+    <section>
+      <h2>6. Technical Architecture</h2>
+      <h3>Web application</h3>
+      <ul>
+        <li>Framework: Next.js 16 with React 18</li>
+        <li>UI: Tailwind CSS and app-router pages</li>
+        <li>Auth session support via NextAuth</li>
+      </ul>
+
+      <h3>Backend API</h3>
+      <ul>
+        <li>Runtime: Node.js with Express and TypeScript</li>
+        <li>Database ORM: Prisma</li>
+        <li>Primary services: auth, SDK routes, analytics, admin, account, public endpoints</li>
+        <li>Email: Nodemailer-based SMTP integration</li>
+        <li>Scheduling: node-cron for time-based account lifecycle work</li>
+      </ul>
+
+      <h3>AI service</h3>
+      <ul>
+        <li>Runtime: Python FastAPI service</li>
+        <li>Core engine: CatVTON-based try-on pipeline</li>
+        <li>Upper-body validation and garment preprocessing</li>
+        <li>Garment cache and request metadata headers</li>
+        <li>Redis-backed queue and job lifecycle</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>7. Infrastructure and Deployment Model</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Deployment role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Edge host</td>
+            <td>Public web app, API, and nginx reverse proxy</td>
+          </tr>
+          <tr>
+            <td>GPU host</td>
+            <td>RunPod A100 Pod running AI API and worker</td>
+          </tr>
+          <tr>
+            <td>Database</td>
+            <td>Managed Postgres recommended</td>
+          </tr>
+          <tr>
+            <td>Queue/cache</td>
+            <td>Redis for API and AI coordination</td>
+          </tr>
+          <tr>
+            <td>Object storage</td>
+            <td>AWS S3 or compatible storage for uploads, outputs, and thumbnails</td>
+          </tr>
+          <tr>
+            <td>Email</td>
+            <td>SMTP provider, with Resend recommended in docs</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="status ready">
+        <strong>Deployment shape already prepared:</strong> the repo includes Dockerfiles, environment templates, nginx config, RunPod bootstrap scripts, environment validation scripts, health checks, and smoke tests.
+      </div>
+    </section>
+
+    <section>
+      <h2>8. AI Runtime Details</h2>
+      <ul>
+        <li>Preferred production environment: RunPod Ubuntu GPU stack</li>
+        <li>Recommended GPU: A100 PCIe 80GB</li>
+        <li>Base image: RunPod PyTorch 2.4.0, Python 3.11, CUDA 12.4.1</li>
+        <li>Preset environment: <code>DRAPIXAI_GPU_PRESET=runpod-a100</code></li>
+        <li>Current launch quality mode: standard only</li>
+        <li>Warm latency target: roughly 10 to 12 seconds</li>
+        <li>Model preload enabled on the A100 path to reduce first-request cold start</li>
+      </ul>
+
+      <h3>AI safeguards already reflected in code</h3>
+      <ul>
+        <li>Rejects unsupported non-standard quality requests.</li>
+        <li>Restricts launch flow to upper-body try-on.</li>
+        <li>Requires internal API-to-AI service token for protected AI routes.</li>
+        <li>Attaches quality, timing, and garment-source metadata to responses.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>9. Data Model</h2>
+      <p>The core persisted entities in the database include:</p>
+      <ul>
+        <li><strong>User:</strong> account, company, plan, trial, store verification, sync metadata</li>
+        <li><strong>ApiKey:</strong> active key lifecycle and domain whitelist</li>
+        <li><strong>Usage / UsageDaily:</strong> monthly and daily quota accounting</li>
+        <li><strong>Garment:</strong> uploaded garment record, cache key, status, thumbnails, source information</li>
+        <li><strong>CatalogProduct:</strong> synced product catalog entries</li>
+        <li><strong>GarmentMatch:</strong> suggested and confirmed garment-to-product links</li>
+        <li><strong>TryOnResult:</strong> result image, quality score, warnings, timing, approvals</li>
+        <li><strong>TryOnFeedback:</strong> human review and error labeling for realism issues</li>
+        <li><strong>EmailLog:</strong> transactional email send tracking</li>
+        <li><strong>VerificationCode:</strong> OTP and verification flow support</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>10. Security and Operational Controls</h2>
+      <ul>
+        <li>Helmet and CORS protection on the API.</li>
+        <li>JWT-based auth for account sessions.</li>
+        <li>Bcrypt hashing for passwords and API key storage.</li>
+        <li>Single-domain enforcement behavior for SDK/API keys.</li>
+        <li>Readiness checks across database, Redis, AI, and storage.</li>
+        <li>Admin review support for low quality, high latency, warning-heavy, or cache-failed cases.</li>
+        <li>Email event logging for OTP and workflow notifications.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>11. Marketing and Go-To-Market Assets</h2>
+      <p>
+        The repo already includes a marketing execution pack. This means DrapixAI is not only being prepared technically, but also operationally for founder-led growth.
+      </p>
+      <ul>
+        <li>Go-to-market strategy</li>
+        <li>Video scripts and production kit</li>
+        <li>Prelaunch partner brief</li>
+        <li>Cold outbound email sequence</li>
+        <li>Email sender setup guide</li>
+        <li>Growth experiments and 90-day roadmap</li>
+        <li>Segmented email templates for growth and enterprise leads</li>
+        <li>Lead sheet CSV templates</li>
+      </ul>
+      <p>
+        The outreach sender is already referenced in the repo and is designed to default to dry-run behavior for safer preview before any real outbound use.
+      </p>
+    </section>
+
+    <section>
+      <h2>12. Launch Readiness</h2>
+      <div class="status ready">
+        <strong>What appears ready now:</strong> deployment documentation, production environment templates, API and web build expectations, launch-readiness assertions, RunPod bootstrap scripts, health checks, and smoke-test flow.
+      </div>
+      <div class="status warn">
+        <strong>Main live blockers still called out in project docs:</strong> live RunPod A100 validation, real SMTP verification, optional Google OAuth verification, and one successful end-to-end public try-on on the Linux GPU stack.
+      </div>
+
+      <h3>Go-live conditions reflected in repo docs</h3>
+      <ul>
+        <li>A100 deployment must pass health and ready checks.</li>
+        <li>At least one real staging try-on must complete end to end.</li>
+        <li>Signup, login, dashboard, garment flow, and SDK flow must be verified.</li>
+        <li>Support inboxes should be live: support, sales, and privacy.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>13. Practical Summary</h2>
+      <p>
+        DrapixAI is best understood as a controlled AI commerce system rather than just an image generator. The product combines garment validation, product mapping, AI generation, analytics, operational review, and launch guardrails into one workflow for fashion brands.
+      </p>
+      <p>
+        The project is technically mature enough to show serious launch preparation, but it still depends on final live validation of the GPU production path and email infrastructure before it should be treated as fully public-ready.
+      </p>
+    </section>
+
+    <section>
+      <h2>14. Source Reference Snapshot</h2>
+      <p class="small">
+        This dossier was compiled from the current codebase and project docs, including deployment guides, production-readiness notes, launch support playbooks, the public website pages, the API routes, the Prisma schema, and the AI service configuration.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Reference area</th>
+            <th>Representative source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Deployment</td>
+            <td>deploy.md, deploy/production-readiness.md</td>
+          </tr>
+          <tr>
+            <td>Launch operations</td>
+            <td>deploy/launch-support-playbook.md</td>
+          </tr>
+          <tr>
+            <td>Public product positioning</td>
+            <td>apps/web/app/page.tsx, apps/web/app/pricing/page.tsx, apps/web/app/help/page.tsx</td>
+          </tr>
+          <tr>
+            <td>Backend behavior</td>
+            <td>apps/api/src/server.ts, routes/auth.ts, routes/sdk.ts, routes/analytics.ts</td>
+          </tr>
+          <tr>
+            <td>Data model</td>
+            <td>apps/api/prisma/schema.prisma</td>
+          </tr>
+          <tr>
+            <td>AI runtime</td>
+            <td>drapixai_ai/api/ai_server.py, drapixai_ai/configs/settings.py</td>
+          </tr>
+          <tr>
+            <td>Marketing</td>
+            <td>marketing/README.md and related execution-pack files</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer">
+      Generated on 2026-06-26 for DrapixAI internal use. This document is intended as a founder, sales, technical, and launch briefing.
+    </div>
+  </main>
+</body>
+</html>

@@ -3,6 +3,9 @@ chcp 65001 >nul
 echo ========================================
 echo   DRAPIXAI LOCAL TESTING SETUP
 echo ========================================
+echo LEGACY_SETUP_DISABLED: This scaffold overwrites launch files and is disabled.
+echo Use deploy\scripts\start-local-stack.ps1 or deploy\runpod\setup-fresh-runpod.sh instead.
+exit /b 1
 
 :: ============================================
 :: STEP 1: CREATE DIRECTORIES
@@ -54,12 +57,12 @@ echo S3_ENDPOINT="http://localhost:9000"
 echo S3_BUCKET="drapixai"
 echo.
 echo # JWT
-echo JWT_SECRET="your-super-secret-jwt-key-change-in-production"
+echo JWT_SECRET="dev-placeholder"
 echo.
 echo # Server
 echo PORT=8000
 echo NODE_ENV=development
-echo ALLOWED_ORIGINS="*"
+echo ALLOWED_ORIGINS="http://localhost:3000"
 ) > .env
 
 :: .gitignore
@@ -221,9 +224,9 @@ echo AWS_ACCESS_KEY_ID="minioadmin"
 echo AWS_SECRET_ACCESS_KEY="minioadmin"
 echo S3_ENDPOINT="http://localhost:9000"
 echo S3_BUCKET="drapixai"
-echo JWT_SECRET="your-super-secret-jwt-key"
+echo JWT_SECRET="dev-placeholder"
 echo PORT=8000
-echo ALLOWED_ORIGINS="*"
+echo ALLOWED_ORIGINS="http://localhost:3000"
 ) > apps\api\.env
 
 :: apps/api/tsconfig.json

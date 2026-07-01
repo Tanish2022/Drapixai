@@ -76,6 +76,18 @@ if parsed < minimum:
 PY
 }
 
+require_min_length() {
+  local name="$1"
+  local minimum="$2"
+  local value="${!name:-}"
+  local length="${#value}"
+
+  if (( length < minimum )); then
+    echo "Environment variable must be at least $minimum characters: $name" >&2
+    exit 1
+  fi
+}
+
 require_pair_or_none() {
   local first="$1"
   local second="$2"
@@ -99,6 +111,8 @@ case "$profile" in
       DATABASE_URL
       REDIS_URL
       JWT_SECRET
+      DRAPIXAI_AUTH_SYNC_TOKEN
+      DRAPIXAI_DASHBOARD_PROXY_TOKEN
       DRAPIXAI_AI_URL
       DRAPIXAI_AI_SERVICE_TOKEN
       DRAPIXAI_CORS_ORIGINS
@@ -123,10 +137,14 @@ case "$profile" in
       NEXTAUTH_URL
       NEXTAUTH_SECRET
       ADMIN_SESSION_SECRET
+      DASHBOARD_SESSION_SECRET
+      DRAPIXAI_AUTH_SYNC_TOKEN
+      DRAPIXAI_DASHBOARD_PROXY_TOKEN
     )
     ;;
   ai)
     required_vars=(
+      DRAPIXAI_ENV
       DRAPIXAI_GPU_PRESET
       DRAPIXAI_DEVICE
       DRAPIXAI_CUDA_DEVICE
@@ -160,6 +178,12 @@ done
 require_pair_or_none GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET
 
 if [[ "$profile" == "web" ]]; then
+  require_equals NODE_ENV "production"
+  require_min_length NEXTAUTH_SECRET 32
+  require_min_length ADMIN_SESSION_SECRET 32
+  require_min_length DASHBOARD_SESSION_SECRET 32
+  require_min_length DRAPIXAI_AUTH_SYNC_TOKEN 32
+  require_min_length DRAPIXAI_DASHBOARD_PROXY_TOKEN 32
   if [[ "${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-0}" == "1" ]]; then
     require_var GOOGLE_CLIENT_ID
     require_var GOOGLE_CLIENT_SECRET
@@ -167,6 +191,13 @@ if [[ "$profile" == "web" ]]; then
 fi
 
 if [[ "$profile" == "api" ]]; then
+  require_equals NODE_ENV "production"
+  require_min_length JWT_SECRET 32
+  require_min_length DRAPIXAI_AUTH_SYNC_TOKEN 32
+  require_min_length DRAPIXAI_DASHBOARD_PROXY_TOKEN 32
+  require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
+  require_min_length DRAPIXAI_ADMIN_TOKEN 32
+  require_min_length DRAPIXAI_ADMIN_PASSWORD 12
   require_not_equals DRAPIXAI_CORS_ORIGINS "*"
   require_equals DRAPIXAI_REQUIRE_GARMENT_CACHE "1"
   require_equals DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON "0"
@@ -174,6 +205,9 @@ if [[ "$profile" == "api" ]]; then
 fi
 
 if [[ "$profile" == "ai" ]]; then
+  require_equals DRAPIXAI_ENV "production"
+  require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
+  require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_equals DRAPIXAI_TRYON_ENGINE "catvton"
   require_equals DRAPIXAI_CANDIDATE_COUNT "1"
   require_number_at_least DRAPIXAI_MIN_QUALITY_SCORE "0.9"

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
@@ -11,6 +12,7 @@ import { sendOtpEmail } from '../services/emailer';
 const router = Router();
 const prisma = new PrismaClient();
 const authRateLimit = createRateLimitMiddleware(10, 15 * 60 * 1000);
+const AUTH_SYNC_TOKEN = process.env.DRAPIXAI_AUTH_SYNC_TOKEN || '';
 
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -41,6 +43,16 @@ const issueApiKeyForUser = async (userId: number) => {
   ]);
 
   return apiKey;
+};
+
+const isProduction = () => process.env.NODE_ENV === 'production';
+
+const hasValidAuthSyncToken = (provided: unknown) => {
+  if (!AUTH_SYNC_TOKEN) return false;
+  const token = Array.isArray(provided) ? provided[0] : String(provided || '');
+  const expected = Buffer.from(AUTH_SYNC_TOKEN);
+  const actual = Buffer.from(token);
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 };
 
 router.use(authRateLimit);
@@ -177,6 +189,13 @@ router.post('/login', async (req, res) => {
  */
 router.post('/oauth/google', async (req, res) => {
   try {
+    if (!AUTH_SYNC_TOKEN && isProduction()) {
+      return res.status(503).json({ error: 'AUTH_SYNC_NOT_CONFIGURED' });
+    }
+    if (AUTH_SYNC_TOKEN && !hasValidAuthSyncToken(req.headers['x-drapixai-auth-sync-token'])) {
+      return res.status(401).json({ error: 'AUTH_SYNC_TOKEN_REQUIRED' });
+    }
+
     const { email, name, issueNewKey, selectedPlan } = req.body || {};
     if (!email) return res.status(400).json({ error: 'EMAIL_REQUIRED' });
     const normalizedEmail = normalizeEmail(String(email));

@@ -1,4 +1,9 @@
 (function () {
+  var sdkScriptElement = document.currentScript;
+  var sdkAssetBaseUrl = sdkScriptElement && sdkScriptElement.src
+    ? new URL('.', sdkScriptElement.src).toString().replace(/\/$/, '')
+    : window.location.origin;
+
   function createWatermarkedBlob(imageUrl) {
     return new Promise(function (resolve, reject) {
       var image = new Image();
@@ -75,6 +80,33 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function sanitizeCssValue(value, fallback) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text || text.length > 220) {
+      return fallback;
+    }
+    if (/[<>"'{};]/.test(text) || /expression\s*\(|javascript\s*:|data\s*:|@import|url\s*\(/i.test(text)) {
+      return fallback;
+    }
+    return text;
+  }
+
+  function sanitizeAssetUrl(value, fallback) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text || text.length > 500 || /[\s<>"']/g.test(text)) {
+      return fallback;
+    }
+    try {
+      var resolved = new URL(text, window.location.origin);
+      if (resolved.protocol === 'https:' || resolved.protocol === 'http:') {
+        return resolved.href;
+      }
+    } catch (_) {
+      // reject malformed URLs
+    }
+    return fallback;
   }
 
   function parseNumber(value) {
@@ -185,20 +217,20 @@
     var fontFamily = theme.fontFamily || computedFont;
 
     return {
-      primary: primary,
-      primaryGradient: theme.primaryGradient || config.primaryGradient || primary,
-      fontFamily: fontFamily,
-      text: theme.textColor || computedText || '#111827',
-      mutedText: theme.mutedTextColor || '#64748b',
-      surface: theme.surfaceColor || '#ffffff',
-      softSurface: theme.softSurfaceColor || '#f8fafc',
-      pageSurface: theme.pageSurfaceColor || (isUsableColor(computedSurface) ? computedSurface : '#f8fafc'),
-      border: theme.borderColor || '#dbe4ee',
-      radius: radius,
-      cardRadius: theme.cardRadius || '24px',
-      buttonRadius: theme.buttonRadius || radius,
-      shadow: theme.shadow || '0 30px 80px rgba(15,23,42,0.22)',
-      overlay: theme.overlayColor || 'rgba(15, 23, 42, 0.34)'
+      primary: sanitizeCssValue(primary, '#111827'),
+      primaryGradient: sanitizeCssValue(theme.primaryGradient || config.primaryGradient || primary, '#111827'),
+      fontFamily: sanitizeCssValue(fontFamily, 'Arial, sans-serif'),
+      text: sanitizeCssValue(theme.textColor || computedText || '#111827', '#111827'),
+      mutedText: sanitizeCssValue(theme.mutedTextColor || '#64748b', '#64748b'),
+      surface: sanitizeCssValue(theme.surfaceColor || '#ffffff', '#ffffff'),
+      softSurface: sanitizeCssValue(theme.softSurfaceColor || '#f8fafc', '#f8fafc'),
+      pageSurface: sanitizeCssValue(theme.pageSurfaceColor || (isUsableColor(computedSurface) ? computedSurface : '#f8fafc'), '#f8fafc'),
+      border: sanitizeCssValue(theme.borderColor || '#dbe4ee', '#dbe4ee'),
+      radius: sanitizeCssValue(radius, '8px'),
+      cardRadius: sanitizeCssValue(theme.cardRadius || '24px', '24px'),
+      buttonRadius: sanitizeCssValue(theme.buttonRadius || radius, '8px'),
+      shadow: sanitizeCssValue(theme.shadow || '0 30px 80px rgba(15,23,42,0.22)', '0 30px 80px rgba(15,23,42,0.22)'),
+      overlay: sanitizeCssValue(theme.overlayColor || 'rgba(15, 23, 42, 0.34)', 'rgba(15, 23, 42, 0.34)')
     };
   }
 
@@ -224,7 +256,8 @@
         adaptBrandTheme: options.adaptBrandTheme !== false,
         primaryGradient: options.primaryGradient || null,
         buyButtonText: options.buyButtonText || 'Buy this item',
-        buyUrlAttribute: options.buyUrlAttribute || 'data-drapix-buy-url'
+        buyUrlAttribute: options.buyUrlAttribute || 'data-drapix-buy-url',
+        logoUrl: sanitizeAssetUrl(options.logoUrl || sdkAssetBaseUrl + '/drapixai_emblem_64.webp', sdkAssetBaseUrl + '/drapixai_emblem_64.webp')
       };
 
       function reportStartupError(message, productId) {
@@ -273,7 +306,7 @@
         return [
           '<div style="font-family:', escapeHtml(theme.fontFamily), ';">',
           '  <button data-drapix-launcher="true" data-drapix-product-id="', escapeHtml(productId), '" style="display:inline-flex;align-items:center;gap:10px;background:', escapeHtml(theme.primaryGradient), ';color:#fff;border:none;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';cursor:pointer;font-weight:700;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">',
-          '    <span style="display:inline-flex;width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,0.16);align-items:center;justify-content:center;font-size:12px;">D</span>',
+          '    <img src="', escapeHtml(config.logoUrl), '" alt="" aria-hidden="true" style="width:26px;height:26px;object-fit:cover;border-radius:6px;" />',
           '    ', escapeHtml(config.buttonText),
           '  </button>',
           '</div>'
@@ -307,7 +340,7 @@
           '  <button id="drapix-close" type="button" aria-label="Close DrapixAI try-on" style="position:absolute;z-index:3;top:16px;right:18px;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border-radius:999px;border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';cursor:pointer;font-size:22px;line-height:1;box-shadow:0 8px 22px rgba(15,23,42,0.08);font-family:', escapeHtml(theme.fontFamily), ';display:inline-flex;align-items:center;justify-content:center;text-align:center;">&times;</button>',
           '  <div style="position:relative;padding:26px;">',
           '    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">',
-          '      <div style="display:flex;width:40px;height:40px;border-radius:', escapeHtml(theme.buttonRadius), ';align-items:center;justify-content:center;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:800;letter-spacing:0.02em;">D</div>',
+          '      <img src="', escapeHtml(config.logoUrl), '" alt="DrapixAI" style="display:block;width:40px;height:40px;object-fit:cover;border-radius:', escapeHtml(theme.buttonRadius), ';" />',
           '      <div>',
           '        <div style="font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:', escapeHtml(theme.primary), ';">DrapixAI</div>',
           '        <div style="font-size:12px;color:', escapeHtml(theme.mutedText), ';">Premium virtual try-on preview</div>',
@@ -347,7 +380,7 @@
           '        </div>',
           '      </div>',
           '      <div style="display:flex;gap:10px;align-items:flex-start;border:1px solid ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.pageSurface), ';padding:12px 14px;">',
-          '        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:', escapeHtml(theme.primaryGradient), ';color:#fff;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:0 0 auto;">✓</span>',
+          '        <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:', escapeHtml(theme.primaryGradient), ';color:#fff;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:0 0 auto;">&#10003;</span>',
           '        <div style="font-size:12px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';">DrapixAI checks realism, garment accuracy, pose preservation, and latency before showing a storefront preview.</div>',
           '      </div>',
           '      <div id="drapix-progress" style="display:none;">',

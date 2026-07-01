@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
 interface AdminGarment {
   id: number;
@@ -118,7 +117,7 @@ export default function AdminDashboard() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [website, setWebsite] = useState<AdminWebsiteAnalytics | null>(null);
   const [ops, setOps] = useState<AdminOps | null>(null);
-  const [apiKey, setApiKey] = useState('');
+  const [sessionReady, setSessionReady] = useState(false);
   const [garments, setGarments] = useState<AdminGarment[]>([]);
   const [thumbs, setThumbs] = useState<Record<number, string>>({});
   const [tryOnResults, setTryOnResults] = useState<AdminTryOnResult[]>([]);
@@ -126,50 +125,57 @@ export default function AdminDashboard() {
   const [tryOnFilter, setTryOnFilter] = useState<TryOnReviewFilter>('generated');
   const [garmentFilter, setGarmentFilter] = useState<GarmentReviewFilter>('pending');
   const router = useRouter();
+  const adminFetch = (path: string, init?: RequestInit) => fetch(`/api/admin/proxy/${path}`, init);
 
   useEffect(() => {
-    const storedApiKey = localStorage.getItem('adminApiKey') || '';
-    if (!storedApiKey) {
-      router.push('/admin-access');
-      return;
-    }
-    setApiKey(storedApiKey);
+    let active = true;
+    const loadAdminData = async () => {
+      try {
+        const [overviewRes, websiteRes, opsRes, resultsRes] = await Promise.all([
+          adminFetch('overview'),
+          adminFetch('website'),
+          adminFetch('ops'),
+          adminFetch('tryon-results?filter=generated'),
+        ]);
 
-    if (storedApiKey) {
-      fetch(`${PUBLIC_API_BASE_URL}/admin/overview`, {
-        headers: { 'Authorization': `Bearer ${storedApiKey}` },
-      })
-        .then(res => res.json())
-        .then(data => setOverview(data))
-        .catch(console.error);
+        if ([overviewRes, websiteRes, opsRes, resultsRes].some((res) => res.status === 401 || res.status === 403)) {
+          router.push('/admin-access');
+          return;
+        }
 
-      fetch(`${PUBLIC_API_BASE_URL}/admin/website`, {
-        headers: { 'Authorization': `Bearer ${storedApiKey}` },
-      })
-        .then(res => res.json())
-        .then(data => setWebsite(data))
-        .catch(console.error);
+        if (!overviewRes.ok || !websiteRes.ok || !opsRes.ok || !resultsRes.ok) {
+          throw new Error('ADMIN_DASHBOARD_LOAD_FAILED');
+        }
 
-      fetch(`${PUBLIC_API_BASE_URL}/admin/ops`, {
-        headers: { 'Authorization': `Bearer ${storedApiKey}` },
-      })
-        .then(res => res.json())
-        .then(data => setOps(data))
-        .catch(console.error);
+        const [overviewData, websiteData, opsData, resultsData] = await Promise.all([
+          overviewRes.json(),
+          websiteRes.json(),
+          opsRes.json(),
+          resultsRes.json(),
+        ]);
 
-      fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?filter=generated`, {
-        headers: { 'Authorization': `Bearer ${storedApiKey}` },
-      })
-        .then(res => res.json())
-        .then(data => setTryOnResults(data.items || []))
-        .catch(console.error);
-    }
+        if (!active) return;
+        setOverview(overviewData);
+        setWebsite(websiteData);
+        setOps(opsData);
+        setTryOnResults(resultsData.items || []);
+        setSessionReady(true);
+      } catch (error) {
+        console.error(error);
+        if (active) {
+          router.push('/admin-access');
+        }
+      }
+    };
+
+    loadAdminData();
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   const fetchGarments = async (filter = garmentFilter) => {
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/garments?filter=${encodeURIComponent(filter)}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
+    const res = await adminFetch(`garments?filter=${encodeURIComponent(filter)}`);
     if (res.ok) {
       const data = await res.json();
       setGarments(data.items || []);
@@ -177,9 +183,7 @@ export default function AdminDashboard() {
   };
 
   const fetchTryOnResults = async (filter = tryOnFilter) => {
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results?filter=${encodeURIComponent(filter)}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
+    const res = await adminFetch(`tryon-results?filter=${encodeURIComponent(filter)}`);
     if (res.ok) {
       const data = await res.json();
       setTryOnResults(data.items || []);
@@ -187,15 +191,13 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    if (!apiKey || garments.length === 0) return;
+    if (!sessionReady || garments.length === 0) return;
     let active = true;
     const load = async () => {
       const next: Record<number, string> = {};
       for (const g of garments.slice(0, 6)) {
         try {
-          const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/garments/${g.id}/thumbnail`, {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-          });
+          const res = await adminFetch(`garments/${g.id}/thumbnail`);
           if (!res.ok) continue;
           const blob = await res.blob();
           next[g.id] = URL.createObjectURL(blob);
@@ -209,10 +211,10 @@ export default function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [apiKey, garments]);
+  }, [sessionReady, garments]);
 
   useEffect(() => {
-    if (!apiKey || tryOnResults.length === 0) return;
+    if (!sessionReady || tryOnResults.length === 0) return;
     let active = true;
     const load = async () => {
       const next: Record<string, string> = {};
@@ -224,9 +226,7 @@ export default function AdminDashboard() {
         ].filter(Boolean);
         for (const kind of imageKinds) {
           try {
-            const res = await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results/${item.id}/${kind}`, {
-              headers: { 'Authorization': `Bearer ${apiKey}` }
-            });
+            const res = await adminFetch(`tryon-results/${item.id}/${kind}`);
             if (!res.ok) continue;
             const blob = await res.blob();
             next[`${item.id}:${kind}`] = URL.createObjectURL(blob);
@@ -242,7 +242,7 @@ export default function AdminDashboard() {
       active = false;
       Object.values(tryOnImages).forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [apiKey, tryOnResults]);
+  }, [sessionReady, tryOnResults]);
 
   if (!overview || !website || !ops) {
     return (
@@ -270,7 +270,6 @@ export default function AdminDashboard() {
             <button
               onClick={() => {
                 fetch('/api/admin/session', { method: 'DELETE' }).finally(() => {
-                  localStorage.removeItem('adminApiKey');
                   router.push('/');
                 });
               }}
@@ -530,10 +529,7 @@ export default function AdminDashboard() {
                     <div className="flex gap-2 mt-4">
                       <button
                         onClick={async () => {
-                          await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results/${item.id}/approve`, {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${apiKey}` }
-                          });
+                          await adminFetch(`tryon-results/${item.id}/approve`, { method: 'POST' });
                           fetchTryOnResults();
                         }}
                         className="px-3 py-1 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300"
@@ -542,10 +538,7 @@ export default function AdminDashboard() {
                       </button>
                       <button
                         onClick={async () => {
-                          await fetch(`${PUBLIC_API_BASE_URL}/admin/tryon-results/${item.id}/reject`, {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${apiKey}` }
-                          });
+                          await adminFetch(`tryon-results/${item.id}/reject`, { method: 'POST' });
                           fetchTryOnResults();
                         }}
                         className="px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-lg text-red-300"
@@ -624,10 +617,7 @@ export default function AdminDashboard() {
                   <div className="flex gap-2 mt-3">
                     <button
                       onClick={async () => {
-                        await fetch(`${PUBLIC_API_BASE_URL}/admin/garments/${g.id}/approve`, {
-                          method: 'POST',
-                          headers: { 'Authorization': `Bearer ${apiKey}` }
-                        });
+                        await adminFetch(`garments/${g.id}/approve`, { method: 'POST' });
                         fetchGarments();
                       }}
                       className="px-3 py-1 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300"
@@ -636,9 +626,9 @@ export default function AdminDashboard() {
                     </button>
                     <button
                       onClick={async () => {
-                        await fetch(`${PUBLIC_API_BASE_URL}/admin/garments/${g.id}/reject`, {
+                        await adminFetch(`garments/${g.id}/reject`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ reason: 'Rejected by admin' })
                         });
                         fetchGarments();

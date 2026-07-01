@@ -28,6 +28,11 @@ GARMENT_ID="${GARMENT_ID:-smoke-upper-garment}"
 PRODUCT_ID="${PRODUCT_ID:-smoke-upper-product}"
 OUTPUT_FILE="${OUTPUT_FILE:-/tmp/drapixai-smoke.png}"
 HEADERS_FILE="${HEADERS_FILE:-/tmp/drapixai-smoke.headers}"
+DASHBOARD_PROXY_TOKEN="${DRAPIXAI_DASHBOARD_PROXY_TOKEN:-${DASHBOARD_PROXY_TOKEN:-}}"
+dashboard_proxy_header_args=()
+if [[ -n "$DASHBOARD_PROXY_TOKEN" ]]; then
+  dashboard_proxy_header_args=(-H "x-drapixai-dashboard-proxy-token: ${DASHBOARD_PROXY_TOKEN}")
+fi
 
 echo "==> registering ${EMAIL}"
 otp="${REGISTER_OTP:-}"
@@ -69,11 +74,16 @@ curl --fail --silent --show-error \
 echo
 
 if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
+  if [[ -z "$DASHBOARD_PROXY_TOKEN" ]]; then
+    echo "DASHBOARD_PROXY_TOKEN/DRAPIXAI_DASHBOARD_PROXY_TOKEN is not set; production APIs that require the dashboard proxy token will reject management setup calls." >&2
+  fi
+
   echo "==> uploading garment and building cached try-on asset"
   garment_json="$(curl --fail --silent --show-error \
     -X POST "${API_URL%/}/sdk/garments" \
     -H "Authorization: Bearer ${api_key}" \
     -H "Origin: ${ORIGIN_URL}" \
+    "${dashboard_proxy_header_args[@]}" \
     -F "cloth_image=@${CLOTH_IMAGE}" \
     -F "garment_id=${GARMENT_ID}" \
     -F "product_name=DrapixAI Smoke Upper Garment" \
@@ -92,6 +102,7 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -H "Authorization: Bearer ${api_key}" \
     -H "Content-Type: application/json" \
     -H "Origin: ${ORIGIN_URL}" \
+    "${dashboard_proxy_header_args[@]}" \
     -d "{\"items\":[{\"productId\":\"${PRODUCT_ID}\",\"productName\":\"DrapixAI Smoke Product\",\"category\":\"shirt\",\"garmentType\":\"upper\"}]}" >/dev/null
 
   curl --fail --silent --show-error \
@@ -99,6 +110,7 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -H "Authorization: Bearer ${api_key}" \
     -H "Content-Type: application/json" \
     -H "Origin: ${ORIGIN_URL}" \
+    "${dashboard_proxy_header_args[@]}" \
     -d "{\"productId\":\"${PRODUCT_ID}\"}" >/dev/null
 
   echo "==> running SDK try-on through confirmed cached product mapping"

@@ -3,8 +3,10 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
+import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { parseCatalogFeed } from '../lib/catalog-feed';
 import { upsertCatalogProductsForUser } from '../lib/catalog-matching';
+import { normalizePublicDomain, safeFetchText } from '../lib/remote-fetch';
 import { consumeVerificationCode, issueVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail } from '../services/emailer';
 
@@ -13,12 +15,24 @@ const prisma = new PrismaClient();
 const accountRateLimit = createRateLimitMiddleware(20, 15 * 60 * 1000);
 
 const generateVerificationToken = () => `drapix_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
-const normalizeDomainInput = (value: string) => value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+const normalizeDomainInput = (value: string) => normalizePublicDomain(value);
+
+const normalizeFeedUrl = (value: string) => {
+  const parsed = new URL(value.trim());
+  if (parsed.protocol !== 'https:') {
+    throw new Error('FEED_URL_HTTPS_REQUIRED');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('FEED_URL_CREDENTIALS_NOT_ALLOWED');
+  }
+  return parsed.toString();
+};
 
 const buildVerificationMetaTag = (token: string) =>
   `<meta name="drapixai-domain-verification" content="${token}" />`;
 
 router.use(accountRateLimit);
+router.use(requireDashboardProxy);
 
 const resolveUser = async (authorizationHeader: string | undefined) => {
   const activeKey = await resolveActiveApiKey(prisma, authorizationHeader);
@@ -230,7 +244,15 @@ router.post('/store', async (req, res) => {
     return res.status(400).json({ error: 'FEED_URL_REQUIRED' });
   }
 
-  const normalizedDomain = String(domain || '').trim() ? normalizeDomainInput(String(domain)) : resolved.activeKey.domainWhitelist;
+  let normalizedDomain = resolved.activeKey.domainWhitelist;
+  let normalizedFeedUrl: string | null = null;
+  try {
+    normalizedDomain = String(domain || '').trim() ? normalizeDomainInput(String(domain)) : resolved.activeKey.domainWhitelist;
+    normalizedFeedUrl = normalizedSyncSource === 'feed_url' ? normalizeFeedUrl(String(feedUrl || '')) : null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'INVALID_STORE_SETTINGS';
+    return res.status(400).json({ error: message });
+  }
   const nextToken = resolved.user.storeVerificationToken || generateVerificationToken();
   const user = await prisma.user.update({
     where: { id: resolved.user.id },
@@ -238,7 +260,7 @@ router.post('/store', async (req, res) => {
       storeVerificationToken: nextToken,
       storeVerifiedAt: normalizedDomain !== resolved.activeKey.domainWhitelist ? null : resolved.user.storeVerifiedAt,
       catalogSyncSource: normalizedSyncSource,
-      catalogFeedUrl: normalizedSyncSource === 'feed_url' ? String(feedUrl || '').trim() : null,
+      catalogFeedUrl: normalizedFeedUrl,
     },
   });
 
@@ -276,12 +298,15 @@ router.post('/store/verify', async (req, res) => {
   let lastError = '';
   for (const url of urlsToCheck) {
     try {
-      const response = await fetch(url, { redirect: 'follow' });
+      const { response, text: html } = await safeFetchText(url, {
+        allowedProtocols: ['https:', 'http:'],
+        maxBytes: 512 * 1024,
+        timeoutMs: 8000,
+      });
       if (!response.ok) {
         lastError = `Unable to fetch ${url}`;
         continue;
       }
-      const html = await response.text();
       if (html.includes(buildVerificationMetaTag(token)) || html.includes(`content="${token}"`)) {
         matched = true;
         break;
@@ -320,13 +345,16 @@ router.post('/store/resync', async (req, res) => {
   }
 
   try {
-    const response = await fetch(feedUrl, { redirect: 'follow' });
+    const { response, text: feedText } = await safeFetchText(feedUrl, {
+      allowedProtocols: ['https:'],
+      maxBytes: Number(process.env.DRAPIXAI_CATALOG_FEED_MAX_BYTES || 2 * 1024 * 1024),
+      timeoutMs: 10000,
+    });
     if (!response.ok) {
       throw new Error(`Feed request failed with status ${response.status}`);
     }
 
     const contentType = response.headers.get('content-type') || '';
-    const feedText = await response.text();
     const parsedItems = parseCatalogFeed(feedText, contentType, resolved.user.catalogSyncSource || 'feed_url');
     const { discovered, skipped } = await upsertCatalogProductsForUser(
       prisma,

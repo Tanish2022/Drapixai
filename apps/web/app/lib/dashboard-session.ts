@@ -4,7 +4,17 @@ export const DASHBOARD_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const getDashboardSessionSecret = () => process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || '';
+const getDashboardSessionSecret = () => {
+  const explicitSecret = process.env.DASHBOARD_SESSION_SECRET || '';
+  const fallbackSecret = process.env.NODE_ENV === 'production' ? '' : process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || '';
+  const secret = explicitSecret || fallbackSecret;
+
+  if (process.env.NODE_ENV === 'production' && explicitSecret.length < 32) {
+    throw new Error('DASHBOARD_SESSION_SECRET_WEAK_OR_MISSING');
+  }
+
+  return secret;
+};
 
 const toBase64 = (bytes: Uint8Array) => {
   let binary = '';

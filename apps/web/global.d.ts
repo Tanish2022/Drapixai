@@ -18,6 +18,7 @@ declare global {
     footerText?: string;
     timeoutMs?: number;
     primaryGradient?: string;
+    logoUrl?: string;
     onResult?: (metadata: {
       resultId?: string;
       engine?: string;

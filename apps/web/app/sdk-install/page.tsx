@@ -79,12 +79,8 @@ export default function SdkInstallPage() {
         }
 
         const [summaryResponse, garmentsResponse] = await Promise.all([
-          fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, {
-            headers: { Authorization: `Bearer ${nextApiKey}` },
-          }),
-          fetch(`${PUBLIC_API_BASE_URL}/sdk/garments`, {
-            headers: { Authorization: `Bearer ${nextApiKey}` },
-          }),
+          fetch('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' }),
+          fetch('/api/dashboard/proxy/sdk/garments', { cache: 'no-store' }),
         ]);
 
         if (!summaryResponse.ok) {

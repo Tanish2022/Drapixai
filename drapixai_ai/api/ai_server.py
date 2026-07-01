@@ -34,15 +34,15 @@ logger = get_logger("drapixai_ai.api")
 
 class TryOnBase64Request(BaseModel):
     user_id: str = Field(..., min_length=1)
-    person_image_base64: str = Field(..., min_length=1)
-    cloth_image_base64: Optional[str] = Field(default=None)
+    person_image_base64: str = Field(..., min_length=1, max_length=settings.request_max_bytes * 2)
+    cloth_image_base64: Optional[str] = Field(default=None, max_length=settings.request_max_bytes * 2)
     quality: Optional[str] = Field(default=None)
     garment_type: Optional[str] = Field(default=None)
     cloth_cache_key: Optional[str] = Field(default=None)
 
 
 class GarmentBase64Request(BaseModel):
-    cloth_image_base64: str = Field(..., min_length=1)
+    cloth_image_base64: str = Field(..., min_length=1, max_length=settings.request_max_bytes * 2)
     brand_id: Optional[str] = Field(default=None)
     garment_id: Optional[str] = Field(default=None)
     category: Optional[str] = Field(default=None)
@@ -57,6 +57,28 @@ def _decode_base64_image(value: Optional[str], field_name: str) -> bytes:
 
     try:
         return base64.b64decode(value, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"INVALID_{field_name.upper()}")
+
+
+def _require_production_config() -> None:
+    env = (os.getenv("DRAPIXAI_ENV") or os.getenv("NODE_ENV") or "").strip().lower()
+    if env != "production":
+        return
+
+    missing = []
+    if not settings.ai_service_token:
+        missing.append("DRAPIXAI_AI_SERVICE_TOKEN")
+    if not settings.admin_token:
+        missing.append("DRAPIXAI_ADMIN_TOKEN")
+    if missing:
+        raise RuntimeError(f"PRODUCTION_CONFIG_INVALID missing={','.join(missing)}")
+
+
+def _validate_image_bytes(image_bytes: bytes, field_name: str) -> None:
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image.verify()
     except Exception:
         raise HTTPException(status_code=400, detail=f"INVALID_{field_name.upper()}")
 
@@ -87,6 +109,9 @@ def _model_ready() -> bool:
 
 def _is_admin(token: Optional[str]) -> bool:
     return bool(settings.admin_token) and token == settings.admin_token
+
+
+_require_production_config()
 
 
 @app.middleware("http")
@@ -167,6 +192,8 @@ async def tryon(
 
     if len(person_bytes) > settings.request_max_bytes or len(cloth_bytes) > settings.request_max_bytes:
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
+    _validate_image_bytes(person_bytes, "person_image")
+    _validate_image_bytes(cloth_bytes, "cloth_image")
 
     if garment_type and garment_type.lower() != "upper":
         raise HTTPException(status_code=400, detail="UPPER_BODY_ONLY")
@@ -252,13 +279,13 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         raise HTTPException(status_code=400, detail="UPPER_BODY_ONLY")
 
     person_bytes = _decode_base64_image(payload.person_image_base64, "person_image")
+    if len(person_bytes) > settings.request_max_bytes:
+        raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
+    _validate_image_bytes(person_bytes, "person_image")
     if settings.enforce_upper_body and (payload.garment_type or "upper").lower() == "upper":
         ok, reason = is_upper_body(person_bytes)
         if not ok:
             raise HTTPException(status_code=400, detail=f"UPPER_BODY_ONLY:{reason}")
-
-    if len(person_bytes) > settings.request_max_bytes:
-        raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
     cloth_b64 = payload.cloth_image_base64 or ""
     garment_source = "direct_upload"
@@ -268,12 +295,14 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
             raise HTTPException(status_code=404, detail="GARMENT_CACHE_MISS")
         if len(hit.image_bytes) > settings.request_max_bytes:
             raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
+        _validate_image_bytes(hit.image_bytes, "cloth_image")
         cloth_b64 = base64.b64encode(hit.image_bytes).decode("utf-8")
         garment_source = "cache"
     else:
         cloth_bytes = _decode_base64_image(payload.cloth_image_base64, "cloth_image")
         if len(cloth_bytes) > settings.request_max_bytes:
             raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
+        _validate_image_bytes(cloth_bytes, "cloth_image")
         cloth_b64 = base64.b64encode(cloth_bytes).decode("utf-8")
 
     try:
@@ -357,6 +386,7 @@ async def garment_preprocess(
     x_admin_token: Optional[str] = Header(default=None),
 ):
     cloth_bytes = await cloth_image.read()
+    _validate_image_bytes(cloth_bytes, "cloth_image")
     if len(cloth_bytes) > settings.request_max_bytes:
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
@@ -434,6 +464,7 @@ async def garment_preprocess_base64(
     x_admin_token: Optional[str] = Header(default=None),
 ):
     cloth_bytes = _decode_base64_image(payload.cloth_image_base64, "cloth_image")
+    _validate_image_bytes(cloth_bytes, "cloth_image")
     if len(cloth_bytes) > settings.request_max_bytes:
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 

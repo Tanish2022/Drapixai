@@ -8,6 +8,7 @@
     "dev:web": "cd apps\\web && npm run dev",
     "dev:worker": "cd workers\\gpu-worker && python src\\worker.py",
     "stop": "docker-compose down",
+    "start:local": "powershell -ExecutionPolicy Bypass -File deploy\\scripts\\start-local-stack.ps1",
     "build": "npm --prefix apps/api run build && npm --prefix apps/web run build",
     "preflight:local": "powershell -ExecutionPolicy Bypass -File deploy\\scripts\\local-preflight.ps1",
     "prove:live": "powershell -ExecutionPolicy Bypass -File deploy\\scripts\\prove-live-stack.ps1",

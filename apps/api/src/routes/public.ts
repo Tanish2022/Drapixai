@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { getUploadRoot, isAllowedImageUpload, sanitizeUpstreamError } from '../lib/security';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -14,15 +15,16 @@ const getAiHeaders = (headers: Record<string, string> = {}) => ({
   ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
 });
 
+const UPLOAD_ROOT = getUploadRoot();
 const upload = multer({
-  dest: 'uploads/',
+  dest: UPLOAD_ROOT,
   limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (_req, file, callback) => {
-    callback(null, file.mimetype.startsWith('image/'));
+    callback(null, isAllowedImageUpload(file));
   },
 });
 
-if (!fs.existsSync('uploads')) fs.mkdirSync('uploads', { recursive: true });
+if (!fs.existsSync(UPLOAD_ROOT)) fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
 
 const parseJsonSafe = <T>(value: string): T | null => {
   try {
@@ -163,7 +165,10 @@ router.post(
 
       if (!tryOnResponse.ok) {
         const errorText = await tryOnResponse.text();
-        return res.status(tryOnResponse.status).json({ error: errorText || 'DEMO_TRY_ON_FAILED' });
+        return res.status(tryOnResponse.status).json({
+          error: sanitizeUpstreamError('DEMO_TRY_ON_FAILED', errorText),
+          message: 'DrapixAI could not complete this demo try-on. Please retry with clearer front-facing inputs.',
+        });
       }
 
       const buffer = Buffer.from(await tryOnResponse.arrayBuffer());

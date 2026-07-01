@@ -4,6 +4,8 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
 import path from 'path';
 import { createStorageClient } from '../lib/storage';
+import { safeFetchBuffer } from '../lib/remote-fetch';
+import { readLocalUploadFile } from '../lib/security';
 
 type GarmentPreprocessResponse = {
   cache_key?: string;
@@ -47,9 +49,7 @@ const printDatabaseHelp = (error: unknown) => {
 const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
   if (!storedUrl) return null;
   if (storedUrl.startsWith('local:')) {
-    const localPath = storedUrl.replace('local:', '');
-    if (!fs.existsSync(localPath)) return null;
-    return fs.readFileSync(localPath);
+    return readLocalUploadFile(storedUrl);
   }
   if (storedUrl.startsWith('s3://')) {
     const rest = storedUrl.replace('s3://', '');
@@ -61,9 +61,13 @@ const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<B
     return Buffer.concat(chunks);
   }
   if (/^https?:\/\//i.test(storedUrl)) {
-    const response = await fetch(storedUrl);
+    const { response, buffer } = await safeFetchBuffer(storedUrl, {
+      allowedProtocols: ['https:'],
+      maxBytes: Number(process.env.DRAPIXAI_GARMENT_SOURCE_MAX_BYTES || 12 * 1024 * 1024),
+      timeoutMs: 10000,
+    });
     if (!response.ok) return null;
-    return Buffer.from(await response.arrayBuffer());
+    return buffer;
   }
   return null;
 };

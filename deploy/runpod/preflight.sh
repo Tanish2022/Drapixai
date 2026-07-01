@@ -160,6 +160,19 @@ if errors:
     raise SystemExit(1)
 PY
 
+
+echo
+echo "== Launch Script Syntax =="
+for script in \
+  "$DRAPIXAI_APP_ROOT/deploy/scripts/smoke-test.sh" \
+  "$DRAPIXAI_APP_ROOT/deploy/runpod/setup-fresh-runpod.sh" \
+  "$DRAPIXAI_APP_ROOT/deploy/runpod/setup-sdk-api-stack.sh" \
+  "$DRAPIXAI_APP_ROOT/deploy/runpod/start-all.sh" \
+  "$DRAPIXAI_APP_ROOT/deploy/runpod/run-launch-tryon-test.sh"; do
+  [[ -f "$script" ]] || { echo "Missing launch script: $script" >&2; exit 1; }
+  bash -n "$script"
+  echo "syntax ok: ${script#$DRAPIXAI_APP_ROOT/}"
+done
 echo
 echo "== Redis target =="
 echo "$DRAPIXAI_REDIS_URL"

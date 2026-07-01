@@ -2,11 +2,15 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { resolveActiveApiKey } from '../lib/api-key-auth';
+import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { getPlanName, getPlanQuota, normalizePlanKey } from '../lib/plans';
 import { getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
 
 const router = Router();
 const prisma = new PrismaClient();
+const analyticsRateLimit = createRateLimitMiddleware(120, 15 * 60 * 1000);
 
 const issueApiKeyForUser = async (userId: number) => {
   const apiKey = uuidv4().replace(/-/g, '');
@@ -25,15 +29,21 @@ const issueApiKeyForUser = async (userId: number) => {
   return apiKey;
 };
 
-router.get('/summary', async (req, res) => {
-  const apiKey = req.headers.authorization?.replace('Bearer ', '');
-  if (!apiKey) return res.status(401).json({ error: 'API key required' });
-  const keys = await prisma.apiKey.findMany({ where: { isActive: true } });
-  let validKey = null;
-  for (const key of keys) {
-    if (await bcrypt.compare(apiKey, key.keyHash)) { validKey = key; break; }
+router.use(analyticsRateLimit);
+router.use(requireDashboardProxy);
+
+const resolveAnalyticsKey = async (authorizationHeader: string | undefined, res: any) => {
+  const activeKey = await resolveActiveApiKey(prisma, authorizationHeader);
+  if (!activeKey) {
+    res.status(401).json({ error: 'INVALID_API_KEY' });
+    return null;
   }
-  if (!validKey) return res.status(401).json({ error: 'Invalid API key' });
+  return activeKey;
+};
+
+router.get('/summary', async (req, res) => {
+  const validKey = await resolveAnalyticsKey(req.headers.authorization, res);
+  if (!validKey) return;
   
   const user = await prisma.user.findUnique({ where: { id: validKey.userId } });
   const now = new Date();
@@ -171,15 +181,10 @@ router.get('/summary', async (req, res) => {
 });
 
 router.post('/domain', async (req, res) => {
-  const apiKey = req.headers.authorization?.replace('Bearer ', '');
   const { domain } = req.body || {};
-  if (!apiKey || !domain) return res.status(400).json({ error: 'API key and domain required' });
-  const keys = await prisma.apiKey.findMany({ where: { isActive: true } });
-  let validKey = null;
-  for (const key of keys) {
-    if (await bcrypt.compare(apiKey, key.keyHash)) { validKey = key; break; }
-  }
-  if (!validKey) return res.status(401).json({ error: 'Invalid API key' });
+  if (!domain) return res.status(400).json({ error: 'DOMAIN_REQUIRED' });
+  const validKey = await resolveAnalyticsKey(req.headers.authorization, res);
+  if (!validKey) return;
 
   if (validKey.domainWhitelist !== '*' && validKey.domainWhitelist !== domain) {
     return res.status(403).json({ error: 'Domain already set', domain: validKey.domainWhitelist });
@@ -194,14 +199,8 @@ router.post('/domain', async (req, res) => {
 });
 
 router.get('/emails', async (req, res) => {
-  const apiKey = req.headers.authorization?.replace('Bearer ', '');
-  if (!apiKey) return res.status(401).json({ error: 'API key required' });
-  const keys = await prisma.apiKey.findMany({ where: { isActive: true } });
-  let validKey = null;
-  for (const key of keys) {
-    if (await bcrypt.compare(apiKey, key.keyHash)) { validKey = key; break; }
-  }
-  if (!validKey) return res.status(401).json({ error: 'Invalid API key' });
+  const validKey = await resolveAnalyticsKey(req.headers.authorization, res);
+  if (!validKey) return;
 
   const logs = await prisma.emailLog.findMany({
     where: { userId: validKey.userId },
@@ -213,14 +212,8 @@ router.get('/emails', async (req, res) => {
 });
 
 router.post('/api-key/rotate', async (req, res) => {
-  const apiKey = req.headers.authorization?.replace('Bearer ', '');
-  if (!apiKey) return res.status(401).json({ error: 'API key required' });
-  const keys = await prisma.apiKey.findMany({ where: { isActive: true } });
-  let validKey = null;
-  for (const key of keys) {
-    if (await bcrypt.compare(apiKey, key.keyHash)) { validKey = key; break; }
-  }
-  if (!validKey) return res.status(401).json({ error: 'Invalid API key' });
+  const validKey = await resolveAnalyticsKey(req.headers.authorization, res);
+  if (!validKey) return;
 
   const nextApiKey = await issueApiKeyForUser(validKey.userId);
   res.json({ ok: true, apiKey: nextApiKey });

@@ -72,12 +72,19 @@ $adminToken = New-SecretValue
 $adminPassword = New-SecretValue
 $nextAuthSecret = New-SecretValue
 $adminSessionSecret = New-SecretValue
+$dashboardSessionSecret = New-SecretValue
+$authSyncToken = New-SecretValue
+$dashboardProxyToken = New-SecretValue
+$aiServiceToken = New-SecretValue
 
 Write-EnvFile `
     -SourcePath (Join-Path $envDir "api.production.example") `
     -TargetPath (Join-Path $envDir "api.production.env") `
     -Replacements @{
         "JWT_SECRET" = $jwtSecret
+        "DRAPIXAI_AUTH_SYNC_TOKEN" = $authSyncToken
+        "DRAPIXAI_DASHBOARD_PROXY_TOKEN" = $dashboardProxyToken
+        "DRAPIXAI_AI_SERVICE_TOKEN" = $aiServiceToken
         "DRAPIXAI_ADMIN_TOKEN" = $adminToken
         "DRAPIXAI_CORS_ORIGINS" = "https://$Domain,https://www.$Domain"
         "DRAPIXAI_ADMIN_EMAIL" = $AdminEmail
@@ -98,6 +105,9 @@ Write-EnvFile `
         "NEXTAUTH_URL" = "https://$Domain"
         "NEXTAUTH_SECRET" = $nextAuthSecret
         "ADMIN_SESSION_SECRET" = $adminSessionSecret
+        "DASHBOARD_SESSION_SECRET" = $dashboardSessionSecret
+        "DRAPIXAI_AUTH_SYNC_TOKEN" = $authSyncToken
+        "DRAPIXAI_DASHBOARD_PROXY_TOKEN" = $dashboardProxyToken
         "NEXT_PUBLIC_GOOGLE_AUTH_ENABLED" = "0"
         "NEXT_PUBLIC_DEMO_VIDEO_URL" = ""
         "NEXT_PUBLIC_ADMIN_EMAIL" = $AdminEmail
@@ -108,6 +118,7 @@ Write-EnvFile `
     -TargetPath (Join-Path $envDir "ai.production.env") `
     -Replacements @{
         "DRAPIXAI_ADMIN_TOKEN" = $adminToken
+        "DRAPIXAI_AI_SERVICE_TOKEN" = $aiServiceToken
         "DRAPIXAI_S3_BUCKET" = $S3Bucket
         "DRAPIXAI_S3_REGION" = $AwsRegion
     }
@@ -118,6 +129,9 @@ Write-Host "Still fill these external-service values before deployment:"
 Write-Host "- DATABASE_URL"
 Write-Host "- REDIS_URL"
 Write-Host "- DRAPIXAI_AI_URL"
+Write-Host "- Confirm DRAPIXAI_AUTH_SYNC_TOKEN matches between API and web env files"
+Write-Host "- Confirm DRAPIXAI_DASHBOARD_PROXY_TOKEN matches between API and web env files"
+Write-Host "- Confirm DRAPIXAI_AI_SERVICE_TOKEN matches between API and AI env files"
 Write-Host "- AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY"
 Write-Host "- DRAPIXAI_S3_ACCESS_KEY_ID / DRAPIXAI_S3_SECRET_ACCESS_KEY"
 Write-Host "- SMTP_HOST / SMTP_USER / SMTP_PASS"

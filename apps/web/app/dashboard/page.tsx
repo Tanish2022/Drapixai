@@ -123,6 +123,8 @@ const parseCatalogCsv = (csvText: string): GarmentSyncRow[] => {
 const getApiErrorMessage = (payload: { message?: string; error?: string } | null | undefined, fallback: string) =>
   payload?.message || payload?.error || fallback;
 
+const dashboardApiPath = (path: string) => '/api/dashboard/proxy/' + path.replace(/^\/+/, '');
+
 const humanizeGarmentId = (value: string) =>
   value
     .replace(/[-_]+/g, ' ')
@@ -194,27 +196,22 @@ export default function Dashboard() {
       ? 'rounded-lg border border-sky-100 bg-white px-4 py-2 text-slate-900 transition-colors hover:bg-sky-50'
       : 'rounded-lg border border-white/10 bg-white/10 px-4 py-2 transition-colors hover:bg-white/20';
 
-  const refreshGarments = async (activeApiKey: string) => {
-    const data = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments`, {
-      headers: { Authorization: `Bearer ${activeApiKey}` },
-    })
+  const refreshGarments = async () => {
+    const data = await fetch(dashboardApiPath('sdk/garments'))
       .then((res) => res.json())
       .catch(() => ({ items: [] }));
     setGarments(data.items || []);
   };
 
-  const refreshCatalog = async (activeApiKey: string) => {
-    const data = await fetch(`${PUBLIC_API_BASE_URL}/sdk/catalog`, {
-      headers: { Authorization: `Bearer ${activeApiKey}` },
-    })
+  const refreshCatalog = async () => {
+    const data = await fetch(dashboardApiPath('sdk/catalog'))
       .then((res) => res.json())
       .catch(() => ({ items: [] }));
     setCatalogProducts(data.items || []);
   };
 
-  const refreshUsage = async (activeApiKey: string) => {
-    const headers = { Authorization: `Bearer ${activeApiKey}` };
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/analytics/summary`, { headers });
+  const refreshUsage = async () => {
+    const res = await fetch(dashboardApiPath('analytics/summary'));
     if (res.status === 401) {
       throw new Error('UNAUTHORIZED');
     }
@@ -235,33 +232,20 @@ export default function Dashboard() {
 
       try {
         const sessionResponse = await fetch('/api/dashboard/session', {
-          cache: 'no-store',
-        });
+          cache: 'no-store'
+    });
 
         if (sessionResponse.ok) {
           const data = (await sessionResponse.json().catch(() => null)) as { apiKey?: string } | null;
           const nextApiKey = data?.apiKey?.trim();
           if (active && nextApiKey) {
-            localStorage.setItem('apiKey', nextApiKey);
             setApiKey(nextApiKey);
             setIsBootstrapping(false);
             return;
           }
         }
       } catch {
-        // ignore and fall back to local storage
-      }
-
-      const storedApiKey = localStorage.getItem('apiKey')?.trim() || '';
-      if (active && storedApiKey) {
-        setApiKey(storedApiKey);
-        fetch('/api/dashboard/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey: storedApiKey }),
-        }).catch(() => undefined);
-        setIsBootstrapping(false);
-        return;
+        // ignore and redirect below
       }
 
       if (active) {
@@ -279,9 +263,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (!apiKey) return;
 
-    Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]).catch(async (error: Error) => {
+    Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]).catch(async (error: Error) => {
       if (error.message === 'UNAUTHORIZED') {
-        localStorage.removeItem('apiKey');
         setApiKey('');
         await fetch('/api/dashboard/session', { method: 'DELETE' }).catch(() => undefined);
         router.replace('/auth/login?next=/dashboard');
@@ -300,9 +283,7 @@ export default function Dashboard() {
       const next: Record<string, string> = {};
       for (const g of garments.slice(0, 6)) {
         try {
-          const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments/${encodeURIComponent(g.garmentId)}/thumbnail`, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          });
+          const res = await fetch(dashboardApiPath(`sdk/garments/${encodeURIComponent(g.garmentId)}/thumbnail`));
           if (!res.ok) continue;
           const blob = await res.blob();
           next[g.garmentId] = URL.createObjectURL(blob);
@@ -345,8 +326,8 @@ export default function Dashboard() {
           apiKey,
           productId: previewProductId,
           containerId: 'drapixai-dashboard-demo',
-          garmentType: 'upper',
-        });
+          garmentType: 'upper'
+    });
       }
     };
     document.body.appendChild(script);
@@ -365,7 +346,6 @@ export default function Dashboard() {
     fetch('/api/dashboard/session', { method: 'DELETE' })
       .catch(() => undefined)
       .finally(() => {
-        localStorage.removeItem('apiKey');
         signOut({ redirect: false })
           .catch(() => undefined)
           .finally(() => {
@@ -390,14 +370,13 @@ export default function Dashboard() {
         return;
       }
 
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/catalog/sync`, {
+      const res = await fetch(dashboardApiPath('sdk/catalog/sync'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ items }),
-      });
+        body: JSON.stringify({ items })
+    });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setCatalogSyncStatus(data?.error || 'Catalog sync failed.');
@@ -410,7 +389,7 @@ export default function Dashboard() {
       setCatalogSyncStatus(`Synced ${syncedCount} upper-body products.${skippedCount ? ` Skipped ${skippedCount} non-upper-body rows.` : ''}`);
       setToast(`Catalog discovery complete. ${syncedCount} products are now available for matching.`);
       setCatalogCsvFile(null);
-      await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+      await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
     } catch {
       setCatalogSyncStatus('Catalog sync failed.');
       setToast('Catalog sync failed.');
@@ -430,10 +409,10 @@ export default function Dashboard() {
       form.append('cloth_images', file);
     });
 
-    const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments/bulk`, {
+    const res = await fetch(dashboardApiPath('sdk/garments/bulk'), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
+
+      body: form
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -455,7 +434,7 @@ export default function Dashboard() {
     );
     setToast(`Bulk upload complete. ${successCount} garments are now ready for matching.`);
     setBulkGarmentFiles([]);
-    await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+    await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
   };
 
   const handleConfirmMatch = async (garmentId: string) => {
@@ -469,14 +448,13 @@ export default function Dashboard() {
     setMatchStatusMessage('Saving confirmed mapping...');
 
     try {
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/matches/${encodeURIComponent(garmentId)}/confirm`, {
+      const res = await fetch(dashboardApiPath(`sdk/matches/${encodeURIComponent(garmentId)}/confirm`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ productId }),
-      });
+        body: JSON.stringify({ productId })
+    });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message = getApiErrorMessage(data, 'Unable to confirm the mapping.');
@@ -487,7 +465,7 @@ export default function Dashboard() {
 
       setMatchStatusMessage('Confirmed mapping saved.');
       setToast('Confirmed mapping saved.');
-      await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+      await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
     } catch {
       setMatchStatusMessage('Unable to confirm the mapping.');
       setToast('Unable to confirm the mapping.');
@@ -503,10 +481,9 @@ export default function Dashboard() {
     setMatchStatusMessage('Clearing confirmed mapping...');
 
     try {
-      const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/matches/${encodeURIComponent(garmentId)}/confirm`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
+      const res = await fetch(dashboardApiPath(`sdk/matches/${encodeURIComponent(garmentId)}/confirm`), {
+        method: 'DELETE'
+    });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message = getApiErrorMessage(data, 'Unable to clear the mapping.');
@@ -517,7 +494,7 @@ export default function Dashboard() {
 
       setMatchStatusMessage('Confirmed mapping cleared. DrapixAI recalculated the suggestion.');
       setToast('Confirmed mapping cleared.');
-      await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+      await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
     } catch {
       setMatchStatusMessage('Unable to clear the mapping.');
       setToast('Unable to clear the mapping.');
@@ -995,22 +972,20 @@ export default function Dashboard() {
             </button>
             <button
               onClick={async () => {
-                const res = await fetch(`${PUBLIC_API_BASE_URL}/analytics/api-key/rotate`, {
-                  method: 'POST',
-                  headers: { Authorization: `Bearer ${apiKey}` },
-                });
+                const res = await fetch(dashboardApiPath('analytics/api-key/rotate'), {
+                  method: 'POST'
+    });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok || !data?.apiKey) {
                   setToast('Unable to rotate API key right now.');
                   return;
                 }
-                localStorage.setItem('apiKey', data.apiKey);
                 setApiKey(data.apiKey);
                 await fetch('/api/dashboard/session', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ apiKey: data.apiKey }),
-                }).catch(() => undefined);
+                  body: JSON.stringify({ apiKey: data.apiKey })
+    }).catch(() => undefined);
                 setToast('API key rotated successfully.');
               }}
               className={actionClass}
@@ -1032,11 +1007,11 @@ export default function Dashboard() {
               onBlur={async (e) => {
                 const value = e.target.value.trim();
                 if (!value || !apiKey) return;
-                const res = await fetch(`${PUBLIC_API_BASE_URL}/analytics/domain`, {
+                const res = await fetch(dashboardApiPath('analytics/domain'), {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-                  body: JSON.stringify({ domain: value }),
-                });
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ domain: value })
+    });
                 if (res.ok) {
                   const data = await res.json();
                   setUsage((prev) => (prev ? { ...prev, domain: data.domain, storeConnected: true } : prev));
@@ -1087,7 +1062,7 @@ export default function Dashboard() {
                       {render.status}
                     </span>
                     {render.outputUrl ? (
-                      <Link href={`${PUBLIC_API_BASE_URL}/sdk/result/${render.id}`} className="text-sm text-cyan-300 hover:text-cyan-200">
+                      <Link href={dashboardApiPath(`sdk/result/${render.id}`)} className="text-sm text-cyan-300 hover:text-cyan-200">
                         Open result
                       </Link>
                     ) : null}
@@ -1291,11 +1266,11 @@ export default function Dashboard() {
                     form.append('category', garmentUploadCategory.trim());
                   }
                   form.append('cloth_image', garmentFile);
-                  const res = await fetch(`${PUBLIC_API_BASE_URL}/sdk/garments`, {
+                  const res = await fetch(dashboardApiPath('sdk/garments'), {
                     method: 'POST',
-                    headers: { Authorization: `Bearer ${apiKey}` },
-                    body: form,
-                  });
+
+                    body: form
+    });
                   const data = await res.json().catch(() => ({}));
                   if (!res.ok) {
                     const message = getApiErrorMessage(data, 'Upload failed.');
@@ -1314,7 +1289,7 @@ export default function Dashboard() {
                   setGarmentUploadId('');
                   setGarmentUploadCategory('');
                   setGarmentFile(null);
-                  await Promise.all([refreshUsage(apiKey), refreshGarments(apiKey), refreshCatalog(apiKey)]);
+                  await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
                 }}
                 className={actionClass}
               >
@@ -1413,8 +1388,8 @@ export default function Dashboard() {
                         onChange={(e) =>
                           setSelectedProducts((current) => ({
                             ...current,
-                            [g.garmentId]: e.target.value,
-                          }))
+                            [g.garmentId]: e.target.value
+    }))
                         }
                         className={inputClass}
                       >
