@@ -189,11 +189,43 @@ if sdk_score_raw:
     match = re.search(r"[0-9]+(?:\.[0-9]+)?", sdk_score_raw)
     sdk_score = float(match.group(0)) if match else None
 
+min_quality = float(os.getenv("DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE", "0.90"))
+max_latency_ms = int(os.getenv("DRAPIXAI_LAUNCH_TARGET_LATENCY_MS", "12000"))
+failures = []
+if direct_score is None:
+    failures.append("direct quality score is missing")
+elif direct_score < min_quality:
+    failures.append(f"direct quality {direct_score:.3f} is below launch minimum {min_quality:.3f}")
+if summary["direct"].get("candidate_count") != 1:
+    failures.append(f"direct candidate_count must be 1, got {summary['direct'].get('candidate_count')!r}")
+if summary["direct"].get("warnings"):
+    failures.append(f"direct warnings must be empty, got {summary['direct'].get('warnings')!r}")
+if sdk_score is None:
+    failures.append("SDK quality score is missing")
+elif sdk_score < min_quality:
+    failures.append(f"SDK quality {sdk_score:.3f} is below launch minimum {min_quality:.3f}")
 if direct_score is not None and sdk_score is not None and direct_score - sdk_score > 0.03:
-    raise SystemExit(
-        f"SDK quality score is lower than direct by more than 0.03: "
-        f"direct={direct_score}, sdk={sdk_score}"
-    )
+    failures.append(f"SDK quality score is lower than direct by more than 0.03: direct={direct_score}, sdk={sdk_score}")
+try:
+    sdk_latency = int(summary["sdk"].get("latency_ms") or 0)
+except ValueError:
+    sdk_latency = 0
+if sdk_latency <= 0:
+    failures.append("SDK latency is missing")
+elif sdk_latency > max_latency_ms:
+    failures.append(f"SDK latency {sdk_latency}ms exceeds launch target {max_latency_ms}ms")
+if summary["sdk"].get("candidate_count") not in ("1", 1):
+    failures.append(f"SDK candidate_count must be 1, got {summary['sdk'].get('candidate_count')!r}")
+if summary["sdk"].get("warnings"):
+    failures.append(f"SDK warnings must be empty, got {summary['sdk'].get('warnings')!r}")
+if summary["sdk"].get("quality_mode") != "standard":
+    failures.append(f"SDK quality mode must be standard, got {summary['sdk'].get('quality_mode')!r}")
+if summary["sdk"].get("garment_source") != "original_verified_cache_gate":
+    failures.append(f"SDK garment source must be original_verified_cache_gate, got {summary['sdk'].get('garment_source')!r}")
+if summary["sdk"].get("garment_cache_status") != "verified":
+    failures.append(f"SDK garment cache status must be verified, got {summary['sdk'].get('garment_cache_status')!r}")
+if failures:
+    raise SystemExit("Launch try-on gates failed:\n- " + "\n- ".join(failures))
 PY
 }
 

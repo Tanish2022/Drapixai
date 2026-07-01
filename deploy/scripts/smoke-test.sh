@@ -128,6 +128,8 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
   echo "Saved try-on output to $OUTPUT_FILE"
   echo "Saved response headers to $HEADERS_FILE"
   grep -iE 'x-drapixai-(quality-score|latency-ms|processing-ms|warnings|candidate-count|garment-source|garment-cache-status|quality-mode)' "$HEADERS_FILE" || true
+  echo "==> asserting SDK launch quality gates"
+  python3 "$(dirname "${BASH_SOURCE[0]}")/assert-smoke-headers.py" "$HEADERS_FILE"
 else
   echo "Skipping try-on because PERSON_IMAGE and CLOTH_IMAGE were not provided."
 fi

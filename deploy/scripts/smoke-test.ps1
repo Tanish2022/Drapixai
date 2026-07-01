@@ -168,6 +168,9 @@ if ($PersonImage -and $ClothImage) {
   Write-Host "Saved try-on output to $OutputFile"
   Write-Host "Saved response headers to $HeadersFile"
   $headers | Select-String -Pattern "x-drapixai-(quality-score|latency-ms|processing-ms|warnings|candidate-count|garment-source|garment-cache-status|quality-mode)"
+  Write-Host "==> asserting SDK launch quality gates"
+  & python (Join-Path $PSScriptRoot "assert-smoke-headers.py") $HeadersFile
+  if ($LASTEXITCODE -ne 0) { throw "SDK launch quality gates failed" }
 } else {
   Write-Host "Skipping try-on because PERSON_IMAGE and CLOTH_IMAGE were not provided."
 }
