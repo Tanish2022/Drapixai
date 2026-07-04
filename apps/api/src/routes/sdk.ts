@@ -27,14 +27,7 @@ import {
   resolveConfirmedGarmentForProduct,
   upsertCatalogProductsForUser,
 } from '../lib/catalog-matching';
-import {
-  getPlanName,
-  getPlanQuality,
-  getPlanQuota,
-  hasActivePlanAccess,
-  isInactivePlan,
-  normalizePlanKey,
-} from '../lib/plans';
+import { getPlanAccessContext } from '../lib/plans';
 import {
   buildProductAccuracyReport,
   getTryOnConfidenceBadge,
@@ -212,17 +205,15 @@ const uploadReviewImage = async (
   }
 };
 
-const getUserPlanContext = (planType: string | null | undefined) => {
-  const normalizedPlan = normalizePlanKey(planType);
-  return {
-    normalizedPlan,
-    planName: getPlanName(normalizedPlan),
-    quota: getPlanQuota(normalizedPlan),
-    quality: getPlanQuality(normalizedPlan),
-    active: hasActivePlanAccess(normalizedPlan),
-    inactive: isInactivePlan(normalizedPlan),
-  };
-};
+const getUserPlanContext = (user: {
+  planType?: string | null;
+  subscriptionStatus?: string | null;
+  trialExpiresAt?: Date | null;
+}) => getPlanAccessContext({
+  planType: user.planType,
+  subscriptionStatus: user.subscriptionStatus,
+  trialExpiresAt: user.trialExpiresAt,
+});
 
 const uploadOriginalGarment = async (
   userId: number,
@@ -456,12 +447,15 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
     }
 
     // Check subscription status
-    const plan = getUserPlanContext(user.planType);
+    const plan = getUserPlanContext(user);
     if (plan.inactive) {
-      return res.status(403).json({ 
-        valid: false, 
+      return res.status(403).json({
+        valid: false,
         error: 'Subscription expired',
-        message: 'Your subscription has expired. Please renew to continue using DrapixAI.'
+        reason: plan.blockedReason,
+        message: plan.blockedReason === 'TRIAL_EXPIRED'
+          ? 'Your DrapixAI trial has expired. Please upgrade your plan to continue.'
+          : 'Your subscription has expired. Please renew to continue using DrapixAI.'
       });
     }
 
@@ -486,9 +480,7 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
       selectedPlan: user.selectedPlan || null,
       subscriptionPlan: user.subscriptionPlan || null,
       subscriptionStatus: user.subscriptionStatus || null,
-      trialDaysLeft: plan.normalizedPlan === 'trial' && user.trialExpiresAt 
-        ? Math.max(0, Math.ceil((user.trialExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-        : 0
+      trialDaysLeft: plan.trialDaysLeft
     });
   } catch (error) {
     console.error('Validation error:', error);
@@ -537,12 +529,15 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       }
     }
 
-    const plan = getUserPlanContext(user.planType);
+    const plan = getUserPlanContext(user);
     if (!plan.active) {
       removeUploadedFile(req.file);
       return res.status(403).json({ 
         error: 'No active subscription',
-        message: 'Please upgrade your plan to continue using DrapixAI'
+        reason: plan.blockedReason,
+        message: plan.blockedReason === 'TRIAL_EXPIRED'
+          ? 'Your DrapixAI trial has expired. Please upgrade your plan to continue.'
+          : 'Please upgrade your plan to continue using DrapixAI'
       });
     }
 
@@ -709,12 +704,15 @@ router.post('/tryon', authMiddleware, upload.fields([
     }
 
     const now = new Date();
-    const plan = getUserPlanContext(user.planType);
+    const plan = getUserPlanContext(user);
     if (!plan.active) {
       cleanupTryOnUploadFiles();
       return res.status(403).json({
         error: 'No active subscription',
-        message: 'Please upgrade your plan to continue using DrapixAI'
+        reason: plan.blockedReason,
+        message: plan.blockedReason === 'TRIAL_EXPIRED'
+          ? 'Your DrapixAI trial has expired. Please upgrade your plan to continue.'
+          : 'Please upgrade your plan to continue using DrapixAI'
       });
     }
     let usage = await prisma.usage.findFirst({
@@ -1654,7 +1652,7 @@ router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
       try {
         const watermarkedUrl = await processWithWatermark(
           render.outputUrl,
-          normalizePlanKey(user.planType)
+          getUserPlanContext(user).normalizedPlan
         );
         
         await prisma.render.update({

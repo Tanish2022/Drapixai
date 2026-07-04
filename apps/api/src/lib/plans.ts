@@ -20,6 +20,23 @@ type PlanConfig = {
   active: boolean;
 };
 
+export type PlanAccessInput = {
+  planType?: string | null;
+  subscriptionStatus?: string | null;
+  trialExpiresAt?: Date | string | null;
+};
+
+export type PlanAccessContext = {
+  normalizedPlan: PlanKey;
+  planName: string;
+  quota: number;
+  quality: 'standard';
+  active: boolean;
+  inactive: boolean;
+  blockedReason: 'PLAN_INACTIVE' | 'TRIAL_EXPIRED' | 'SUBSCRIPTION_INACTIVE' | null;
+  trialDaysLeft: number;
+};
+
 const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
   trial: {
     key: 'trial',
@@ -79,6 +96,25 @@ const PLAN_CONFIG: Record<PlanKey, PlanConfig> = {
   },
 };
 
+const INACTIVE_SUBSCRIPTION_STATUSES = new Set([
+  'canceled',
+  'cancelled',
+  'expired',
+  'inactive',
+  'past_due',
+  'unpaid',
+  'suspended',
+]);
+
+const normalizeSubscriptionStatus = (value: string | null | undefined) =>
+  String(value || '').trim().toLowerCase();
+
+const normalizeTrialExpiry = (value: Date | string | null | undefined) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+};
+
 export const normalizePlanKey = (value: string | null | undefined): PlanKey => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized in PLAN_CONFIG) {
@@ -112,6 +148,40 @@ export const hasActivePlanAccess = (value: string | null | undefined) =>
 export const isInactivePlan = (value: string | null | undefined) => {
   const plan = normalizePlanKey(value);
   return plan === 'expired' || plan === 'canceled' || plan === 'none';
+};
+
+export const getPlanAccessContext = (input: PlanAccessInput): PlanAccessContext => {
+  const normalizedPlan = normalizePlanKey(input.planType);
+  const config = PLAN_CONFIG[normalizedPlan];
+  const subscriptionStatus = normalizeSubscriptionStatus(input.subscriptionStatus);
+  const trialExpiresAt = normalizeTrialExpiry(input.trialExpiresAt);
+  const trialDaysLeft = normalizedPlan === 'trial' && trialExpiresAt
+    ? Math.max(0, Math.ceil((trialExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  let active = config.active;
+  let blockedReason: PlanAccessContext['blockedReason'] = active ? null : 'PLAN_INACTIVE';
+
+  if (active && normalizedPlan === 'trial' && trialExpiresAt && trialExpiresAt.getTime() <= Date.now()) {
+    active = false;
+    blockedReason = 'TRIAL_EXPIRED';
+  }
+
+  if (active && INACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
+    active = false;
+    blockedReason = 'SUBSCRIPTION_INACTIVE';
+  }
+
+  return {
+    normalizedPlan,
+    planName: config.name,
+    quota: config.quota,
+    quality: config.quality,
+    active,
+    inactive: !active,
+    blockedReason,
+    trialDaysLeft,
+  };
 };
 
 export const formatPlanLabel = (value: string | null | undefined) => {

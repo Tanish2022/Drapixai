@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
 import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
-import { getPlanName, getPlanQuota, normalizePlanKey } from '../lib/plans';
+import { getPlanAccessContext, getPlanName } from '../lib/plans';
 import { getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
 
 const router = Router();
@@ -125,17 +125,19 @@ router.get('/summary', async (req, res) => {
     timingJson: result.timingJson as Record<string, unknown> | null,
   }) === 'Excellent').length;
 
-  const normalizedPlan = normalizePlanKey(user?.planType);
-  const quota = getPlanQuota(normalizedPlan);
-  const planName = getPlanName(normalizedPlan);
+  const plan = getPlanAccessContext({
+    planType: user?.planType,
+    subscriptionStatus: user?.subscriptionStatus,
+    trialExpiresAt: user?.trialExpiresAt,
+  });
   const normalizedDomain = (validKey.domainWhitelist || '').trim();
   
   res.json({
-    planType: normalizedPlan,
-    planName: planName,
+    planType: plan.normalizedPlan,
+    planName: plan.planName,
     rendersUsed: usage?.renderCount || 0,
-    quota: quota,
-    quotaRemaining: Math.max(0, quota - (usage?.renderCount || 0)),
+    quota: plan.quota,
+    quotaRemaining: Math.max(0, plan.quota - (usage?.renderCount || 0)),
     email: user?.email || null,
     companyName: user?.companyName || null,
     selectedPlan: user?.selectedPlan || null,
@@ -143,6 +145,8 @@ router.get('/summary', async (req, res) => {
     subscriptionPlan: user?.subscriptionPlan || null,
     subscriptionPlanName: user?.subscriptionPlan ? getPlanName(user.subscriptionPlan) : null,
     subscriptionStatus: user?.subscriptionStatus || null,
+    planAccessActive: plan.active,
+    planBlockedReason: plan.blockedReason,
     subscriptionCurrentPeriodEndsAt: user?.subscriptionCurrentPeriodEndsAt
       ? user.subscriptionCurrentPeriodEndsAt.toISOString()
       : null,
@@ -174,9 +178,7 @@ router.get('/summary', async (req, res) => {
       createdAt: render.createdAt.toISOString(),
     })),
     trialEndsAt: user?.trialExpiresAt ? user.trialExpiresAt.toISOString() : null,
-    trialDaysLeft: normalizedPlan === 'trial' && user?.trialExpiresAt 
-      ? Math.max(0, Math.ceil((user.trialExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) 
-      : 0
+    trialDaysLeft: plan.trialDaysLeft
   });
 });
 
