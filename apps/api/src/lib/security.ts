@@ -112,6 +112,23 @@ export const readLocalUploadFile = (storedUrl: string) => {
   return fs.readFileSync(localPath);
 };
 
+export const removeLocalStoredFile = (storedUrl: string | null | undefined, requiredRelativePrefix?: string) => {
+  if (!storedUrl?.startsWith('local:')) return false;
+  const root = getResolvedUploadRoot();
+  const localPath = path.resolve(storedUrl.replace('local:', ''));
+  if (!isPathInside(root, localPath)) return false;
+
+  if (requiredRelativePrefix) {
+    const normalizedRelative = path.relative(root, localPath).replace(/\\/g, '/');
+    const normalizedPrefix = requiredRelativePrefix.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!normalizedRelative.startsWith(`${normalizedPrefix}/`)) return false;
+  }
+
+  if (!fs.existsSync(localPath)) return false;
+  fs.unlinkSync(localPath);
+  return true;
+};
+
 export const sanitizeUpstreamError = (fallback: string, raw: string) => {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return fallback;

@@ -192,6 +192,7 @@ These are hard launch gates, not recommendations:
 - Cookie-backed admin and dashboard routes must reject cross-origin session and proxy mutations using the configured web origin.
 - Session routes that create, clear, or reveal dashboard credentials must return explicit no-store JSON responses so browser/proxy caches do not retain API keys.
 - Public privacy copy and SDK consent text must match the launch retention policy: shopper person photos and generated try-on preview images may be retained for up to 30 days for quality review, fraud prevention, abuse investigation, and support; garment assets stay while the brand account uses DrapixAI; security, billing, and audit logs may be retained for up to 12 months.
+- Operators must run `npm --prefix apps/api run tryon:purge-review-retention -- --dry-run` to preview expired shopper review images and `npm --prefix apps/api run tryon:purge-review-retention -- --confirm` to enforce the 30-day review-image retention policy.
 
 Minimum security verification before launch:
 
