@@ -284,9 +284,15 @@ Values you will fill:
 Minimum verification before launch:
 
 1. Domain verified with SMTP provider
-2. One real test email sent from the API
-3. Email logs checked in the app/database
-4. SPF and DKIM records added for the sending domain
+2. SPF and DKIM records added for the sending domain
+3. A real DrapixAI account exists for the test recipient email
+4. One real test email sent from the API and confirmed in `EmailLog`:
+
+```bash
+npm --prefix apps/api run email:send-test -- --to=admin@yourbrand.com
+```
+
+The command fails if SMTP env vars are missing, the recipient is not an existing DrapixAI user, sending fails, or the `EmailLog` row is not written with `status="sent"`.
 
 ## 5. Google OAuth Setup
 

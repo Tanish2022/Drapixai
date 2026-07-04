@@ -3,6 +3,13 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+type EmailSendResult = {
+  sent: boolean;
+  skipped: boolean;
+  logId?: number;
+  error?: string;
+};
+
 const getTransporter = () => nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT || 587),
@@ -13,8 +20,17 @@ const getTransporter = () => nodemailer.createTransport({
   } : undefined
 });
 
-export const sendEmail = async (userId: number | null, to: string, event: string, subject: string, text: string) => {
-  if (!process.env.SMTP_HOST) return;
+export const sendEmail = async (
+  userId: number | null,
+  to: string,
+  event: string,
+  subject: string,
+  text: string
+): Promise<EmailSendResult> => {
+  if (!process.env.SMTP_HOST) {
+    return { sent: false, skipped: true, error: 'SMTP_HOST_NOT_CONFIGURED' };
+  }
+
   try {
     await getTransporter().sendMail({
       from: process.env.SMTP_FROM || 'no-reply@drapixai.com',
@@ -23,16 +39,21 @@ export const sendEmail = async (userId: number | null, to: string, event: string
       text
     });
     if (userId) {
-      await prisma.emailLog.create({
+      const log = await prisma.emailLog.create({
         data: { userId, email: to, event, status: 'sent' }
       });
+      return { sent: true, skipped: false, logId: log.id };
     }
+    return { sent: true, skipped: false };
   } catch (err: any) {
+    const error = String(err?.message || err);
     if (userId) {
-      await prisma.emailLog.create({
-        data: { userId, email: to, event, status: 'failed', error: String(err?.message || err) }
+      const log = await prisma.emailLog.create({
+        data: { userId, email: to, event, status: 'failed', error }
       });
+      return { sent: false, skipped: false, logId: log.id, error };
     }
+    return { sent: false, skipped: false, error };
   }
 };
 
