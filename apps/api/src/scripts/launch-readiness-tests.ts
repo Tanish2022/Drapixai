@@ -46,6 +46,30 @@ assert.deepStrictEqual(
   `Real env files must never be tracked by Git: ${forbiddenTrackedEnvFiles.join(', ')}`,
 );
 
+const generatedArtifactPrefixes = [
+  '.next/',
+  '.next-review/',
+  'apps/web/.next/',
+  'apps/web/.next-review/',
+  'runtime/',
+  'outputs/',
+  'uploads/',
+  'drapixai_ai/runtime/',
+  'drapixai_ai/outputs/',
+  'drapixai_ai/garments/',
+];
+
+const forbiddenTrackedGeneratedFiles = trackedFiles.filter((file) => {
+  const normalized = file.replace(/\\/g, '/');
+  return generatedArtifactPrefixes.some((prefix) => normalized.startsWith(prefix));
+});
+
+assert.deepStrictEqual(
+  forbiddenTrackedGeneratedFiles,
+  [],
+  `Generated artifacts must never be tracked by Git: ${forbiddenTrackedGeneratedFiles.join(', ')}`,
+);
+
 const sdkRoute = read('apps/api/src/routes/sdk.ts');
 const apiServer = read('apps/api/src/server.ts');
 const authRoute = read('apps/api/src/routes/auth.ts');
@@ -446,6 +470,7 @@ assertIncludes(initProductionEnv, '"DASHBOARD_SESSION_SECRET" = $dashboardSessio
 assertIncludes(initProductionEnv, '"DRAPIXAI_DASHBOARD_PROXY_TOKEN" = $dashboardProxyToken', 'Production env initializer must write the same dashboard proxy token to API and web envs');
 assertIncludes(initProductionEnv, '"DRAPIXAI_AI_SERVICE_TOKEN" = $aiServiceToken', 'Production env initializer must write the same AI service token to API and AI envs');
 assertIncludes(gitignore, 'deploy/env/*.production.env', 'Real production env files must stay out of Git');
+assertIncludes(gitignore, '.next-review/', 'Git ignore must exclude Next review build artifacts');
 assertIncludes(gitignore, 'output/', 'Generated catalog output must stay out of Git');
 assertIncludes(gitignore, 'outputs/', 'Generated launch package outputs must stay out of Git');
 assertIncludes(setupBatch, 'LEGACY_SETUP_DISABLED', 'Legacy destructive Setup.bat scaffold must stay disabled');
