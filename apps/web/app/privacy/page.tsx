@@ -11,7 +11,7 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Privacy Policy"
       title="Privacy Policy"
-      summary="This policy explains what information DrapixAI collects, how it is used, and the steps taken to protect customer and end-user data. Update this page with your final legal review before public launch."
+      summary="This policy explains what information DrapixAI collects, how it is used, and the steps taken to protect customer and end-user data across the current upper-body virtual try-on launch scope."
       sections={[
         {
           heading: 'Information We Collect',
@@ -31,21 +31,21 @@ export default function PrivacyPage() {
           heading: 'Storage, Security, and Retention',
           body: [
             'DrapixAI uses technical and organizational safeguards to protect data in transit and at rest. Access to production systems is restricted to authorized personnel and service providers who need it to operate the platform.',
-            'Uploaded assets, generated outputs, logs, and account records are retained only as long as needed for service delivery, legal compliance, dispute resolution, fraud prevention, and security operations. Final retention periods should be defined before launch.',
+            'Shopper person photos and generated try-on preview images may be retained for up to 30 days for quality review, fraud prevention, abuse investigation, and support, then deleted or de-identified unless a longer period is required by law or an active dispute. Brand garment assets and confirmed product mappings are retained while the brand account uses DrapixAI so cached try-on assets can be regenerated after model or resolution upgrades. Security, billing, and audit logs may be retained for up to 12 months.',
           ],
         },
         {
           heading: 'Third-Party Services',
           body: [
             'DrapixAI relies on third-party infrastructure and software providers such as hosting, database, storage, email, analytics, and authentication vendors. Those providers may process data on our behalf under their own contractual and privacy terms.',
-            'You should list the final production providers on this page once your infrastructure stack is finalized.',
+            'The current launch stack may use providers for hosting, GPU runtime, database, Redis/queueing, object storage, email delivery, authentication, analytics, and support operations. Provider access is limited to what is needed to operate DrapixAI.',
           ],
         },
         {
           heading: 'Your Rights and Contact',
           body: [
             'Depending on your location, you may have rights to access, correct, delete, or restrict certain personal information. You may also have the right to object to certain processing or request a copy of your data.',
-            'For privacy requests, contact DrapixAI at support@drapixai.com until a dedicated privacy contact is published.',
+            'For privacy requests, contact DrapixAI at privacy@drapixai.com. Support requests can still be sent to support@drapixai.com.',
           ],
         },
       ]}

@@ -118,6 +118,7 @@ const apiProductionExample = read('deploy/env/api.production.example');
 const webProductionExample = read('deploy/env/web.production.example');
 const nextConfig = read('apps/web/next.config.js');
 const homePage = read('apps/web/app/page.tsx');
+const privacyPage = read('apps/web/app/privacy/page.tsx');
 const proveLiveShell = read('deploy/scripts/prove-live-stack.sh');
 const proveLivePowerShell = read('deploy/scripts/prove-live-stack.ps1');
 const localPreflight = read('deploy/scripts/local-preflight.ps1');
@@ -497,6 +498,10 @@ assertIncludes(productionReadiness, 'must not be persisted in browser `localStor
 assertIncludes(productionReadiness, 'sanitize configurable CSS values and logo URLs', 'Production readiness doc must call out SDK markup sanitization');
 assertIncludes(productionReadiness, 'production security headers from `next.config.js`', 'Production readiness doc must call out web security headers');
 assertIncludes(productionReadiness, 'reject cross-origin session and proxy mutations', 'Production readiness doc must call out CSRF protection for cookie-backed routes');
+assertIncludes(productionReadiness, 'shopper person photos and generated try-on preview images may be retained for up to 30 days', 'Production readiness doc must define launch retention policy');
+assertIncludes(privacyPage, 'retained for up to 30 days', 'Privacy page must define shopper photo/result retention window');
+assertIncludes(privacyPage, 'privacy@drapixai.com', 'Privacy page must publish privacy contact');
+assertIncludes(sdkJs, 'quality review, fraud prevention, and support', 'SDK privacy copy must match retention/review use');
 assertIncludes(productionReadiness, 'npm run start:local', 'Production readiness doc must include one-command local stack startup');
 assertIncludes(productionReadiness, 'localhost:5433', 'Production readiness doc must match the local Postgres port override');
 assertIncludes(productionReadiness, 'prove-live-stack.ps1 -ApiUrl http://localhost:8000', 'Production readiness doc must include local live-stack proof command');

@@ -257,7 +257,7 @@
         buttonText: options.buttonText || 'Try On',
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
-        footerText: options.footerText || 'Privacy: your photo is used only to create this try-on preview and is not shown publicly.',
+        footerText: options.footerText || 'Privacy: your photo is used only for this try-on preview, quality review, fraud prevention, and support. It is not shown publicly.',
         timeoutMs: Number(options.timeoutMs || 20000),
         adaptBrandTheme: options.adaptBrandTheme !== false,
         primaryGradient: options.primaryGradient || null,
