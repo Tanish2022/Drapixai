@@ -430,6 +430,11 @@ assertIncludes(nextConfig, 'Referrer-Policy', 'Web app must send a referrer poli
 assertIncludes(nextConfig, 'Permissions-Policy', 'Web app must restrict sensitive browser APIs');
 assertIncludes(nextConfig, 'X-Frame-Options', 'Web app must send legacy frame protection');
 assertIncludes(nextConfig, 'Strict-Transport-Security', 'Web app must send production HSTS');
+assertIncludes(nextConfig, 'privateNoIndexSources', 'Web app must define private noindex routes');
+assertIncludes(nextConfig, 'X-Robots-Tag', 'Web app must send X-Robots-Tag on private app surfaces');
+assertIncludes(nextConfig, "'/dashboard'", 'Dashboard page must be noindexed');
+assertIncludes(nextConfig, "'/admin'", 'Admin page must be noindexed');
+assertIncludes(nextConfig, "'/api/:path*'", 'API routes must be noindexed');
 assertIncludes(nextConfig, 'includeSubDomains; preload', 'Web HSTS must cover subdomains and preload readiness');
 assertIncludes(productionReadiness, 'Admin dashboard traffic must go through the same-origin Next admin proxy', 'Production readiness doc must call out admin proxy security');
 assertIncludes(productionReadiness, 'same-origin Next dashboard proxy', 'Production readiness doc must call out dashboard proxy security');

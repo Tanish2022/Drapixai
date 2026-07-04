@@ -39,6 +39,23 @@ const contentSecurityPolicy = [
   ...(isProduction ? ['upgrade-insecure-requests'] : []),
 ].join('; ');
 
+const privateNoIndexHeaders = [
+  { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
+];
+
+const privateNoIndexSources = [
+  '/api/:path*',
+  '/admin',
+  '/admin/:path*',
+  '/admin-access',
+  '/dashboard',
+  '/dashboard/:path*',
+  '/settings',
+  '/settings/:path*',
+  '/sdk-install',
+  '/subscription',
+];
+
 const securityHeaders = [
   { key: 'Content-Security-Policy', value: contentSecurityPolicy },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -60,6 +77,10 @@ const nextConfig = {
         source: '/:path*',
         headers: securityHeaders,
       },
+      ...privateNoIndexSources.map((source) => ({
+        source,
+        headers: privateNoIndexHeaders,
+      })),
     ];
   },
 }
