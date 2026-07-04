@@ -1,4 +1,5 @@
 import assert from 'assert';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -15,6 +16,35 @@ const assertIncludes = (source: string, expected: string, label: string) => {
 const assertNotIncludes = (source: string, unexpected: string, label: string) => {
   assert.ok(!source.includes(unexpected), label);
 };
+
+const gitLsFiles = () => {
+  return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((file) => file.trim())
+    .filter(Boolean);
+};
+
+const trackedFiles = gitLsFiles();
+const forbiddenTrackedEnvFiles = trackedFiles.filter((file) => {
+  const normalized = file.replace(/\\/g, '/');
+  if (normalized.endsWith('.example') || normalized.endsWith('.sample')) {
+    return false;
+  }
+  return (
+    normalized === '.env' ||
+    normalized === '.env.local' ||
+    /(^|\/)\.env($|\.)/.test(normalized) ||
+    /(^|\/)deploy\/env\/[^/]+\.production\.env$/.test(normalized) ||
+    /(^|\/)apps\/[^/]+\/\.env($|\.)/.test(normalized)
+  );
+});
+
+assert.deepStrictEqual(
+  forbiddenTrackedEnvFiles,
+  [],
+  `Real env files must never be tracked by Git: ${forbiddenTrackedEnvFiles.join(', ')}`,
+);
 
 const sdkRoute = read('apps/api/src/routes/sdk.ts');
 const apiServer = read('apps/api/src/server.ts');
