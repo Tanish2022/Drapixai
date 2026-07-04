@@ -39,19 +39,21 @@ export const sendEmail = async (userId: number | null, to: string, event: string
 export const sendOtpEmail = async (
   to: string,
   code: string,
-  purpose: 'signup' | 'email_change_current' | 'email_change_new',
+  purpose: 'signup' | 'email_change_current' | 'email_change_new' | 'password_reset',
   userId?: number | null
 ) => {
   const subjectMap = {
     signup: 'Your DrapixAI sign-up verification code',
     email_change_current: 'Verify your current DrapixAI email',
     email_change_new: 'Verify your new DrapixAI email',
+    password_reset: 'Your DrapixAI password reset code',
   } as const;
 
   const introMap = {
     signup: 'Use this code to complete your DrapixAI sign-up:',
     email_change_current: 'Use this code to confirm your current account email before changing it:',
     email_change_new: 'Use this code to verify your new account email address:',
+    password_reset: 'Use this code to reset your DrapixAI password:',
   } as const;
 
   const text = `${introMap[purpose]}\n\n${code}\n\nThis code expires in 10 minutes. If you did not request this, you can ignore this email.`;

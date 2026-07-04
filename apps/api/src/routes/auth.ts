@@ -85,6 +85,75 @@ router.post('/register/request-otp', async (req, res) => {
   }
 });
 
+router.post('/password-reset/request-otp', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: 'EMAIL_REQUIRED' });
+    }
+
+    const normalizedEmail = normalizeEmail(String(email));
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+    if (!user) {
+      return res.json({ ok: true });
+    }
+
+    const { code } = await issueVerificationCode(prisma, {
+      email: normalizedEmail,
+      purpose: 'password_reset',
+      userId: user.id,
+    });
+
+    await sendOtpEmail(normalizedEmail, code, 'password_reset', user.id);
+    return res.json({
+      ok: true,
+      debugOtp: !process.env.SMTP_HOST && process.env.NODE_ENV !== 'production' ? code : undefined,
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'PASSWORD_RESET_OTP_REQUEST_FAILED' });
+  }
+});
+
+router.post('/password-reset/confirm', async (req, res) => {
+  try {
+    const { email, otp, password } = req.body || {};
+    if (!email || !otp || !password) {
+      return res.status(400).json({ error: 'EMAIL_OTP_AND_PASSWORD_REQUIRED' });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: 'PASSWORD_TOO_SHORT' });
+    }
+
+    const normalizedEmail = normalizeEmail(String(email));
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) {
+      return res.status(400).json({ error: 'INVALID_OR_EXPIRED_OTP' });
+    }
+
+    const otpValid = await consumeVerificationCode(prisma, {
+      email: normalizedEmail,
+      purpose: 'password_reset',
+      code: String(otp),
+      userId: user.id,
+    });
+    if (!otpValid) {
+      return res.status(400).json({ error: 'INVALID_OR_EXPIRED_OTP' });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(String(password), 10),
+        emailVerifiedAt: user.emailVerifiedAt || new Date(),
+      },
+    });
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'PASSWORD_RESET_FAILED' });
+  }
+});
 router.post('/register', async (req, res) => {
   try {
     const { email, password, companyName, selectedPlan, otp, mobileNumber } = req.body;
