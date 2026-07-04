@@ -421,6 +421,8 @@ assertIncludes(nextConfig, 'X-Content-Type-Options', 'Web app must send no-sniff
 assertIncludes(nextConfig, 'Referrer-Policy', 'Web app must send a referrer policy');
 assertIncludes(nextConfig, 'Permissions-Policy', 'Web app must restrict sensitive browser APIs');
 assertIncludes(nextConfig, 'X-Frame-Options', 'Web app must send legacy frame protection');
+assertIncludes(nextConfig, 'Strict-Transport-Security', 'Web app must send production HSTS');
+assertIncludes(nextConfig, 'includeSubDomains; preload', 'Web HSTS must cover subdomains and preload readiness');
 assertIncludes(productionReadiness, 'Admin dashboard traffic must go through the same-origin Next admin proxy', 'Production readiness doc must call out admin proxy security');
 assertIncludes(productionReadiness, 'same-origin Next dashboard proxy', 'Production readiness doc must call out dashboard proxy security');
 assertIncludes(productionReadiness, 'must not be persisted in browser `localStorage`', 'Production readiness doc must call out browser API key persistence rules');
