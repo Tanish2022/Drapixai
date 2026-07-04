@@ -109,6 +109,12 @@
     return fallback;
   }
 
+  var SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+  function isSupportedImageFile(file) {
+    return Boolean(file && SUPPORTED_IMAGE_TYPES.indexOf(String(file.type || '').toLowerCase()) !== -1);
+  }
+
   function parseNumber(value) {
     var parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
@@ -350,7 +356,7 @@
           '    <div style="font-size:13px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';max-width:560px;margin-bottom:20px;">', escapeHtml(config.modalSubtitle), '</div>',
           '    <div style="display:grid;gap:18px;">',
           '      <div id="drapix-dropzone" class="drapix-dropzone" style="position:relative;border:1px dashed ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.cardRadius), ';padding:24px;background:', escapeHtml(theme.softSurface), ';transition:all .2s ease;">',
-          '        <input id="drapix-person" type="file" accept="image/*" style="display:none;" />',
+          '        <input id="drapix-person" type="file" accept="image/jpeg,image/png,image/webp" style="display:none;" />',
           '        <div id="drapix-upload-state">',
           '          <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.pageSurface), ';margin-bottom:14px;">',
           '            <span style="font-size:22px;color:', escapeHtml(theme.text), ';">&#8593;</span>',
@@ -574,6 +580,11 @@
         });
         personInput.addEventListener('change', function () {
           if (personInput.files && personInput.files[0]) {
+            if (!isSupportedImageFile(personInput.files[0])) {
+              status.textContent = 'Please upload a JPEG, PNG, or WebP image.';
+              personInput.value = '';
+              return;
+            }
             updatePreview(personInput.files[0]);
           }
         });
@@ -593,10 +604,10 @@
         });
         dropzone.addEventListener('drop', function (event) {
           var droppedFile = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
-          if (droppedFile && droppedFile.type.indexOf('image/') === 0) {
+          if (isSupportedImageFile(droppedFile)) {
             setSelectedFile(droppedFile);
           } else {
-            status.textContent = 'Please drop a valid image file.';
+            status.textContent = 'Please drop a JPEG, PNG, or WebP image.';
           }
         });
 
@@ -610,6 +621,11 @@
         runBtn.addEventListener('click', async function () {
           if (!personInput.files || !personInput.files[0]) {
             status.textContent = 'Please upload your front-facing image first.';
+            return;
+          }
+
+          if (!isSupportedImageFile(personInput.files[0])) {
+            status.textContent = 'Please upload a JPEG, PNG, or WebP image.';
             return;
           }
 
@@ -682,8 +698,8 @@
             result.src = activeResultUrl;
             var resultMeta = modal.querySelector('#drapix-result-meta');
             if (resultMeta) {
-              var latencyText = metadata.latencyMs ? ' · ' + (metadata.latencyMs / 1000).toFixed(1) + 's' : '';
-              var scoreText = typeof metadata.qualityScore === 'number' ? ' · score ' + metadata.qualityScore.toFixed(2) : '';
+              var latencyText = metadata.latencyMs ? ' - ' + (metadata.latencyMs / 1000).toFixed(1) + 's' : '';
+              var scoreText = typeof metadata.qualityScore === 'number' ? ' - score ' + metadata.qualityScore.toFixed(2) : '';
               resultMeta.textContent = (metadata.confidenceBadge || 'Review') + scoreText + latencyText + '. Download and Share exports include a small DrapixAI watermark.';
             }
             resultShell.style.display = 'block';

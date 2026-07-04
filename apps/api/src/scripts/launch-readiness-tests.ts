@@ -272,6 +272,10 @@ for (const label of [
 assertIncludes(sdkJs, "throw reportStartupError('INVALID_QUALITY');", 'Browser SDK must reject non-standard quality options');
 assertIncludes(sdkJs, 'function sanitizeCssValue', 'Browser SDK must sanitize CSS values before generated markup');
 assertIncludes(sdkJs, 'function sanitizeAssetUrl', 'Browser SDK must sanitize logo/image URLs before generated markup');
+assertIncludes(sdkJs, 'SUPPORTED_IMAGE_TYPES', 'Browser SDK must keep client upload types aligned with API image allowlist');
+assertIncludes(sdkJs, 'function isSupportedImageFile', 'Browser SDK must reject unsupported image types before preview/upload');
+assertIncludes(sdkJs, 'accept="image/jpeg,image/png,image/webp"', 'Browser SDK file input must not accept broad image/* uploads');
+assertNotIncludes(sdkJs, 'accept="image/*"', 'Browser SDK must not advertise unsupported image types');
 assertIncludes(sdkJs, '/expression\\s*\\(|javascript\\s*:|data\\s*:|@import|url\\s*\\(/i', 'Browser SDK CSS sanitizer must reject active CSS values');
 assertIncludes(sdkJs, "logoUrl: sanitizeAssetUrl", 'Browser SDK must sanitize configurable logo URLs');
 assertIncludes(sdkJs, '&#10003;', 'Browser SDK must use ASCII-safe entities for inline status icons');
