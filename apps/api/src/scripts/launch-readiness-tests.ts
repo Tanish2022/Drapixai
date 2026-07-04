@@ -277,6 +277,11 @@ assertIncludes(remoteFetchHelpers, "redirect: 'error'", 'Remote fetch helper mus
 assertIncludes(remoteFetchHelpers, 'safeFetchBuffer', 'Remote fetch helper must support guarded binary image fetches');
 assertIncludes(accountRoute, 'safeFetchText', 'Account store verification and feed sync must use safe remote fetches');
 assertIncludes(accountRoute, 'FEED_URL_HTTPS_REQUIRED', 'Catalog feed URLs must require HTTPS');
+assertIncludes(accountRoute, 'allowInsecureStoreVerification', 'Store verification must make HTTP fallback explicit and local-only');
+assertIncludes(accountRoute, "process.env.NODE_ENV !== 'production' && process.env.DRAPIXAI_ALLOW_INSECURE_STORE_VERIFICATION === '1'", 'Store verification HTTP fallback must be disabled in production');
+assertIncludes(accountRoute, 'const urlsToCheck = allowInsecureVerification ? [`https://${domain}`, `http://${domain}`] : [`https://${domain}`];', 'Production store verification must check HTTPS only');
+assertIncludes(accountRoute, 'allowedProtocols: allowedVerificationProtocols', 'Store verification protocol allowlist must follow HTTPS-only launch policy');
+assertNotIncludes(accountRoute, "allowedProtocols: ['https:', 'http:']", 'Store verification must not always permit insecure HTTP');
 assertIncludes(accountRoute, 'router.use(requireDashboardProxy);', 'Account routes must require the same-origin dashboard proxy token');
 assertNotIncludes(accountRoute, "fetch(feedUrl", 'Account feed sync must not fetch brand URLs directly');
 assertNotIncludes(accountRoute, "fetch(url, { redirect: 'follow' })", 'Store verification must not follow arbitrary redirects');

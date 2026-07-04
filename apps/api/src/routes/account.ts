@@ -16,6 +16,8 @@ const accountRateLimit = createRateLimitMiddleware(20, 15 * 60 * 1000);
 
 const generateVerificationToken = () => `drapix_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 const normalizeDomainInput = (value: string) => normalizePublicDomain(value);
+const allowInsecureStoreVerification = () =>
+  process.env.NODE_ENV !== 'production' && process.env.DRAPIXAI_ALLOW_INSECURE_STORE_VERIFICATION === '1';
 
 const normalizeFeedUrl = (value: string) => {
   const parsed = new URL(value.trim());
@@ -293,13 +295,15 @@ router.post('/store/verify', async (req, res) => {
     return res.status(400).json({ error: 'STORE_DOMAIN_NOT_CONFIGURED' });
   }
 
-  const urlsToCheck = [`https://${domain}`, `http://${domain}`];
+  const allowInsecureVerification = allowInsecureStoreVerification();
+  const allowedVerificationProtocols = allowInsecureVerification ? ['https:', 'http:'] : ['https:'];
+  const urlsToCheck = allowInsecureVerification ? [`https://${domain}`, `http://${domain}`] : [`https://${domain}`];
   let matched = false;
   let lastError = '';
   for (const url of urlsToCheck) {
     try {
       const { response, text: html } = await safeFetchText(url, {
-        allowedProtocols: ['https:', 'http:'],
+        allowedProtocols: allowedVerificationProtocols,
         maxBytes: 512 * 1024,
         timeoutMs: 8000,
       });
@@ -318,7 +322,10 @@ router.post('/store/verify', async (req, res) => {
   }
 
   if (!matched) {
-    return res.status(400).json({ error: 'STORE_VERIFICATION_FAILED', message: lastError || 'Verification failed.' });
+    return res.status(400).json({
+      error: 'STORE_VERIFICATION_FAILED',
+      message: lastError || (allowInsecureVerification ? 'Verification failed.' : 'HTTPS storefront verification failed.'),
+    });
   }
 
   const user = await prisma.user.update({
