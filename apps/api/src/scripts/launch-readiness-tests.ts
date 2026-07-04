@@ -241,6 +241,7 @@ assertNotIncludes(adminProxyRoute, '@/app/lib/public-env', 'Admin proxy must not
 assertIncludes(adminProxyRoute, 'ADMIN_SESSION_REQUIRED', 'Admin proxy must reject missing admin sessions');
 assertIncludes(adminProxyRoute, 'Authorization: `Bearer ${session.apiKey}`', 'Admin proxy must attach the admin API key only server-side');
 assertIncludes(adminProxyRoute, 'rejectCrossOriginMutation(request)', 'Admin proxy must reject cross-origin mutating requests');
+assertIncludes(adminProxyRoute, 'readLimitedProxyBody(request)', 'Admin proxy must use bounded request body reads');
 assertIncludes(adminProxyRoute, "responseHeaders.set('Cache-Control', 'no-store", 'Admin proxy responses must be explicitly non-cacheable');
 assertIncludes(adminSessionRoute, 'rejectCrossOriginRequest(request)', 'Admin session route must reject cross-origin session mutations');
 assertIncludes(adminSessionRoute, 'SERVER_API_BASE_URL', 'Admin session route must use the server-only API base URL');
@@ -297,6 +298,9 @@ assertIncludes(dashboardProxyRoute, 'x-drapixai-dashboard-proxy-token', 'Dashboa
 assertIncludes(dashboardProxyRoute, 'DASHBOARD_PROXY_TOKEN_NOT_CONFIGURED', 'Dashboard proxy must fail closed in production when proxy token is missing');
 assertIncludes(dashboardProxyRoute, "responseHeaders.set('Cache-Control', 'no-store", 'Dashboard proxy responses must be explicitly non-cacheable');
 assertIncludes(dashboardProxyRoute, 'rejectCrossOriginMutation(request)', 'Dashboard proxy must reject cross-origin mutating requests');
+assertIncludes(dashboardProxyRoute, 'readLimitedProxyBody(request)', 'Dashboard proxy must use bounded request body reads');
+assertIncludes(requestGuard, 'readLimitedProxyBody', 'Web request guard must cap proxied request bodies before buffering');
+assertIncludes(requestGuard, 'PROXY_REQUEST_TOO_LARGE', 'Web request guard must reject oversized proxied bodies with a sanitized error');
 assertIncludes(dashboardSessionRoute, 'rejectCrossOriginRequest(request)', 'Dashboard session route must reject cross-origin session mutations');
 assertIncludes(dashboardSessionRoute, 'export async function GET(request: Request)', 'Dashboard session API-key reads must inspect the incoming request');
 assertIncludes(dashboardSessionRoute, 'return noStoreJson({ ok: true, apiKey: session.apiKey });', 'Dashboard session API-key reads must be non-cacheable');

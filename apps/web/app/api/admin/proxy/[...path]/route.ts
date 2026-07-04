@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
-import { rejectCrossOriginMutation } from '@/app/lib/request-guard';
+import { readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
 type AdminProxyContext = {
   params: Promise<{ path?: string[] }>;
@@ -44,10 +44,13 @@ const proxyAdminRequest = async (request: NextRequest, context: AdminProxyContex
     headers['Content-Type'] = contentType;
   }
 
+  const bodyResult = await readLimitedProxyBody(request);
+  if (bodyResult.rejection) return bodyResult.rejection;
+
   const upstream = await fetch(buildAdminUrl(request, path), {
     method: request.method,
     headers,
-    body: request.method === 'GET' ? undefined : await request.arrayBuffer(),
+    body: bodyResult.body,
     cache: 'no-store',
   });
 

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
-import { rejectCrossOriginMutation } from '@/app/lib/request-guard';
+import { readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
 type DashboardProxyContext = {
   params: Promise<{ path?: string[] }>;
@@ -56,10 +56,13 @@ const proxyDashboardRequest = async (request: NextRequest, context: DashboardPro
   const contentType = request.headers.get('content-type');
   if (contentType) headers.set('Content-Type', contentType);
 
+  const bodyResult = await readLimitedProxyBody(request);
+  if (bodyResult.rejection) return bodyResult.rejection;
+
   const upstream = await fetch(buildApiUrl(request, path), {
     method: request.method,
     headers,
-    body: request.method === 'GET' ? undefined : await request.arrayBuffer(),
+    body: bodyResult.body,
     cache: 'no-store',
   });
 

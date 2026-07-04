@@ -44,3 +44,36 @@ export const noStoreJson = (body: unknown, init: ResponseInit = {}) => {
   headers.set('Pragma', 'no-cache');
   return NextResponse.json(body, { ...init, headers });
 };
+
+const DEFAULT_PROXY_BODY_LIMIT_BYTES = 12 * 1024 * 1024;
+
+const getProxyBodyLimitBytes = () => {
+  const configured = Number(process.env.DRAPIXAI_WEB_PROXY_MAX_BODY_BYTES || DEFAULT_PROXY_BODY_LIMIT_BYTES);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_PROXY_BODY_LIMIT_BYTES;
+};
+
+export const readLimitedProxyBody = async (request: Request) => {
+  if (['GET', 'HEAD'].includes(request.method.toUpperCase())) {
+    return { body: undefined as BodyInit | undefined, rejection: null as NextResponse | null };
+  }
+
+  const maxBytes = getProxyBodyLimitBytes();
+  const rawContentLength = request.headers.get('content-length');
+  const contentLength = rawContentLength ? Number(rawContentLength) : 0;
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    return {
+      body: undefined,
+      rejection: noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 }),
+    };
+  }
+
+  const body = await request.arrayBuffer();
+  if (body.byteLength > maxBytes) {
+    return {
+      body: undefined,
+      rejection: noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 }),
+    };
+  }
+
+  return { body, rejection: null as NextResponse | null };
+};
