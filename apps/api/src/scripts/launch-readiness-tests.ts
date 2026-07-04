@@ -164,6 +164,9 @@ assertIncludes(dashboardOauthSessionRoute, 'rejectCrossOriginRequest(request)', 
 assertNotIncludes(dashboardOauthSessionRoute, 'apiKey });', 'OAuth dashboard session bridge must not return the API key in browser JSON');
 assertIncludes(securityHelpers, 'ALLOWED_IMAGE_MIME_TYPES', 'API must use an image MIME allowlist');
 assertIncludes(securityHelpers, 'ALLOWED_IMAGE_EXTENSIONS', 'API must use an image extension allowlist');
+assertIncludes(securityHelpers, 'detectImageMimeType', 'API must verify upload image magic bytes');
+assertIncludes(securityHelpers, 'isAllowedImageFileContent', 'API must validate uploaded image content after Multer writes files');
+assertIncludes(securityHelpers, 'removeUploadedFile', 'API must clean up rejected upload temp files through a guarded helper');
 assertIncludes(securityHelpers, 'sanitizeUpstreamError', 'API must sanitize upstream AI errors before returning them');
 assertIncludes(securityHelpers, 'buildUploadPath', 'API must build local upload paths through a guarded helper');
 assertIncludes(securityHelpers, 'readLocalUploadFile', 'API must read local upload files through a guarded helper');
@@ -173,9 +176,16 @@ assertIncludes(sdkRoute, 'sanitizePathSegment', 'SDK local upload fallback must 
 assertIncludes(sdkRoute, 'readLocalUploadFile', 'SDK local image reads must stay inside the upload root');
 assertIncludes(adminRoute, 'readLocalUploadFile', 'Admin local image reads must stay inside the upload root');
 assertIncludes(sdkRoute, 'isAllowedImageUpload(file)', 'SDK uploads must use strict image upload validation');
+assertIncludes(sdkRoute, 'isAllowedImageFileContent(personFile)', 'SDK try-on must validate person upload content bytes');
+assertIncludes(sdkRoute, 'isAllowedImageFileContent(clothFile)', 'SDK try-on must validate cloth upload content bytes when supplied');
+assertIncludes(sdkRoute, 'isAllowedImageFileContent(req.file)', 'SDK garment onboarding must validate garment upload content bytes');
+assertIncludes(sdkRoute, 'INVALID_IMAGE_CONTENT', 'SDK routes must reject invalid uploaded image content');
 assertIncludes(sdkRoute, 'resolveActiveApiKey', 'SDK routes must use the shared API-key resolver');
 assertIncludes(sdkRoute, "redis.on('error'", 'SDK Redis client must handle socket errors without crashing');
 assertIncludes(publicRoute, 'isAllowedImageUpload(file)', 'Public demo uploads must use strict image upload validation');
+assertIncludes(publicRoute, 'isAllowedImageFileContent(personFile)', 'Public demo must validate person upload content bytes');
+assertIncludes(publicRoute, 'isAllowedImageFileContent(clothFile)', 'Public demo must validate garment upload content bytes');
+assertIncludes(publicRoute, 'INVALID_IMAGE_CONTENT', 'Public demo must reject invalid uploaded image content');
 assertIncludes(sdkRoute, 'sanitizeUpstreamError', 'SDK try-on must sanitize upstream AI errors');
 assertIncludes(publicRoute, 'sanitizeUpstreamError', 'Public demo must sanitize upstream AI errors');
 assertNotIncludes(sdkRoute, "file.mimetype.startsWith('image/')", 'SDK uploads must not trust broad image/* MIME values');

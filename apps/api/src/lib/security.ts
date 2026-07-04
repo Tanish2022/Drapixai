@@ -17,6 +17,54 @@ export const isAllowedImageUpload = (file: Express.Multer.File) => {
   return ALLOWED_IMAGE_MIME_TYPES.has(mimetype) && ALLOWED_IMAGE_EXTENSIONS.has(extension);
 };
 
+const normalizeImageMimeType = (value: unknown) => {
+  const mimetype = String(value || '').toLowerCase();
+  return mimetype === 'image/jpg' ? 'image/jpeg' : mimetype;
+};
+
+export const detectImageMimeType = (buffer: Buffer) => {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+
+  return null;
+};
+
+export const isAllowedImageFileContent = (file: Express.Multer.File) => {
+  if (!file?.path || !fs.existsSync(file.path)) return false;
+  const fd = fs.openSync(file.path, 'r');
+  try {
+    const header = Buffer.alloc(16);
+    const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+    const detected = detectImageMimeType(header.subarray(0, bytesRead));
+    return Boolean(detected && detected === normalizeImageMimeType(file.mimetype));
+  } finally {
+    fs.closeSync(fd);
+  }
+};
+
 export const getUploadRoot = () => process.env.DRAPIXAI_UPLOAD_DIR || 'uploads';
 
 const getResolvedUploadRoot = () => path.resolve(getUploadRoot());
@@ -24,6 +72,15 @@ const getResolvedUploadRoot = () => path.resolve(getUploadRoot());
 const isPathInside = (root: string, target: string) => {
   const relative = path.relative(root, target);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+
+export const removeUploadedFile = (file: Express.Multer.File | undefined | null) => {
+  if (!file?.path) return;
+  const root = getResolvedUploadRoot();
+  const localPath = path.resolve(file.path);
+  if (isPathInside(root, localPath) && fs.existsSync(localPath)) {
+    fs.unlinkSync(localPath);
+  }
 };
 
 export const sanitizePathSegment = (value: unknown, fallback = 'item') => {

@@ -43,8 +43,10 @@ import {
 import {
   buildUploadPath,
   getUploadRoot,
+  isAllowedImageFileContent,
   isAllowedImageUpload,
   readLocalUploadFile,
+  removeUploadedFile,
   sanitizePathSegment,
   sanitizeUpstreamError,
 } from '../lib/security';
@@ -520,6 +522,11 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       });
     }
 
+    if (!isAllowedImageFileContent(req.file)) {
+      removeUploadedFile(req.file);
+      return res.status(400).json({ error: 'INVALID_IMAGE_CONTENT' });
+    }
+
     if (productId) {
       const mappedGarment = await resolveConfirmedGarmentForProduct(prisma, user.id, String(productId));
       if (!mappedGarment?.cacheKey) {
@@ -532,6 +539,7 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
 
     const plan = getUserPlanContext(user.planType);
     if (!plan.active) {
+      removeUploadedFile(req.file);
       return res.status(403).json({ 
         error: 'No active subscription',
         message: 'Please upgrade your plan to continue using DrapixAI'
@@ -645,32 +653,47 @@ router.post('/tryon', authMiddleware, upload.fields([
   try {
     const apiKey = req.apiKey;
     const user = req.user;
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const personFile = files?.person_image?.[0];
+    const clothFile = files?.cloth_image?.[0];
+    const cleanupTryOnUploadFiles = () => {
+      removeUploadedFile(personFile);
+      removeUploadedFile(clothFile);
+    };
     const requestDomain = getRequestDomain(req);
     const finalWhitelist = await enforceSingleDomain(apiKey.id, requestDomain, apiKey.domainWhitelist);
 
     if (SINGLE_DOMAIN_REQUIRED && !isDomainAllowed(finalWhitelist, requestDomain)) {
+      cleanupTryOnUploadFiles();
       return res.status(403).json({
         error: 'Domain not allowed',
         message: `This API key is not authorized for domain: ${requestDomain || 'unknown'}`
       });
     }
 
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    const personFile = files?.person_image?.[0];
-    const clothFile = files?.cloth_image?.[0];
     const explicitGarmentId = req.body.garment_id as string | undefined;
     const requestedProductId = req.body.productId as string | undefined;
     const garmentId = explicitGarmentId || requestedProductId;
     const clothCacheKey = req.body.cloth_cache_key as string | undefined;
 
     if (!personFile) {
+      cleanupTryOnUploadFiles();
       return res.status(400).json({
         error: 'Person image required',
         message: 'Please upload a person image'
       });
     }
 
+    if (!isAllowedImageFileContent(personFile) || (clothFile && !isAllowedImageFileContent(clothFile))) {
+      cleanupTryOnUploadFiles();
+      return res.status(400).json({
+        error: 'INVALID_IMAGE_CONTENT',
+        message: 'Uploaded image content must match a supported JPEG, PNG, or WebP file.'
+      });
+    }
+
     if (REQUIRE_GARMENT_CACHE && !garmentId && !clothCacheKey) {
+      cleanupTryOnUploadFiles();
       return res.status(400).json({
         error: 'GARMENT_CACHE_REQUIRED',
         message: 'Provide garment_id or cloth_cache_key'
@@ -678,6 +701,7 @@ router.post('/tryon', authMiddleware, upload.fields([
     }
 
     if (!clothFile && !garmentId && !clothCacheKey) {
+      cleanupTryOnUploadFiles();
       return res.status(400).json({
         error: 'Cloth image required',
         message: 'Provide cloth_image or garment_id or cloth_cache_key'
@@ -687,6 +711,7 @@ router.post('/tryon', authMiddleware, upload.fields([
     const now = new Date();
     const plan = getUserPlanContext(user.planType);
     if (!plan.active) {
+      cleanupTryOnUploadFiles();
       return res.status(403).json({
         error: 'No active subscription',
         message: 'Please upgrade your plan to continue using DrapixAI'
@@ -701,11 +726,13 @@ router.post('/tryon', authMiddleware, upload.fields([
     });
 
     if (usage && usage.renderCount >= plan.quota) {
+      cleanupTryOnUploadFiles();
       return res.status(429).json({ error: 'TRY_ON_LIMIT_EXCEEDED' });
     }
 
     const garmentType = String(req.body.garment_type || 'upper').toLowerCase();
     if (garmentType !== 'upper') {
+      cleanupTryOnUploadFiles();
       return res.status(400).json({ error: 'UPPER_BODY_ONLY' });
     }
 
@@ -1011,8 +1038,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       res.setHeader('x-drapixai-garment-cache-version', EXPECTED_GARMENT_CACHE_VERSION);
       res.send(buffer);
     } finally {
-      if (personFile?.path && fs.existsSync(personFile.path)) fs.unlinkSync(personFile.path);
-      if (clothFile?.path && fs.existsSync(clothFile.path)) fs.unlinkSync(clothFile.path);
+      cleanupTryOnUploadFiles();
     }
   } catch (error) {
     console.error('Try-on error:', error);
@@ -1076,6 +1102,10 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
 
     if (!req.file) {
       return res.status(400).json({ error: 'CLOTH_IMAGE_REQUIRED' });
+    }
+
+    if (!isAllowedImageFileContent(req.file)) {
+      return res.status(400).json({ error: 'INVALID_IMAGE_CONTENT' });
     }
 
     const fileLabel = path.parse(req.file.originalname || '').name || 'garment';
@@ -1165,7 +1195,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
     console.error('Garment upload error:', error);
     res.status(500).json({ error: 'Garment upload failed' });
   } finally {
-    if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    removeUploadedFile(req.file);
   }
 });
 
@@ -1186,6 +1216,10 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
       const fileLabel = path.parse(file.originalname).name;
       if (!fileLabel) {
         results.push({ file: file.originalname, error: 'INVALID_FILENAME' });
+        continue;
+      }
+      if (!isAllowedImageFileContent(file)) {
+        results.push({ file: file.originalname, error: 'INVALID_IMAGE_CONTENT' });
         continue;
       }
       const garmentId = buildGarmentAssetId(fileLabel);
@@ -1268,7 +1302,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
     const files = req.files as Express.Multer.File[];
     if (files) {
       for (const file of files) {
-        if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        removeUploadedFile(file);
       }
     }
   }

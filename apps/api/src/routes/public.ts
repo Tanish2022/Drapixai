@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
-import { getUploadRoot, isAllowedImageUpload, sanitizeUpstreamError } from '../lib/security';
+import { getUploadRoot, isAllowedImageFileContent, isAllowedImageUpload, removeUploadedFile, sanitizeUpstreamError } from '../lib/security';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -114,7 +114,18 @@ router.post(
     const clothFile = files?.cloth_image?.[0];
 
     if (!personFile || !clothFile) {
+      removeUploadedFile(personFile);
+      removeUploadedFile(clothFile);
       return res.status(400).json({ error: 'PERSON_AND_CLOTH_REQUIRED' });
+    }
+
+    if (!isAllowedImageFileContent(personFile) || !isAllowedImageFileContent(clothFile)) {
+      removeUploadedFile(personFile);
+      removeUploadedFile(clothFile);
+      return res.status(400).json({
+        error: 'INVALID_IMAGE_CONTENT',
+        message: 'Uploaded image content must match a supported JPEG, PNG, or WebP file.'
+      });
     }
 
     try {
@@ -202,8 +213,8 @@ router.post(
       }).catch(() => undefined);
       return res.status(500).json({ error: 'DEMO_TRY_ON_FAILED' });
     } finally {
-      if (personFile?.path && fs.existsSync(personFile.path)) fs.unlinkSync(personFile.path);
-      if (clothFile?.path && fs.existsSync(clothFile.path)) fs.unlinkSync(clothFile.path);
+      removeUploadedFile(personFile);
+      removeUploadedFile(clothFile);
     }
   }
 );
