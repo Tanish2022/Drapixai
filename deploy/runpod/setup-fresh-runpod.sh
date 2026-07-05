@@ -30,7 +30,7 @@ print_troubleshooting() {
   printf '1. GPU visibility: nvidia-smi\n'
   printf '2. Disk space: df -h /workspace\n'
   printf '3. Repo status: cd %s && git status -sb\n' "$APP_ROOT"
-  printf '4. Env file: cat %s\n' "$ENV_FILE"
+  printf '4. Env file: grep -Ev "(TOKEN|SECRET|PASSWORD|ACCESS_KEY)" %s\n' "$ENV_FILE"
   printf '5. AI logs: tail -n 200 %s/runtime/logs/*.log\n' "$APP_ROOT"
   printf '6. Port 8080: ss -ltnp | grep %s\n' "$PORT"
   printf '7. Redis: redis-cli ping\n'
@@ -137,10 +137,33 @@ PY
 upsert_env() {
   local key="$1"
   local value="$2"
-  if grep -q "^${key}=" "$ENV_FILE"; then
-    sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
-  else
-    printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+  ENV_FILE="$ENV_FILE" ENV_KEY="$key" ENV_VALUE="$value" python3 - <<'PY'
+import os
+from pathlib import Path
+
+env_file = Path(os.environ["ENV_FILE"])
+key = os.environ["ENV_KEY"]
+value = os.environ["ENV_VALUE"]
+line = f"{key}={value}\n"
+
+lines = env_file.read_text(encoding="utf-8").splitlines(keepends=True) if env_file.exists() else []
+for index, current in enumerate(lines):
+    if current.startswith(f"{key}="):
+        lines[index] = line
+        break
+else:
+    lines.append(line)
+
+env_file.write_text("".join(lines), encoding="utf-8")
+PY
+}
+
+require_for_backend() {
+  local name="$1"
+  local value="${!name:-}"
+  if [[ -z "$value" ]]; then
+    echo "Set $name when DRAPIXAI_GARMENT_CACHE_BACKEND=s3." >&2
+    exit 1
   fi
 }
 
@@ -208,11 +231,23 @@ ensure_env_file() {
     upsert_env "DRAPIXAI_AI_SERVICE_TOKEN" "$(generate_secret)"
   fi
 
-  upsert_env "DRAPIXAI_GARMENT_CACHE_BACKEND" "${DRAPIXAI_GARMENT_CACHE_BACKEND:-local}"
-  upsert_env "DRAPIXAI_S3_BUCKET" "${DRAPIXAI_S3_BUCKET:-drapixai-runpod-local}"
-  upsert_env "DRAPIXAI_S3_REGION" "${DRAPIXAI_S3_REGION:-us-east-1}"
-  upsert_env "DRAPIXAI_S3_ACCESS_KEY_ID" "${DRAPIXAI_S3_ACCESS_KEY_ID:-local-runpod}"
-  upsert_env "DRAPIXAI_S3_SECRET_ACCESS_KEY" "${DRAPIXAI_S3_SECRET_ACCESS_KEY:-local-runpod}"
+  local garment_cache_backend="${DRAPIXAI_GARMENT_CACHE_BACKEND:-local}"
+  upsert_env "DRAPIXAI_GARMENT_CACHE_BACKEND" "$garment_cache_backend"
+  if [[ "$garment_cache_backend" == "s3" ]]; then
+    require_for_backend "DRAPIXAI_S3_BUCKET"
+    require_for_backend "DRAPIXAI_S3_REGION"
+    require_for_backend "DRAPIXAI_S3_ACCESS_KEY_ID"
+    require_for_backend "DRAPIXAI_S3_SECRET_ACCESS_KEY"
+    upsert_env "DRAPIXAI_S3_BUCKET" "$DRAPIXAI_S3_BUCKET"
+    upsert_env "DRAPIXAI_S3_REGION" "$DRAPIXAI_S3_REGION"
+    upsert_env "DRAPIXAI_S3_ACCESS_KEY_ID" "$DRAPIXAI_S3_ACCESS_KEY_ID"
+    upsert_env "DRAPIXAI_S3_SECRET_ACCESS_KEY" "$DRAPIXAI_S3_SECRET_ACCESS_KEY"
+  else
+    upsert_env "DRAPIXAI_S3_BUCKET" "${DRAPIXAI_S3_BUCKET:-drapixai-runpod-local}"
+    upsert_env "DRAPIXAI_S3_REGION" "${DRAPIXAI_S3_REGION:-us-east-1}"
+    upsert_env "DRAPIXAI_S3_ACCESS_KEY_ID" ""
+    upsert_env "DRAPIXAI_S3_SECRET_ACCESS_KEY" ""
+  fi
 }
 
 load_env() {
