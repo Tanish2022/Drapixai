@@ -131,6 +131,7 @@ const localPreflight = read('deploy/scripts/local-preflight.ps1');
 const localStart = read('deploy/scripts/start-local-stack.ps1');
 const runpodPreflight = read('deploy/runpod/preflight.sh');
 const runLaunchTryon = read('deploy/runpod/run-launch-tryon-test.sh');
+const runpodSdkApiSetup = read('deploy/runpod/setup-sdk-api-stack.sh');
 const productionReadiness = read('deploy/production-readiness.md');
 const dockerCompose = read('docker-compose.yml');
 const rootPackageJson = read('package.json');
@@ -623,6 +624,8 @@ assertIncludes(runpodPreflight, 'deploy/runpod/run-launch-tryon-test.sh', 'RunPo
 assertIncludes(runLaunchTryon, 'API_ENV_FILE=', 'RunPod launch try-on test must know where the API env file lives');
 assertIncludes(runLaunchTryon, 'read_env_value DRAPIXAI_DASHBOARD_PROXY_TOKEN "$API_ENV_FILE"', 'RunPod launch try-on test must load dashboard proxy token from API env');
 assertIncludes(runLaunchTryon, 'DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token"', 'RunPod launch try-on test must pass dashboard proxy token to SDK smoke flow');
+assertIncludes(runpodSdkApiSetup, 'DRAPIXAI_ADMIN_PASSWORD=' + '$' + '(generate_secret)', 'RunPod SDK/API setup must generate a unique admin password');
+assertNotIncludes(runpodSdkApiSetup, 'DRAPIXAI_ADMIN_PASSWORD=ChangeMe123!', 'RunPod SDK/API setup must not write a fixed admin password');
 assertIncludes(read('deploy/runpod/setup-fresh-runpod.sh'), 'codex/catvton-runpod-clean', 'RunPod setup-fresh-runpod.sh must default to launch branch');
 assertIncludes(read('deploy/runpod/prepare-runpod-for-launch.sh'), 'codex/catvton-runpod-clean', 'RunPod prepare wrapper must default to launch branch');
 assertIncludes(read('deploy/runpod/README.md'), 'DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE', 'RunPod README must document strict launch quality gates');
