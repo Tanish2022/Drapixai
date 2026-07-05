@@ -93,6 +93,10 @@
     return text;
   }
 
+  function isLocalHttpAsset(resolved) {
+    return resolved.protocol === 'http:' && /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(resolved.hostname);
+  }
+
   function sanitizeAssetUrl(value, fallback) {
     var text = String(value == null ? '' : value).trim();
     if (!text || text.length > 500 || /[\s<>"']/g.test(text)) {
@@ -100,7 +104,7 @@
     }
     try {
       var resolved = new URL(text, window.location.origin);
-      if (resolved.protocol === 'https:' || resolved.protocol === 'http:') {
+      if (resolved.protocol === 'https:' || isLocalHttpAsset(resolved)) {
         return resolved.href;
       }
     } catch (_) {
