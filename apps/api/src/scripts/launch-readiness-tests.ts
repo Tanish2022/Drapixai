@@ -663,6 +663,9 @@ assertIncludes(productionReadiness, 'localhost:5433', 'Production readiness doc 
 assertIncludes(productionReadiness, 'prove-live-stack.ps1 -ApiUrl http://localhost:8000', 'Production readiness doc must include local live-stack proof command');
 assertIncludes(productionReadiness, 'validate-production-env-set.sh', 'Production readiness doc must include cross-file env-set validation');
 assertIncludes(productionReadiness, 'validate-production-env-set.ps1', 'Production readiness doc must include Windows cross-file env-set validation');
+assertIncludes(cacheRegenerationScript, 'redactSensitiveText', 'Cache regeneration troubleshooting must redact sensitive connection strings');
+assertIncludes(cacheRegenerationScript, 'DATABASE_URL configured:', 'Cache regeneration troubleshooting may report whether DATABASE_URL exists');
+assertNotIncludes(cacheRegenerationScript, 'DATABASE_URL=${process.env.DATABASE_URL', 'Cache regeneration troubleshooting must never print DATABASE_URL');
 assertIncludes(productionReadiness, '- `DRAPIXAI_AUTH_SYNC_TOKEN`\n- `DRAPIXAI_DASHBOARD_PROXY_TOKEN`\n- `DRAPIXAI_AI_URL`', 'Production readiness doc must list dashboard proxy token as a required API env');
 assertIncludes(productionReadiness, '- `DRAPIXAI_AUTH_SYNC_TOKEN`\n- `DRAPIXAI_DASHBOARD_PROXY_TOKEN`\n\nRequired only if Google login is enabled:', 'Production readiness doc must list dashboard proxy token as a required Web env');
 

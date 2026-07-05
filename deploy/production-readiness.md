@@ -179,7 +179,7 @@ These are hard launch gates, not recommendations:
 - `DRAPIXAI_CORS_ORIGINS` must list exact production origins. Never use `*` in production.
 - `JWT_SECRET`, `NEXTAUTH_SECRET`, `ADMIN_SESSION_SECRET`, `DASHBOARD_SESSION_SECRET`, `DRAPIXAI_ADMIN_TOKEN`, and `DRAPIXAI_AI_SERVICE_TOKEN` must be long random secrets.
 - RunPod setup scripts must generate admin/API/database/object-storage secrets at setup time and must not write fixed credentials into generated env files.
-- `npm --prefix apps/api run test:launch` must pass before release; it includes tracked env-file, generated-artifact, and source-secret scans so provider tokens cannot be committed accidentally.
+- `npm --prefix apps/api run test:launch` must pass before release; it includes tracked env-file, generated-artifact, source-secret, and operator-log redaction checks so provider tokens cannot be committed or printed accidentally.
 - `DRAPIXAI_AUTH_SYNC_TOKEN` must be the same long random secret on the web and API services so Google login sync is server-to-server only.
 - The same `DRAPIXAI_AI_SERVICE_TOKEN` must be configured on the API and AI service.
 - Run `bash deploy/scripts/validate-production-env-set.sh` after editing production env files to verify shared secrets match across API, web, and AI.

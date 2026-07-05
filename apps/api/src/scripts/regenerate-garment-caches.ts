@@ -34,6 +34,12 @@ const isDatabaseConnectionError = (error: unknown) => {
     || message.includes('Connection refused');
 };
 
+const redactSensitiveText = (input: unknown) => {
+  return String(input || '')
+    .replace(/(postgres(?:ql)?:\/\/)([^:@\s/]+):([^@\s]+)@/gi, '$1[redacted]:[redacted]@')
+    .replace(/(DATABASE_URL=)([^\s]+)/gi, '$1[redacted]');
+};
+
 const printDatabaseHelp = (error: unknown) => {
   const value = error as { message?: string };
   console.error('Cache regeneration cannot reach the DrapixAI database.');
@@ -42,8 +48,8 @@ const printDatabaseHelp = (error: unknown) => {
   console.error('  npm --prefix apps/api run prisma:generate');
   console.error('  npm --prefix apps/api run garments:regenerate-cache -- --dry-run');
   console.error('');
-  console.error(`DATABASE_URL=${process.env.DATABASE_URL || '(not set)'}`);
-  console.error(`Original error: ${String(value?.message || error).split('\n')[0]}`);
+  console.error(`DATABASE_URL configured: ${process.env.DATABASE_URL ? 'yes' : 'no'}`);
+  console.error(`Original error: ${redactSensitiveText(value?.message || error).split('\n')[0]}`);
 };
 
 const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
