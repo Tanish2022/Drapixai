@@ -70,6 +70,100 @@ assert.deepStrictEqual(
   `Generated artifacts must never be tracked by Git: ${forbiddenTrackedGeneratedFiles.join(', ')}`,
 );
 
+const secretScanSkippedExtensions = new Set([
+  '.avif',
+  '.gif',
+  '.ico',
+  '.jpeg',
+  '.jpg',
+  '.pdf',
+  '.png',
+  '.webp',
+  '.woff',
+  '.woff2',
+  '.zip',
+]);
+
+const highRiskSecretPatterns = [
+  { name: 'AWS access key', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
+  { name: 'GitHub token', pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}\b/g },
+  { name: 'GitHub fine-grained token', pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g },
+  { name: 'Hugging Face token', pattern: /\bhf_[A-Za-z0-9]{20,}\b/g },
+  { name: 'Stripe/OpenAI-style key', pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}\b/g },
+  { name: 'Google API key', pattern: /\bAIza[0-9A-Za-z\-_]{35}\b/g },
+  { name: 'Resend API key', pattern: /\bre_[A-Za-z0-9_]{20,}\b/g },
+];
+
+const secretAssignmentPattern =
+  /^[ \t]*(?:export[ \t]+)?([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*)[ \t]*=[ \t]*["']?([^"'\r\n# \t]+)["']?/gm;
+
+const isAllowedPlaceholderSecret = (file: string, name: string, value: string) => {
+  const normalized = value.trim();
+  const normalizedFile = file.replace(/\\/g, '/');
+
+  if (!normalized || normalized === '""' || normalized === "''") {
+    return true;
+  }
+
+  if (/[<$%*]/.test(normalized)) {
+    return true;
+  }
+
+  if (
+    /replace-with|your-|example|placeholder|changeme|dummy|sample|app-password|smtp-secret|username:password/i.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+
+  if (normalizedFile.endsWith('.example') || normalizedFile.endsWith('.sample')) {
+    return true;
+  }
+
+  if (normalizedFile === 'deploy/scripts/smoke-test.sh' && name === 'PASSWORD') {
+    return true;
+  }
+
+  return false;
+};
+
+const trackedSecretFindings: string[] = [];
+
+for (const file of trackedFiles) {
+  const absolutePath = path.join(repoRoot, file);
+  if (!fs.existsSync(absolutePath)) {
+    continue;
+  }
+
+  const extension = path.extname(file).toLowerCase();
+  const stats = fs.statSync(absolutePath);
+  if (secretScanSkippedExtensions.has(extension) || stats.size > 1_000_000) {
+    continue;
+  }
+
+  const source = fs.readFileSync(absolutePath, 'utf8').replace(/\r\n/g, '\n');
+  for (const { name, pattern } of highRiskSecretPatterns) {
+    if (source.match(pattern)) {
+      trackedSecretFindings.push(`${file}: ${name}`);
+    }
+  }
+
+  secretAssignmentPattern.lastIndex = 0;
+  for (const match of source.matchAll(secretAssignmentPattern)) {
+    const [, name, value] = match;
+    if (!isAllowedPlaceholderSecret(file, name, value)) {
+      trackedSecretFindings.push(`${file}: hard-coded ${name}`);
+    }
+  }
+}
+
+assert.deepStrictEqual(
+  trackedSecretFindings,
+  [],
+  `Tracked source files must not contain real tokens or hard-coded secrets: ${trackedSecretFindings.join(', ')}`,
+);
+
 const sdkRoute = read('apps/api/src/routes/sdk.ts');
 const apiServer = read('apps/api/src/server.ts');
 const authRoute = read('apps/api/src/routes/auth.ts');
