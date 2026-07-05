@@ -6,6 +6,10 @@ source "$SCRIPT_DIR/common.sh"
 
 ENV_FILE="${1:-$DRAPIXAI_APP_ROOT/deploy/env/ai.production.env}"
 
+redact_url_credentials() {
+  printf '%s' "$1" | sed -E 's#(://)([^/@]+@)#\1[redacted]@#'
+}
+
 if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1090
@@ -200,7 +204,7 @@ for script in \
 done
 echo
 echo "== Redis target =="
-echo "$DRAPIXAI_REDIS_URL"
+redact_url_credentials "$DRAPIXAI_REDIS_URL"
 
 echo
 echo "Preflight passed. Next:"

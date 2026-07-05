@@ -736,6 +736,8 @@ assertIncludes(localStart, 'drapixai_ai.api.ai_server:app', 'Local stack starter
 assertIncludes(runpodPreflight, 'bash -n "$script"', 'RunPod preflight must syntax-check launch shell scripts');
 assertIncludes(runpodPreflight, 'DRAPIXAI_EXPECTED_GIT_REF', 'RunPod preflight must support exact launch commit verification');
 assertIncludes(runpodPreflight, '== Repo Version ==', 'RunPod preflight must print repo branch and commit');
+assertIncludes(runpodPreflight, 'redact_url_credentials', 'RunPod preflight must redact credential-bearing service URLs');
+assertNotIncludes(runpodPreflight, 'echo "$DRAPIXAI_REDIS_URL"', 'RunPod preflight must not print raw Redis URLs');
 assertIncludes(runpodPreflight, 'deploy/scripts/smoke-test.sh', 'RunPod preflight must include deployment smoke shell syntax check');
 assertIncludes(runpodPreflight, 'deploy/runpod/run-launch-tryon-test.sh', 'RunPod preflight must include launch try-on shell syntax check');
 assertIncludes(runLaunchTryon, 'API_ENV_FILE=', 'RunPod launch try-on test must know where the API env file lives');
