@@ -389,6 +389,14 @@ assertIncludes(accountRoute, "process.env.NODE_ENV !== 'production' && process.e
 assertIncludes(accountRoute, 'const urlsToCheck = allowInsecureVerification ? [`https://${domain}`, `http://${domain}`] : [`https://${domain}`];', 'Production store verification must check HTTPS only');
 assertIncludes(accountRoute, 'allowedProtocols: allowedVerificationProtocols', 'Store verification protocol allowlist must follow HTTPS-only launch policy');
 assertNotIncludes(accountRoute, "allowedProtocols: ['https:', 'http:']", 'Store verification must not always permit insecure HTTP');
+assertIncludes(accountRoute, 'normalizeStoreSettingsError', 'Account store settings must normalize validation errors');
+assertIncludes(accountRoute, 'normalizeVerificationFailure', 'Store verification must normalize upstream fetch failures');
+assertIncludes(accountRoute, 'normalizeCatalogSyncFailure', 'Catalog sync must normalize feed failures');
+assertNotIncludes(accountRoute, "const message = error instanceof Error ? error.message : 'INVALID_STORE_SETTINGS';", 'Account store settings must not return raw exception messages');
+assertNotIncludes(accountRoute, "lastError = error instanceof Error ? error.message : 'Verification request failed.';", 'Store verification must not expose raw upstream error text');
+assertNotIncludes(accountRoute, "const message = error instanceof Error ? error.message : 'Feed sync failed.';", 'Catalog sync must not expose raw exception text');
+assertNotIncludes(accountRoute, 'message: lastError', 'Store verification must not return upstream error text as a user message');
+assertIncludes(accountRoute, 'reason: lastError', 'Store verification may return normalized failure reason codes');
 assertIncludes(accountRoute, 'router.use(requireDashboardProxy);', 'Account routes must require the same-origin dashboard proxy token');
 assertNotIncludes(accountRoute, "fetch(feedUrl", 'Account feed sync must not fetch brand URLs directly');
 assertNotIncludes(accountRoute, "fetch(url, { redirect: 'follow' })", 'Store verification must not follow arbitrary redirects');
@@ -512,6 +520,7 @@ assertIncludes(sdkRoute, "router.post('/matches/:garmentId/confirm', authMiddlew
 assertIncludes(sdkRoute, "router.get('/result/:jobId', authMiddleware, async", 'Shopper result endpoint must stay available through storefront auth and domain checks');
 assertIncludes(dashboardPage, '/api/dashboard/proxy/', 'Dashboard page must use the same-origin dashboard proxy for management calls');
 assertIncludes(settingsPage, '/api/dashboard/proxy/', 'Settings page must use the same-origin dashboard proxy for account calls');
+assertIncludes(settingsPage, 'payload?.reason', 'Settings page must display normalized account failure reason codes');
 assertIncludes(homePage, '/api/dashboard/proxy/analytics/summary', 'Homepage profile summary must use the same-origin dashboard proxy');
 assertIncludes(subscriptionPage, '/api/dashboard/proxy/analytics/summary', 'Subscription page must use the same-origin dashboard proxy');
 assertIncludes(sdkInstallPage, '/api/dashboard/proxy/analytics/summary', 'SDK install summary must use the same-origin dashboard proxy');
@@ -632,6 +641,7 @@ assertIncludes(nextConfig, 'includeSubDomains; preload', 'Web HSTS must cover su
 assertIncludes(productionReadiness, 'Admin dashboard traffic must go through the same-origin Next admin proxy', 'Production readiness doc must call out admin proxy security');
 assertIncludes(productionReadiness, 'same-origin Next dashboard proxy', 'Production readiness doc must call out dashboard proxy security');
 assertIncludes(productionReadiness, 'must not be persisted in browser `localStorage`', 'Production readiness doc must call out browser API key persistence rules');
+assertIncludes(productionReadiness, 'stable failure codes/reasons', 'Production readiness doc must call out sanitized account/store errors');
 assertIncludes(productionReadiness, 'sanitize configurable CSS values and logo URLs', 'Production readiness doc must call out SDK markup sanitization');
 assertIncludes(productionReadiness, 'production security headers from `next.config.js`', 'Production readiness doc must call out web security headers');
 assertIncludes(productionReadiness, 'reject cross-origin session and proxy mutations', 'Production readiness doc must call out CSRF protection for cookie-backed routes');

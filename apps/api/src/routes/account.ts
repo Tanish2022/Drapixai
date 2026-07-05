@@ -33,6 +33,32 @@ const normalizeFeedUrl = (value: string) => {
 const buildVerificationMetaTag = (token: string) =>
   `<meta name="drapixai-domain-verification" content="${token}" />`;
 
+const normalizeStoreSettingsError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+  if (message === 'FEED_URL_HTTPS_REQUIRED' || message === 'FEED_URL_CREDENTIALS_NOT_ALLOWED') {
+    return message;
+  }
+  return 'INVALID_STORE_SETTINGS';
+};
+
+const normalizeVerificationFailure = (error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('timeout') || message.includes('aborted')) return 'STORE_VERIFICATION_TIMEOUT';
+  if (message.includes('redirect')) return 'STORE_VERIFICATION_REDIRECT_BLOCKED';
+  if (message.includes('protocol')) return 'STORE_VERIFICATION_PROTOCOL_BLOCKED';
+  return 'STORE_VERIFICATION_REQUEST_FAILED';
+};
+
+const normalizeCatalogSyncFailure = (error: unknown) => {
+  const message = error instanceof Error ? error.message : '';
+  if (message.startsWith('Feed request failed with status ')) return 'CATALOG_FEED_REQUEST_FAILED';
+  if (message.includes('timeout') || message.includes('aborted')) return 'CATALOG_FEED_TIMEOUT';
+  if (message.includes('redirect')) return 'CATALOG_FEED_REDIRECT_BLOCKED';
+  if (message.includes('protocol')) return 'CATALOG_FEED_PROTOCOL_BLOCKED';
+  if (message.includes('parse') || message.includes('CSV') || message.includes('JSON')) return 'CATALOG_FEED_PARSE_FAILED';
+  return 'CATALOG_SYNC_FAILED';
+};
+
 router.use(accountRateLimit);
 router.use(requireDashboardProxy);
 
@@ -252,8 +278,7 @@ router.post('/store', async (req, res) => {
     normalizedDomain = String(domain || '').trim() ? normalizeDomainInput(String(domain)) : resolved.activeKey.domainWhitelist;
     normalizedFeedUrl = normalizedSyncSource === 'feed_url' ? normalizeFeedUrl(String(feedUrl || '')) : null;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'INVALID_STORE_SETTINGS';
-    return res.status(400).json({ error: message });
+    return res.status(400).json({ error: normalizeStoreSettingsError(error) });
   }
   const nextToken = resolved.user.storeVerificationToken || generateVerificationToken();
   const user = await prisma.user.update({
@@ -317,14 +342,14 @@ router.post('/store/verify', async (req, res) => {
       }
       lastError = 'Verification meta tag was not found on the homepage.';
     } catch (error) {
-      lastError = error instanceof Error ? error.message : 'Verification request failed.';
+      lastError = normalizeVerificationFailure(error);
     }
   }
 
   if (!matched) {
     return res.status(400).json({
       error: 'STORE_VERIFICATION_FAILED',
-      message: lastError || (allowInsecureVerification ? 'Verification failed.' : 'HTTPS storefront verification failed.'),
+      reason: lastError || (allowInsecureVerification ? 'STORE_VERIFICATION_FAILED' : 'STORE_VERIFICATION_HTTPS_FAILED'),
     });
   }
 
@@ -386,12 +411,12 @@ router.post('/store/resync', async (req, res) => {
       skippedCount: skipped.length,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Feed sync failed.';
+    const failureCode = normalizeCatalogSyncFailure(error);
     await prisma.user.update({
       where: { id: resolved.user.id },
-      data: { catalogLastSyncStatus: `FAILED:${message}` },
+      data: { catalogLastSyncStatus: `FAILED:${failureCode}` },
     });
-    return res.status(400).json({ error: 'CATALOG_SYNC_FAILED', message });
+    return res.status(400).json({ error: failureCode });
   }
 });
 

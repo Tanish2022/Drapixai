@@ -347,11 +347,12 @@ export default function SettingsPage() {
     const payload = (await response?.json().catch(() => null)) as {
       error?: string;
       message?: string;
+      reason?: string;
       storeVerified?: boolean;
       storeVerifiedAt?: string | null;
     } | null;
     if (!response?.ok) {
-      setToast(payload?.message || payload?.error || 'Store verification failed.');
+      setToast(payload?.message || payload?.reason || payload?.error || 'Store verification failed.');
       return;
     }
 
