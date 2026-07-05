@@ -9,10 +9,10 @@ LOG_DIR="$APP_ROOT/runtime/logs"
 MINIO_DATA_DIR="${DRAPIXAI_MINIO_DATA_DIR:-$APP_ROOT/runtime/minio}"
 MINIO_BUCKET="${S3_BUCKET:-drapixai-local}"
 MINIO_ROOT_USER="${MINIO_ROOT_USER:-drapixai}"
-MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-drapixai-local-secret}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"
 POSTGRES_DB="${POSTGRES_DB:-drapixai}"
 POSTGRES_USER="${POSTGRES_USER:-drapixai}"
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-drapixai}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -27,6 +27,9 @@ alphabet = string.ascii_letters + string.digits + "-_"
 print("".join(secrets.choice(alphabet) for _ in range(64)))
 PY
 }
+
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(generate_secret)}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(generate_secret)}"
 
 require_root_or_sudo() {
   APT_PREFIX=()

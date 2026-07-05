@@ -626,6 +626,12 @@ assertIncludes(runLaunchTryon, 'read_env_value DRAPIXAI_DASHBOARD_PROXY_TOKEN "$
 assertIncludes(runLaunchTryon, 'DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token"', 'RunPod launch try-on test must pass dashboard proxy token to SDK smoke flow');
 assertIncludes(runpodSdkApiSetup, 'DRAPIXAI_ADMIN_PASSWORD=' + '$' + '(generate_secret)', 'RunPod SDK/API setup must generate a unique admin password');
 assertNotIncludes(runpodSdkApiSetup, 'DRAPIXAI_ADMIN_PASSWORD=ChangeMe123!', 'RunPod SDK/API setup must not write a fixed admin password');
+assertIncludes(runpodSdkApiSetup, 'MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-}"', 'RunPod SDK/API setup must not default MinIO password to a fixed value');
+assertIncludes(runpodSdkApiSetup, 'POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"', 'RunPod SDK/API setup must not default Postgres password to a fixed value');
+assertIncludes(runpodSdkApiSetup, 'MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(generate_secret)}"', 'RunPod SDK/API setup must generate a MinIO password');
+assertIncludes(runpodSdkApiSetup, 'POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(generate_secret)}"', 'RunPod SDK/API setup must generate a Postgres password');
+assertNotIncludes(runpodSdkApiSetup, 'MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-drapixai-local-secret}"', 'RunPod SDK/API setup must not write a fixed MinIO password');
+assertNotIncludes(runpodSdkApiSetup, 'POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-drapixai}"', 'RunPod SDK/API setup must not write a fixed Postgres password');
 assertIncludes(read('deploy/runpod/setup-fresh-runpod.sh'), 'codex/catvton-runpod-clean', 'RunPod setup-fresh-runpod.sh must default to launch branch');
 assertIncludes(read('deploy/runpod/prepare-runpod-for-launch.sh'), 'codex/catvton-runpod-clean', 'RunPod prepare wrapper must default to launch branch');
 assertIncludes(read('deploy/runpod/README.md'), 'DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE', 'RunPod README must document strict launch quality gates');
