@@ -608,6 +608,8 @@ assertNotIncludes(setupBatch, 'your-super-secret-jwt-key', 'Legacy setup must no
 assertNotIncludes(setupBatch, 'ALLOWED_ORIGINS="*"', 'Legacy setup must not write wildcard origins');
 assertIncludes(nextConfig, 'poweredByHeader: false', 'Web app must disable the Next.js powered-by header');
 assertIncludes(nextConfig, 'Content-Security-Policy', 'Web app must send a Content Security Policy');
+assertIncludes(nextConfig, 'DRAPIXAI_WEB_CSP_CONNECT_SRC', 'Web CSP must require explicit extra browser connect origins');
+assertIncludes(nextConfig, "...(isProduction ? [] : ['https:'])", 'Web CSP must not allow broad HTTPS connect-src in production');
 assertIncludes(nextConfig, "frame-ancestors 'none'", 'Web CSP must prevent clickjacking frame ancestors');
 assertIncludes(nextConfig, "object-src 'none'", 'Web CSP must block legacy plugin content');
 assertIncludes(nextConfig, 'X-Content-Type-Options', 'Web app must send no-sniff protection');

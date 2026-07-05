@@ -7,8 +7,25 @@ const apiBaseUrl = trimTrailingSlash(process.env.NEXT_PUBLIC_API_BASE_URL || 'ht
 const demoVideoUrl = String(process.env.NEXT_PUBLIC_DEMO_VIDEO_URL || '').trim();
 const isProduction = process.env.NODE_ENV === 'production';
 
+const parseCspOrigins = (value) => String(value || '')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/+$/, ''))
+  .filter(Boolean)
+  .filter((origin) => {
+    try {
+      const parsed = new URL(origin);
+      return parsed.protocol === 'https:' || (!isProduction && parsed.protocol === 'http:');
+    } catch {
+      return false;
+    }
+  });
+
+const extraConnectSources = parseCspOrigins(
+  process.env.DRAPIXAI_WEB_CSP_CONNECT_SRC || process.env.NEXT_PUBLIC_CSP_CONNECT_SRC || '',
+);
+
 const cspSources = {
-  connect: ["'self'", webBaseUrl, apiBaseUrl, 'https:'],
+  connect: ["'self'", webBaseUrl, apiBaseUrl, ...extraConnectSources, ...(isProduction ? [] : ['https:'])],
   frame: ["'self'", 'https://www.youtube.com', 'https://youtube.com', 'https://player.vimeo.com'],
   media: ["'self'", 'blob:', 'data:', 'https:'],
 };
