@@ -55,6 +55,15 @@ const hasValidAuthSyncToken = (provided: unknown) => {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 };
 
+const publicAuthFailure = (error: unknown, fallback: string, fallbackStatus = 400) => {
+  const code = error instanceof Error ? error.message : '';
+  if (code === 'JWT_SECRET_NOT_CONFIGURED') {
+    return { status: 500, error: 'AUTH_CONFIGURATION_ERROR' };
+  }
+
+  return { status: fallbackStatus, error: fallback };
+};
+
 router.use(authRateLimit);
 
 router.post('/register/request-otp', async (req, res) => {
@@ -80,8 +89,9 @@ router.post('/register/request-otp', async (req, res) => {
       ok: true,
       debugOtp: !process.env.SMTP_HOST && process.env.NODE_ENV !== 'production' ? code : undefined,
     });
-  } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'OTP_REQUEST_FAILED' });
+  } catch (err: unknown) {
+    const failure = publicAuthFailure(err, 'OTP_REQUEST_FAILED');
+    return res.status(failure.status).json({ error: failure.error });
   }
 });
 
@@ -110,8 +120,9 @@ router.post('/password-reset/request-otp', async (req, res) => {
       ok: true,
       debugOtp: !process.env.SMTP_HOST && process.env.NODE_ENV !== 'production' ? code : undefined,
     });
-  } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'PASSWORD_RESET_OTP_REQUEST_FAILED' });
+  } catch (err: unknown) {
+    const failure = publicAuthFailure(err, 'PASSWORD_RESET_OTP_REQUEST_FAILED');
+    return res.status(failure.status).json({ error: failure.error });
   }
 });
 
@@ -150,8 +161,9 @@ router.post('/password-reset/confirm', async (req, res) => {
     });
 
     return res.json({ ok: true });
-  } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'PASSWORD_RESET_FAILED' });
+  } catch (err: unknown) {
+    const failure = publicAuthFailure(err, 'PASSWORD_RESET_FAILED');
+    return res.status(failure.status).json({ error: failure.error });
   }
 });
 router.post('/register', async (req, res) => {
@@ -165,7 +177,7 @@ router.post('/register', async (req, res) => {
     }
     const normalizedEmail = normalizeEmail(String(email));
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (existing) return res.status(400).json({ error: 'Email already registered' });
+    if (existing) return res.status(400).json({ error: 'EMAIL_ALREADY_REGISTERED' });
 
     const otpValid = await consumeVerificationCode(prisma, {
       email: normalizedEmail,
@@ -209,9 +221,9 @@ router.post('/register', async (req, res) => {
         subscriptionStatus: user.subscriptionStatus,
       },
     });
-  } catch (err: any) {
-    const status = err?.message === 'JWT_SECRET_NOT_CONFIGURED' ? 500 : 400;
-    res.status(status).json({ error: err.message });
+  } catch (err: unknown) {
+    const failure = publicAuthFailure(err, 'REGISTER_FAILED');
+    res.status(failure.status).json({ error: failure.error });
   }
 });
 
@@ -246,9 +258,9 @@ router.post('/login', async (req, res) => {
         subscriptionStatus: user.subscriptionStatus,
       },
     });
-  } catch (err: any) {
-    const status = err?.message === 'JWT_SECRET_NOT_CONFIGURED' ? 500 : 400;
-    res.status(status).json({ error: err.message });
+  } catch (err: unknown) {
+    const failure = publicAuthFailure(err, 'LOGIN_FAILED');
+    res.status(failure.status).json({ error: failure.error });
   }
 });
 

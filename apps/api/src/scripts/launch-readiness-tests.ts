@@ -313,6 +313,14 @@ assertIncludes(authRoute, "router.post('/password-reset/confirm'", 'Auth route m
 assertIncludes(authRoute, "purpose: 'password_reset'", 'Password reset must use a dedicated OTP purpose');
 assertIncludes(authRoute, "error: 'INVALID_OR_EXPIRED_OTP'", 'Password reset must not disclose account existence through OTP failures');
 assertIncludes(authRoute, "return res.json({ ok: true });", 'Password reset request must avoid account enumeration');
+assertIncludes(authRoute, 'const publicAuthFailure =', 'Auth route must centralize public error sanitization');
+assertIncludes(authRoute, "error: 'AUTH_CONFIGURATION_ERROR'", 'Auth route must not expose internal JWT config errors to clients');
+assertIncludes(authRoute, "error: 'EMAIL_ALREADY_REGISTERED'", 'Auth register flow must use stable public error codes');
+assertNotIncludes(authRoute, "err.message || 'OTP_REQUEST_FAILED'", 'Auth OTP route must not return raw exception messages');
+assertNotIncludes(authRoute, "err.message || 'PASSWORD_RESET_OTP_REQUEST_FAILED'", 'Password reset OTP route must not return raw exception messages');
+assertNotIncludes(authRoute, "err.message || 'PASSWORD_RESET_FAILED'", 'Password reset confirm route must not return raw exception messages');
+assertNotIncludes(authRoute, 'res.status(status).json({ error: err.message });', 'Auth login/register routes must not return raw exception messages');
+assertNotIncludes(authRoute, "error: 'Email already registered'", 'Auth register route must not return inconsistent natural-language error text');
 assertIncludes(emailerService, 'password_reset', 'Emailer must support password reset OTP copy');
 assertIncludes(forgotPasswordPage, 'ForgotPasswordForm', 'Forgot password page must render the reset form');
 assertIncludes(forgotPasswordForm, '/auth/password-reset/request-otp', 'Forgot password form must request reset OTPs');
