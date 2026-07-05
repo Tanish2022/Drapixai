@@ -409,6 +409,8 @@ assertIncludes(adminRoute, "filter === 'cache_failed'", 'Admin API must support 
 assertIncludes(adminRoute, "data: { status: 'approved'", 'Admin API must support try-on approval');
 assertIncludes(adminRoute, "data: { status: 'rejected'", 'Admin API must support try-on rejection');
 assertIncludes(adminSessionRoute, 'createAdminSessionToken(apiKey)', 'Admin session route must store the API key only in the httpOnly session token');
+assertIncludes(adminSessionRoute, "sameSite: 'strict'", 'Admin session cookies must be SameSite Strict');
+assertNotIncludes(adminSessionRoute, "sameSite: 'lax'", 'Admin session cookies must not use SameSite Lax');
 assertIncludes(adminSessionRoute, 'return noStoreJson({ ok: true });', 'Admin session route must not return the admin API key to browser code');
 assertNotIncludes(adminSessionRoute, 'return NextResponse.json({ ok: true, apiKey', 'Admin session route must never expose the admin API key in JSON');
 assertIncludes(adminSessionHelper, "scope: 'admin'", 'Admin session token must carry admin scope');
@@ -486,6 +488,10 @@ assertIncludes(dashboardProxyRoute, 'readLimitedProxyBody(request)', 'Dashboard 
 assertIncludes(requestGuard, 'readLimitedProxyBody', 'Web request guard must cap proxied request bodies before buffering');
 assertIncludes(requestGuard, 'PROXY_REQUEST_TOO_LARGE', 'Web request guard must reject oversized proxied bodies with a sanitized error');
 assertIncludes(dashboardSessionRoute, 'rejectCrossOriginRequest(request)', 'Dashboard session route must reject cross-origin session mutations');
+assertIncludes(dashboardSessionRoute, "sameSite: 'strict'", 'Dashboard session cookies must be SameSite Strict');
+assertNotIncludes(dashboardSessionRoute, "sameSite: 'lax'", 'Dashboard session cookies must not use SameSite Lax');
+assertIncludes(dashboardOauthSessionRoute, "sameSite: 'strict'", 'OAuth dashboard session cookies must be SameSite Strict');
+assertNotIncludes(dashboardOauthSessionRoute, "sameSite: 'lax'", 'OAuth dashboard session cookies must not use SameSite Lax');
 assertIncludes(dashboardSessionRoute, 'export async function GET(request: Request)', 'Dashboard session API-key reads must inspect the incoming request');
 assertIncludes(dashboardSessionRoute, 'return noStoreJson({ ok: true, apiKey: session.apiKey });', 'Dashboard session API-key reads must be non-cacheable');
 assertIncludes(dashboardSessionRoute, 'return noStoreJson({ ok: true, apiKey });', 'Dashboard session login responses must be non-cacheable');

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     name: DASHBOARD_SESSION_COOKIE,
     value: await createDashboardSessionToken(apiKey),
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: DASHBOARD_SESSION_MAX_AGE_SECONDS,
