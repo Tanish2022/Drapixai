@@ -19,8 +19,14 @@ export default function ProductPage() {
       timeoutMs={20000}
       primaryGradient="linear-gradient(90deg,#22d3ee,#3b82f6)"
       logoUrl="https://cdn.yourbrand.com/logo-mark.svg"
-      onResult={(metadata) => console.log(metadata.qualityScore, metadata.latencyMs)}
-      onError={(error) => console.warn(error.message)}
+      onResult={(metadata) => {
+        // Send this to your brand analytics or admin monitoring.
+        console.log(metadata.qualityScore, metadata.latencyMs);
+      }}
+      onError={(error) => {
+        // Show a clean storefront message and log the code internally.
+        console.warn(error.message);
+      }}
     />
   );
 }
@@ -30,7 +36,7 @@ export default function ProductPage() {
 - `apiKey` (required)
 - `productId` (required)
 - `containerId` (optional)
-- `baseUrl` (optional, default `http://localhost:8000`)
+- `baseUrl` (optional; defaults to the deployed `NEXT_PUBLIC_API_BASE_URL` used by your storefront build, with localhost only for local development)
 - `garmentType` (optional, `upper`)
 - `quality` (optional, `standard`; this is the only production try-on mode)
 - `buttonText` (optional)
@@ -53,6 +59,8 @@ export default function ProductPage() {
 6. Read `metadata.latencyMs`, `metadata.qualityScore`, and `metadata.warnings` from `onResult` for storefront monitoring.
 
 The storefront SDK should not upload arbitrary garment photos during shopper try-on. It sends the shopper person photo plus the confirmed `productId`; the API resolves that product to the approved garment and uses the cached try-on asset. This keeps quality consistent and avoids spending request time on garment preprocessing.
+
+Production storefronts must set `NEXT_PUBLIC_API_BASE_URL` to the HTTPS API endpoint, for example `https://api.drapixai.com`. Do not ship a public storefront that points to localhost or a development tunnel.
 
 ## Returned Metadata
 
