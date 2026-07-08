@@ -12,6 +12,14 @@ const getArg = (name: string) => {
 
 const maskEmail = (email: string) => email.replace(/^(.).+(@.+)$/, '$1***$2');
 
+const redactSensitiveText = (value: unknown) =>
+  String(value ?? '')
+    .replace(/\b(?:postgresql|postgres|redis|smtp|https?):\/\/[^\s]+/gi, (match) => {
+      const scheme = match.split('://')[0];
+      return `${scheme}://[redacted]`;
+    })
+    .replace(/([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*=)([^\s]+)/gi, '$1[redacted]');
+
 const main = async () => {
   const to = getArg('to') || process.env.SMTP_TEST_TO || '';
   const subject = getArg('subject') || 'DrapixAI SMTP launch verification';
@@ -49,7 +57,12 @@ const main = async () => {
   const result = await sendEmail(user.id, user.email, 'smtp_launch_test', subject, text);
   if (!result.sent || !result.logId) {
     console.error('SMTP launch verification failed.');
-    console.error(JSON.stringify({ sent: result.sent, skipped: result.skipped, logId: result.logId, error: result.error }, null, 2));
+    console.error(JSON.stringify({
+      sent: result.sent,
+      skipped: result.skipped,
+      logId: result.logId,
+      error: result.error ? redactSensitiveText(result.error) : result.error,
+    }, null, 2));
     process.exitCode = 1;
     return;
   }
@@ -75,7 +88,7 @@ const main = async () => {
 main()
   .catch((error) => {
     console.error('SMTP launch verification command failed.');
-    console.error(error);
+    console.error(redactSensitiveText(error instanceof Error ? error.message : error));
     process.exitCode = 1;
   })
   .finally(async () => {

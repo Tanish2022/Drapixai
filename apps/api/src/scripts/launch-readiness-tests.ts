@@ -205,6 +205,7 @@ const cacheRegenerationScript = read('apps/api/src/scripts/regenerate-garment-ca
 const retentionPurgeScript = read('apps/api/src/scripts/purge-tryon-review-retention.ts');
 const smtpTestScript = read('apps/api/src/scripts/send-test-email.ts');
 const emailerService = read('apps/api/src/services/emailer.ts');
+const watermarkService = read('apps/api/src/services/watermark.ts');
 const smokeTryon = read('deploy/runpod/smoke_tryon.py');
 const smokeMatrix = read('deploy/runpod/smoke_matrix.py');
 const smokeTest = read('deploy/scripts/smoke-test.sh');
@@ -671,6 +672,15 @@ assertIncludes(smtpTestScript, "log.status !== 'sent'", 'SMTP test command must 
 assertIncludes(smtpTestScript, 'SMTP verification requires an existing DrapixAI account email', 'SMTP test command must require a real account for audit logging');
 assertIncludes(emailerService, 'Promise<EmailSendResult>', 'Email helper must return structured delivery status');
 assertIncludes(emailerService, "error: 'SMTP_HOST_NOT_CONFIGURED'", 'Email helper must report missing SMTP config instead of silently passing');
+assertIncludes(smtpTestScript, 'const redactSensitiveText =', 'SMTP launch verifier must redact sensitive error text');
+assertNotIncludes(smtpTestScript, 'console.error(error);', 'SMTP launch verifier must not dump raw exception objects');
+assertIncludes(smtpTestScript, 'error: result.error ? redactSensitiveText(result.error) : result.error', 'SMTP launch verifier must redact email send errors before logging');
+assertIncludes(watermarkService, 'const escapeSvgText =', 'Watermark SVG text must be escaped');
+assertIncludes(watermarkService, 'const sanitizeWatermarkColor =', 'Watermark SVG color must be allowlisted');
+assertIncludes(watermarkService, 'const redactObjectKey =', 'Watermark logs must redact storage object keys');
+assertNotIncludes(watermarkService, '`Downloading ${inputKey} from S3...`', 'Watermark logs must not print raw input object keys');
+assertNotIncludes(watermarkService, '`Uploading to ${outputKey}...`', 'Watermark logs must not print raw output object keys');
+assertNotIncludes(watermarkService, "console.error('Watermark processing error:', error);", 'Watermark errors must not dump raw exception objects');
 assertIncludes(emailerService, 'logId: log.id', 'Email helper must expose the EmailLog id for launch verification');
 assertIncludes(productionReadiness, 'npm --prefix apps/api run email:send-test -- --to=admin@yourbrand.com', 'Production readiness doc must include SMTP launch verification command');
 assertIncludes(read('apps/api/package.json'), 'tryon:purge-review-retention', 'API package must expose try-on retention purge command');

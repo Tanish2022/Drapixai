@@ -51,6 +51,33 @@ const DEFAULT_OPTIONS: WatermarkOptions = {
   color: 'white'
 };
 
+const escapeSvgText = (value: string) =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const sanitizeWatermarkColor = (value: string) => {
+  const trimmed = String(value || '').trim();
+
+  if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^(white|black|red|blue|green|gray|grey)$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  return DEFAULT_OPTIONS.color || 'white';
+};
+
+const redactObjectKey = (key: string) => {
+  const fileName = String(key || '').split('/').pop() || 'object';
+  return `[redacted]/${fileName.slice(0, 12)}${fileName.length > 12 ? '...' : ''}`;
+};
+
 /**
  * Create watermark SVG
  */
@@ -74,8 +101,8 @@ function createWatermarkSVG(
         font-family="Arial, sans-serif"
         font-size="${fontSize}"
         font-weight="bold"
-        fill="${color}"
-      >${text}</text>
+        fill="${sanitizeWatermarkColor(color)}"
+      >${escapeSvgText(text)}</text>
     </svg>
   `;
 }
@@ -167,7 +194,7 @@ export async function processWithWatermark(
   
   try {
     // Download image from S3
-    console.log(`Downloading ${inputKey} from S3...`);
+    console.log(`Downloading ${redactObjectKey(inputKey)} from S3...`);
     
     const getCommand = new GetObjectCommand({
       Bucket: BUCKET,
@@ -206,7 +233,7 @@ export async function processWithWatermark(
     tempFiles.push(tempOutput);
     
     // Upload to S3
-    console.log(`Uploading to ${outputKey}...`);
+    console.log(`Uploading to ${redactObjectKey(outputKey)}...`);
     const fileContent = fs.readFileSync(tempOutput);
     
     const putCommand = new PutObjectCommand({
@@ -228,7 +255,7 @@ export async function processWithWatermark(
     return signedUrl;
     
   } catch (error) {
-    console.error('Watermark processing error:', error);
+    console.error('Watermark processing error:', error instanceof Error ? error.message : 'WATERMARK_PROCESSING_FAILED');
     throw error;
     
   } finally {
