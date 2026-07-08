@@ -347,6 +347,8 @@ assertIncludes(securityHelpers, 'detectImageMimeType', 'API must verify upload i
 assertIncludes(securityHelpers, 'isAllowedImageFileContent', 'API must validate uploaded image content after Multer writes files');
 assertIncludes(securityHelpers, 'removeUploadedFile', 'API must clean up rejected upload temp files through a guarded helper');
 assertIncludes(securityHelpers, 'sanitizeUpstreamError', 'API must sanitize upstream AI errors before returning them');
+assertIncludes(securityHelpers, 'redactSensitiveText', 'API must provide shared sensitive text redaction for operational logs');
+assertIncludes(securityHelpers, 'formatLogError', 'API must provide shared sanitized log error formatting');
 assertIncludes(securityHelpers, 'buildUploadPath', 'API must build local upload paths through a guarded helper');
 assertIncludes(securityHelpers, 'readLocalUploadFile', 'API must read local upload files through a guarded helper');
 assertIncludes(securityHelpers, 'UPLOAD_PATH_OUTSIDE_ROOT', 'API upload helper must fail closed when paths escape the upload root');
@@ -361,6 +363,11 @@ assertIncludes(sdkRoute, 'isAllowedImageFileContent(req.file)', 'SDK garment onb
 assertIncludes(sdkRoute, 'INVALID_IMAGE_CONTENT', 'SDK routes must reject invalid uploaded image content');
 assertIncludes(sdkRoute, 'resolveActiveApiKey', 'SDK routes must use the shared API-key resolver');
 assertIncludes(sdkRoute, "redis.on('error'", 'SDK Redis client must handle socket errors without crashing');
+assertIncludes(sdkRoute, 'formatLogError', 'SDK route must sanitize operational error logs');
+assertNotIncludes(sdkRoute, "console.error('SDK Redis client error:', error);", 'SDK route must not log raw Redis client errors');
+assertNotIncludes(sdkRoute, "console.error('Try-on error:', error);", 'SDK route must not log raw try-on exceptions');
+assertNotIncludes(sdkRoute, "console.error('Garment upload error:', error);", 'SDK route must not log raw garment upload exceptions');
+assertNotIncludes(sdkRoute, "console.error('Watermark error:', watermarkError);", 'SDK route must not log raw watermark exceptions');
 assertIncludes(publicRoute, 'isAllowedImageUpload(file)', 'Public demo uploads must use strict image upload validation');
 assertIncludes(publicRoute, 'isAllowedImageFileContent(personFile)', 'Public demo must validate person upload content bytes');
 assertIncludes(publicRoute, 'isAllowedImageFileContent(clothFile)', 'Public demo must validate garment upload content bytes');

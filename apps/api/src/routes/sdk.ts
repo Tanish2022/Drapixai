@@ -42,6 +42,7 @@ import {
   removeUploadedFile,
   sanitizePathSegment,
   sanitizeUpstreamError,
+  formatLogError,
 } from '../lib/security';
 
 const router = Router();
@@ -95,10 +96,10 @@ const getGarmentValidationMessage = (code: string) => {
 // Initialize Redis client
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
 redis.on('error', (error) => {
-  console.error('SDK Redis client error:', error);
+  console.error('SDK Redis client error:', formatLogError(error));
 });
 redis.connect().catch((error) => {
-  console.error('Redis connection error:', error);
+  console.error('Redis connection error:', formatLogError(error));
 });
 
 // Initialize S3 client (MinIO)
@@ -358,7 +359,7 @@ const authMiddleware = async (req: any, res: any, next: any) => {
     
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    console.error('Auth middleware error:', formatLogError(error));
     res.status(500).json({ error: 'Authentication failed' });
   }
 };
@@ -483,7 +484,7 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
       trialDaysLeft: plan.trialDaysLeft
     });
   } catch (error) {
-    console.error('Validation error:', error);
+    console.error('Validation error:', formatLogError(error));
     res.status(500).json({ error: 'Validation failed' });
   }
 });
@@ -629,7 +630,7 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       message: 'Your render job has been queued. Check status using the job ID.'
     });
   } catch (error) {
-    console.error('Render error:', error);
+    console.error('Render error:', formatLogError(error));
     res.status(500).json({ 
       error: 'Render failed',
       message: 'Failed to process your request. Please try again.'
@@ -1039,7 +1040,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       cleanupTryOnUploadFiles();
     }
   } catch (error) {
-    console.error('Try-on error:', error);
+    console.error('Try-on error:', formatLogError(error));
     res.status(500).json({ error: 'Try-on failed' });
   }
 });
@@ -1080,7 +1081,7 @@ router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
 
     res.json({ ok: true, feedbackId: feedback.id });
   } catch (error) {
-    console.error('Try-on feedback error:', error);
+    console.error('Try-on feedback error:', formatLogError(error));
     res.status(500).json({ error: 'TRYON_FEEDBACK_FAILED' });
   }
 });
@@ -1190,7 +1191,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
       warnings: result.warnings || [],
     });
   } catch (error) {
-    console.error('Garment upload error:', error);
+    console.error('Garment upload error:', formatLogError(error));
     res.status(500).json({ error: 'Garment upload failed' });
   } finally {
     removeUploadedFile(req.file);
@@ -1294,7 +1295,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
 
     res.json({ items: results });
   } catch (error) {
-    console.error('Garment bulk error:', error);
+    console.error('Garment bulk error:', formatLogError(error));
     res.status(500).json({ error: 'Garment bulk upload failed' });
   } finally {
     const files = req.files as Express.Multer.File[];
@@ -1343,7 +1344,7 @@ router.get('/garments/:garmentId', authMiddleware, requireDashboardProxy, async 
       updatedAt: garment.updatedAt
     });
   } catch (error) {
-    console.error('Garment fetch error:', error);
+    console.error('Garment fetch error:', formatLogError(error));
     res.status(500).json({ error: 'Failed to fetch garment' });
   }
 });
@@ -1358,7 +1359,7 @@ router.get('/garments', authMiddleware, requireDashboardProxy, async (req: any, 
     const items = await listGarmentsWithMatchState(user.id);
     res.json({ items });
   } catch (error) {
-    console.error('Garment list error:', error);
+    console.error('Garment list error:', formatLogError(error));
     res.status(500).json({ error: 'Failed to list garments' });
   }
 });
@@ -1386,7 +1387,7 @@ router.get('/catalog', authMiddleware, requireDashboardProxy, async (req: any, r
       }))
     });
   } catch (error) {
-    console.error('Catalog list error:', error);
+    console.error('Catalog list error:', formatLogError(error));
     res.status(500).json({ error: 'Failed to list catalog products' });
   }
 });
@@ -1425,7 +1426,7 @@ const syncCatalogHandler = async (req: any, res: any) => {
 
     res.json({ items: discovered, skipped });
   } catch (error) {
-    console.error('Garment sync error:', error);
+    console.error('Garment sync error:', formatLogError(error));
     res.status(500).json({ error: 'Garment sync failed' });
   }
 };
@@ -1469,7 +1470,7 @@ router.post('/matches/:garmentId/confirm', authMiddleware, requireDashboardProxy
       return res.status(code === 'GARMENT_NOT_FOUND' || code === 'PRODUCT_NOT_FOUND' ? 404 : 400).json({ error: code });
     }
   } catch (error) {
-    console.error('Match confirm error:', error);
+    console.error('Match confirm error:', formatLogError(error));
     res.status(500).json({ error: 'MATCH_CONFIRM_FAILED' });
   }
 });
@@ -1489,7 +1490,7 @@ router.delete('/matches/:garmentId/confirm', authMiddleware, requireDashboardPro
     await clearConfirmedGarmentMatch(prisma, user.id, garmentId);
     res.json({ ok: true, garmentId });
   } catch (error) {
-    console.error('Match clear error:', error);
+    console.error('Match clear error:', formatLogError(error));
     res.status(500).json({ error: 'MATCH_CLEAR_FAILED' });
   }
 });
@@ -1519,7 +1520,7 @@ router.get('/garments/:garmentId/image', authMiddleware, requireDashboardProxy, 
     res.setHeader('Content-Type', aiRes.headers.get('content-type') || 'image/png');
     res.send(buffer);
   } catch (error) {
-    console.error('Garment image error:', error);
+    console.error('Garment image error:', formatLogError(error));
     res.status(500).json({ error: 'Garment image fetch failed' });
   }
 });
@@ -1557,7 +1558,7 @@ router.get('/garments/:garmentId/thumbnail', authMiddleware, requireDashboardPro
     }
     return res.status(404).json({ error: 'THUMBNAIL_NOT_FOUND' });
   } catch (error) {
-    console.error('Garment thumbnail error:', error);
+    console.error('Garment thumbnail error:', formatLogError(error));
     res.status(500).json({ error: 'Garment thumbnail fetch failed' });
   }
 });
@@ -1612,7 +1613,7 @@ router.get('/status/:jobId', authMiddleware, async (req: any, res: any) => {
       });
     }
   } catch (error) {
-    console.error('Status check error:', error);
+    console.error('Status check error:', formatLogError(error));
     res.status(500).json({ error: 'Failed to check status' });
   }
 });
@@ -1665,7 +1666,7 @@ router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
           url: watermarkedUrl
         });
       } catch (watermarkError) {
-        console.error('Watermark error:', watermarkError);
+        console.error('Watermark error:', formatLogError(watermarkError));
         res.json({ 
           status: 'complete',
           url: render.outputUrl
@@ -1678,7 +1679,7 @@ router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
       });
     }
   } catch (error) {
-    console.error('Result error:', error);
+    console.error('Result error:', formatLogError(error));
     res.status(500).json({ error: 'Failed to get result' });
   }
 });
@@ -1722,7 +1723,7 @@ router.delete('/job/:jobId', authMiddleware, async (req: any, res: any) => {
       message: 'Job has been cancelled'
     });
   } catch (error) {
-    console.error('Cancel job error:', error);
+    console.error('Cancel job error:', formatLogError(error));
     res.status(500).json({ error: 'Failed to cancel job' });
   }
 });

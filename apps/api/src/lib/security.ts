@@ -143,6 +143,17 @@ export const sanitizeUpstreamError = (fallback: string, raw: string) => {
   }
 };
 
+export const redactSensitiveText = (value: unknown) =>
+  String(value ?? '')
+    .replace(/\b(?:postgresql|postgres|redis|smtp|https?):\/\/[^\s]+/gi, (match) => {
+      const scheme = match.split('://')[0];
+      return `${scheme}://[redacted]`;
+    })
+    .replace(/([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*=)([^\s]+)/gi, '$1[redacted]');
+
+export const formatLogError = (error: unknown) =>
+  redactSensitiveText(error instanceof Error ? error.message : error || 'UNKNOWN_ERROR');
+
 export const getRequestOrigin = (req: Request) => {
   const origin = req.headers.origin;
   return typeof origin === 'string' ? origin : null;
