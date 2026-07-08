@@ -13,16 +13,17 @@ import accountRoutes from './routes/account';
 import cron from 'node-cron';
 import { startTrialNotifications } from './services/trial_notifier';
 import { getStorageSummary } from './lib/storage';
+import { formatLogError } from './lib/security';
 import { ensureAdminUser } from './services/admin-bootstrap';
 
 const app = express();
 const prisma = new PrismaClient();
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
 redis.on('error', (error) => {
-  console.error('Redis client error:', error);
+  console.error('Redis client error:', formatLogError(error));
 });
 redis.connect().catch((error) => {
-  console.error('Redis connection error:', error);
+  console.error('Redis connection error:', formatLogError(error));
 });
 const aiBaseUrl = (process.env.DRAPIXAI_AI_URL || '').trim();
 
@@ -220,7 +221,7 @@ app.use((error: Error & { status?: number; statusCode?: number; type?: string },
       code,
       path: req.path,
       method: req.method,
-      message: error.message,
+      message: formatLogError(error),
     });
   }
 
@@ -244,7 +245,7 @@ cron.schedule('0 0 * * *', async () => {
 
 startTrialNotifications();
 ensureAdminUser().catch((error) => {
-  console.error('Admin bootstrap failed:', error);
+  console.error('Admin bootstrap failed:', formatLogError(error));
 });
 
 const PORT = process.env.PORT || 8000;

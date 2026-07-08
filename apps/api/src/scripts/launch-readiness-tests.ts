@@ -311,6 +311,10 @@ assertIncludes(apiServer, "error.message === 'CORS_ORIGIN_NOT_ALLOWED'", 'API se
 assertIncludes(apiServer, 'status = 403;', 'API server must return 403 for blocked CORS origins');
 assertIncludes(apiServer, "res.status(404).json({ error: 'NOT_FOUND' });", 'API server must return JSON 404s');
 assertIncludes(apiServer, "redis.on('error'", 'API server Redis client must handle socket errors without crashing');
+assertIncludes(apiServer, 'formatLogError', 'API server must sanitize operational error logs');
+assertNotIncludes(apiServer, "console.error('Redis client error:', error);", 'API server must not log raw Redis client errors');
+assertNotIncludes(apiServer, "console.error('Redis connection error:', error);", 'API server must not log raw Redis connection errors');
+assertNotIncludes(apiServer, "console.error('Admin bootstrap failed:', error);", 'API server must not log raw admin bootstrap exceptions');
 assertIncludes(authRoute, "router.post('/password-reset/request-otp'", 'Auth route must expose password reset OTP request');
 assertIncludes(authRoute, "router.post('/password-reset/confirm'", 'Auth route must expose password reset confirmation');
 assertIncludes(authRoute, "purpose: 'password_reset'", 'Password reset must use a dedicated OTP purpose');
@@ -332,6 +336,8 @@ assertIncludes(forgotPasswordForm, 'without revealing whether the email is regis
 assertNotIncludes(forgotPasswordForm, 'Password reset is not self-serve yet', 'Forgot password page must not expose launch TODO copy');
 assertNotIncludes(forgotPasswordForm, 'should be replaced with a real reset flow', 'Forgot password page must not ship stale TODO copy');
 assertIncludes(authRoute, 'x-drapixai-auth-sync-token', 'Google OAuth sync must require a server-to-server token');
+assertIncludes(authRoute, 'formatLogError', 'Auth route must sanitize OAuth sync operational logs');
+assertNotIncludes(authRoute, "console.error('OAuth sync error:', error);", 'Auth route must not log raw OAuth sync exceptions');
 assertIncludes(authRoute, 'AUTH_SYNC_TOKEN_REQUIRED', 'Google OAuth sync must reject missing auth sync token when configured');
 assertIncludes(nextAuthRoute, 'DRAPIXAI_AUTH_SYNC_TOKEN', 'NextAuth route must read the auth sync token');
 assertIncludes(nextAuthRoute, 'x-drapixai-auth-sync-token', 'NextAuth route must forward the auth sync token');
@@ -374,6 +380,9 @@ assertIncludes(publicRoute, 'isAllowedImageFileContent(clothFile)', 'Public demo
 assertIncludes(publicRoute, 'INVALID_IMAGE_CONTENT', 'Public demo must reject invalid uploaded image content');
 assertIncludes(sdkRoute, 'sanitizeUpstreamError', 'SDK try-on must sanitize upstream AI errors');
 assertIncludes(publicRoute, 'sanitizeUpstreamError', 'Public demo must sanitize upstream AI errors');
+assertIncludes(publicRoute, 'formatLogError', 'Public route must sanitize operational error logs');
+assertNotIncludes(publicRoute, "console.error('Website event tracking error:', error);", 'Public route must not log raw analytics exceptions');
+assertNotIncludes(publicRoute, "console.error('Public demo try-on error:', error);", 'Public route must not log raw demo try-on exceptions');
 assertNotIncludes(sdkRoute, "file.mimetype.startsWith('image/')", 'SDK uploads must not trust broad image/* MIME values');
 assertNotIncludes(sdkRoute, "authorization?.replace('Bearer ', '')", 'SDK routes must not hand-roll bearer parsing');
 assertNotIncludes(sdkRoute, "path.join(UPLOAD_ROOT", 'SDK local fallback paths must not join raw values against upload root');
@@ -426,6 +435,8 @@ assertNotIncludes(proveLiveShell, 'eval(', 'Live stack proof script must not eva
 assertIncludes(adminRoute, "filter === 'low_quality'", 'Admin API must support low quality review filter');
 assertIncludes(adminRoute, 'resolveActiveApiKey', 'Admin routes must use the shared API-key resolver');
 assertIncludes(adminRoute, "redis.on('error'", 'Admin Redis client must handle socket errors without crashing');
+assertIncludes(adminRoute, 'formatLogError', 'Admin route must sanitize operational error logs');
+assertNotIncludes(adminRoute, "console.error('Admin Redis client error:', error);", 'Admin route must not log raw Redis client errors');
 assertNotIncludes(adminRoute, "authorization?.replace('Bearer ', '')", 'Admin routes must not hand-roll bearer parsing');
 assertNotIncludes(adminRoute, "storedUrl.replace('local:', '')", 'Admin image reads must not trust raw local paths');
 assertNotIncludes(adminRoute, "garment.thumbnailUrl.replace('local:', '')", 'Admin thumbnail reads must not trust raw local paths');
@@ -707,6 +718,10 @@ assertIncludes(productionReadiness, 'prove-live-stack.ps1 -ApiUrl http://localho
 assertIncludes(productionReadiness, 'validate-production-env-set.sh', 'Production readiness doc must include cross-file env-set validation');
 assertIncludes(productionReadiness, 'validate-production-env-set.ps1', 'Production readiness doc must include Windows cross-file env-set validation');
 assertIncludes(cacheRegenerationScript, 'redactSensitiveText', 'Cache regeneration troubleshooting must redact sensitive connection strings');
+assertIncludes(cacheRegenerationScript, 'formatLogError', 'Cache regeneration command must sanitize uncaught operational errors');
+assertNotIncludes(cacheRegenerationScript, 'console.error(error);', 'Cache regeneration command must not dump raw exception objects');
+assertIncludes(retentionPurgeScript, 'formatLogError', 'Retention purge command must sanitize uncaught operational errors');
+assertNotIncludes(retentionPurgeScript, 'console.error(error);', 'Retention purge command must not dump raw exception objects');
 assertIncludes(cacheRegenerationScript, 'DATABASE_URL configured:', 'Cache regeneration troubleshooting may report whether DATABASE_URL exists');
 assertNotIncludes(cacheRegenerationScript, 'DATABASE_URL=${process.env.DATABASE_URL', 'Cache regeneration troubleshooting must never print DATABASE_URL');
 assertIncludes(productionReadiness, '- `DRAPIXAI_AUTH_SYNC_TOKEN`\n- `DRAPIXAI_DASHBOARD_PROXY_TOKEN`\n- `DRAPIXAI_AI_URL`', 'Production readiness doc must list dashboard proxy token as a required API env');

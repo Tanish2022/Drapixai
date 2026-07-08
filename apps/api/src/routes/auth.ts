@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { formatLogError } from '../lib/security';
 import { v4 as uuidv4 } from 'uuid';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
@@ -317,7 +318,7 @@ router.post('/oauth/google', async (req, res) => {
 
     return res.json({ ok: true, userId: user.id, apiKey: apiKeyValue });
   } catch (error) {
-    console.error('OAuth sync error:', error);
+    console.error('OAuth sync error:', formatLogError(error));
     return res.status(500).json({ error: 'OAUTH_SYNC_FAILED' });
   }
 });

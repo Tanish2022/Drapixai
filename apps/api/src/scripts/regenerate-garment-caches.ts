@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { createStorageClient } from '../lib/storage';
 import { safeFetchBuffer } from '../lib/remote-fetch';
-import { readLocalUploadFile } from '../lib/security';
+import { formatLogError, readLocalUploadFile } from '../lib/security';
 
 type GarmentPreprocessResponse = {
   cache_key?: string;
@@ -225,7 +225,7 @@ const main = async () => {
 
 main()
   .catch((error) => {
-    console.error(error);
+    console.error(formatLogError(error));
     process.exitCode = 1;
   })
   .finally(async () => {

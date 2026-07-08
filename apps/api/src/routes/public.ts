@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
-import { getUploadRoot, isAllowedImageFileContent, isAllowedImageUpload, removeUploadedFile, sanitizeUpstreamError } from '../lib/security';
+import { formatLogError, getUploadRoot, isAllowedImageFileContent, isAllowedImageUpload, removeUploadedFile, sanitizeUpstreamError } from '../lib/security';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -95,7 +95,7 @@ router.post(
 
       return res.json({ ok: true });
     } catch (error) {
-      console.error('Website event tracking error:', error);
+      console.error('Website event tracking error:', formatLogError(error));
       return res.status(500).json({ error: 'EVENT_TRACK_FAILED' });
     }
   }
@@ -207,7 +207,7 @@ router.post(
       if (timingJson) res.setHeader('x-drapixai-timing-json', timingJson);
       return res.send(buffer);
     } catch (error) {
-      console.error('Public demo try-on error:', error);
+      console.error('Public demo try-on error:', formatLogError(error));
       await trackWebsiteEvent('demo_tryon_failed', '/demo', null, req.headers.referer || null, {
         source: 'public_demo',
       }).catch(() => undefined);

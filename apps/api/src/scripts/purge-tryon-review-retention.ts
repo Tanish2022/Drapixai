@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { createStorageClient } from '../lib/storage';
-import { removeLocalStoredFile } from '../lib/security';
+import { formatLogError, removeLocalStoredFile } from '../lib/security';
 
 const prisma = new PrismaClient();
 const s3 = createStorageClient();
@@ -117,7 +117,7 @@ const main = async () => {
 main()
   .catch((error) => {
     console.error('Try-on review retention purge failed.');
-    console.error(error);
+    console.error(formatLogError(error));
     process.exitCode = 1;
   })
   .finally(async () => {

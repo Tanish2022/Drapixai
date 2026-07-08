@@ -8,7 +8,7 @@ import { resolveActiveApiKey } from '../lib/api-key-auth';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { formatPlanLabel } from '../lib/plans';
 import { buildProductAccuracyReport, getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
-import { readLocalUploadFile } from '../lib/security';
+import { formatLogError, readLocalUploadFile } from '../lib/security';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -17,7 +17,7 @@ const ADMIN_USER_ID = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
 const s3 = createStorageClient();
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
 redis.on('error', (error) => {
-  console.error('Admin Redis client error:', error);
+  console.error('Admin Redis client error:', formatLogError(error));
 });
 redis.connect().catch(() => undefined);
 const adminRateLimit = createRateLimitMiddleware(60, 15 * 60 * 1000);
