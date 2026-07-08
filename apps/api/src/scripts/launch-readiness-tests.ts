@@ -494,6 +494,11 @@ for (const label of [
 assertIncludes(sdkJs, "throw reportStartupError('INVALID_QUALITY');", 'Browser SDK must reject non-standard quality options');
 assertIncludes(sdkJs, 'function sanitizeCssValue', 'Browser SDK must sanitize CSS values before generated markup');
 assertIncludes(sdkJs, 'function sanitizeAssetUrl', 'Browser SDK must sanitize logo/image URLs before generated markup');
+assertIncludes(sdkJs, 'function sanitizeServiceUrl', 'Browser SDK must sanitize API base URLs before authenticated fetches');
+assertIncludes(sdkJs, 'function sanitizeNavigationUrl', 'Browser SDK must sanitize buy/checkout URLs before navigation');
+assertIncludes(sdkJs, 'baseUrl: sanitizeServiceUrl', 'Browser SDK must sanitize configured API base URL');
+assertIncludes(sdkJs, 'var buyUrl = sanitizeNavigationUrl', 'Browser SDK must sanitize buy URLs from options or product attributes');
+assertNotIncludes(sdkJs, 'var buyUrl = options.buyUrl || options.checkoutUrl', 'Browser SDK must not use raw buy URLs');
 assertIncludes(sdkJs, 'function isLocalHttpAsset', 'Browser SDK must keep local HTTP asset support isolated to development');
 assertIncludes(sdkJs, "resolved.protocol === 'https:' || isLocalHttpAsset(resolved)", 'Browser SDK must require HTTPS asset URLs outside localhost');
 assertIncludes(sdkJs, 'SUPPORTED_IMAGE_TYPES', 'Browser SDK must keep client upload types aligned with API image allowlist');

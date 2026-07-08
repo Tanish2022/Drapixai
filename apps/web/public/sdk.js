@@ -113,6 +113,27 @@
     return fallback;
   }
 
+  function sanitizeServiceUrl(value, fallback) {
+    var resolved = sanitizeAssetUrl(value, fallback);
+    return resolved.replace(/\/$/, '');
+  }
+
+  function sanitizeNavigationUrl(value) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text || text.length > 1000 || /[\s<>"']/g.test(text)) {
+      return '';
+    }
+    try {
+      var resolved = new URL(text, window.location.href);
+      if (resolved.protocol === 'https:' || resolved.origin === window.location.origin || isLocalHttpAsset(resolved)) {
+        return resolved.href;
+      }
+    } catch (_) {
+      // reject malformed URLs
+    }
+    return '';
+  }
+
   var SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
   function isSupportedImageFile(file) {
@@ -255,7 +276,7 @@
         productSelector: options.productSelector || '[data-drapix-product-id]',
         productIdAttribute: options.productIdAttribute || 'data-drapix-product-id',
         buttonTargetSelector: options.buttonTargetSelector || '[data-drapix-button-slot]',
-        baseUrl: options.baseUrl || window.DRAPIXAI_API_BASE_URL || window.location.origin,
+        baseUrl: sanitizeServiceUrl(options.baseUrl || window.DRAPIXAI_API_BASE_URL || window.location.origin, window.location.origin),
         garmentType: (options.garmentType || 'upper').toLowerCase(),
         quality: 'standard',
         buttonText: options.buttonText || 'Try On',
@@ -330,7 +351,7 @@
         }
 
         var productNode = openBtn.closest ? openBtn.closest(config.productSelector) : null;
-        var buyUrl = options.buyUrl || options.checkoutUrl || (productNode ? productNode.getAttribute(config.buyUrlAttribute) : '');
+        var buyUrl = sanitizeNavigationUrl(options.buyUrl || options.checkoutUrl || (productNode ? productNode.getAttribute(config.buyUrlAttribute) : ''));
         var theme = config.adaptBrandTheme ? resolveBrandTheme(productNode || openBtn, options, config) : resolveBrandTheme(document.body, { theme: options.theme || {} }, config);
 
         var modal = document.createElement('div');
