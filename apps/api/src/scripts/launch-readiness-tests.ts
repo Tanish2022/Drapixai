@@ -460,6 +460,9 @@ assertIncludes(adminProxyRoute, 'readAdminSessionToken', 'Admin proxy must read 
 assertIncludes(adminProxyRoute, 'SERVER_API_BASE_URL', 'Admin proxy must use the server-only API base URL');
 assertNotIncludes(adminProxyRoute, '@/app/lib/public-env', 'Admin proxy must not import public browser env helpers');
 assertIncludes(adminProxyRoute, 'ADMIN_SESSION_REQUIRED', 'Admin proxy must reject missing admin sessions');
+assertIncludes(adminProxyRoute, 'noStoreJson', 'Admin proxy rejection responses must be explicitly non-cacheable');
+assertIncludes(adminProxyRoute, "return noStoreJson({ error: 'ADMIN_SESSION_REQUIRED' }", 'Admin proxy session errors must be non-cacheable');
+assertIncludes(adminProxyRoute, "return noStoreJson({ error: 'INVALID_ADMIN_PROXY_PATH' }", 'Admin proxy path errors must be non-cacheable');
 assertIncludes(adminProxyRoute, 'Authorization: `Bearer ${session.apiKey}`', 'Admin proxy must attach the admin API key only server-side');
 assertIncludes(adminProxyRoute, 'rejectCrossOriginMutation(request)', 'Admin proxy must reject cross-origin mutating requests');
 assertIncludes(adminProxyRoute, 'readLimitedProxyBody(request)', 'Admin proxy must use bounded request body reads');
@@ -531,6 +534,9 @@ assertIncludes(dashboardProxyRoute, 'DRAPIXAI_DASHBOARD_PROXY_TOKEN', 'Dashboard
 assertIncludes(dashboardProxyRoute, 'x-drapixai-dashboard-proxy-token', 'Dashboard proxy must forward the server-only proxy token');
 assertIncludes(dashboardProxyRoute, 'DASHBOARD_PROXY_TOKEN_NOT_CONFIGURED', 'Dashboard proxy must fail closed in production when proxy token is missing');
 assertIncludes(dashboardProxyRoute, "responseHeaders.set('Cache-Control', 'no-store", 'Dashboard proxy responses must be explicitly non-cacheable');
+assertIncludes(dashboardProxyRoute, 'noStoreJson', 'Dashboard proxy rejection responses must be explicitly non-cacheable');
+assertIncludes(dashboardProxyRoute, "return noStoreJson({ error: 'DASHBOARD_SESSION_REQUIRED' }", 'Dashboard proxy session errors must be non-cacheable');
+assertIncludes(dashboardProxyRoute, "return noStoreJson({ error: 'INVALID_DASHBOARD_PROXY_PATH' }", 'Dashboard proxy path errors must be non-cacheable');
 assertIncludes(dashboardProxyRoute, 'rejectCrossOriginMutation(request)', 'Dashboard proxy must reject cross-origin mutating requests');
 assertIncludes(dashboardProxyRoute, 'readLimitedProxyBody(request)', 'Dashboard proxy must use bounded request body reads');
 assertIncludes(requestGuard, 'readLimitedProxyBody', 'Web request guard must cap proxied request bodies before buffering');

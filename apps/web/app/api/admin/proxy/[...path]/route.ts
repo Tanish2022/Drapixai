@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
-import { readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
+import { noStoreJson, readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
 type AdminProxyContext = {
   params: Promise<{ path?: string[] }>;
@@ -23,7 +23,7 @@ const buildAdminUrl = (request: NextRequest, segments: string[]) => {
 const proxyAdminRequest = async (request: NextRequest, context: AdminProxyContext) => {
   const { path = [] } = await context.params;
   if (!isSafePath(path)) {
-    return NextResponse.json({ error: 'INVALID_ADMIN_PROXY_PATH' }, { status: 400 });
+    return noStoreJson({ error: 'INVALID_ADMIN_PROXY_PATH' }, { status: 400 });
   }
 
   const csrfRejection = rejectCrossOriginMutation(request);
@@ -32,7 +32,7 @@ const proxyAdminRequest = async (request: NextRequest, context: AdminProxyContex
   const cookieStore = await cookies();
   const session = await readAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
   if (!session) {
-    return NextResponse.json({ error: 'ADMIN_SESSION_REQUIRED' }, { status: 401 });
+    return noStoreJson({ error: 'ADMIN_SESSION_REQUIRED' }, { status: 401 });
   }
 
   const headers: HeadersInit = {

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
-import { readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
+import { noStoreJson, readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
 type DashboardProxyContext = {
   params: Promise<{ path?: string[] }>;
@@ -34,7 +34,7 @@ const buildApiUrl = (request: NextRequest, segments: string[]) => {
 const proxyDashboardRequest = async (request: NextRequest, context: DashboardProxyContext) => {
   const { path = [] } = await context.params;
   if (!isSafePath(path) || !isAllowedDashboardPath(path)) {
-    return NextResponse.json({ error: 'INVALID_DASHBOARD_PROXY_PATH' }, { status: 400 });
+    return noStoreJson({ error: 'INVALID_DASHBOARD_PROXY_PATH' }, { status: 400 });
   }
 
   const csrfRejection = rejectCrossOriginMutation(request);
@@ -43,11 +43,11 @@ const proxyDashboardRequest = async (request: NextRequest, context: DashboardPro
   const cookieStore = await cookies();
   const session = await readDashboardSessionToken(cookieStore.get(DASHBOARD_SESSION_COOKIE)?.value);
   if (!session) {
-    return NextResponse.json({ error: 'DASHBOARD_SESSION_REQUIRED' }, { status: 401 });
+    return noStoreJson({ error: 'DASHBOARD_SESSION_REQUIRED' }, { status: 401 });
   }
 
   if (!dashboardProxyToken && process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ error: 'DASHBOARD_PROXY_TOKEN_NOT_CONFIGURED' }, { status: 500 });
+    return noStoreJson({ error: 'DASHBOARD_PROXY_TOKEN_NOT_CONFIGURED' }, { status: 500 });
   }
 
   const headers = new Headers();
