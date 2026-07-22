@@ -2,12 +2,14 @@
 
 This file is the execution guide for the remaining launch work after local code/build prep.
 
+The hard public-launch security decision is defined in `docs/security-release-gate.md`. Generate release evidence with `npm run launch:report`; do not infer launch readiness from this guide alone.
+
 ## 1. Current Local State
 
 - Local Postgres is reachable on `localhost:5433` when `DRAPIXAI_POSTGRES_PORT=5433`
 - Local Redis is reachable on `localhost:6379`
 - Local MinIO is reachable on `localhost:9000`
-- Prisma schema has been pushed successfully to the clean local `drapixai` database
+- Prisma schema is valid, and the initial migration has been deployed successfully to an isolated clean database
 - Web and API builds pass
 - Python compile validation for `drapixai_ai` passes
 - Local Windows output is not a CatVTON quality gate.
@@ -21,7 +23,8 @@ DrapixAI CatVTON quality is validated on RunPod Linux Ubuntu GPU.
 - Python: `3.11`
 - CUDA: `12.4.1`
 - GPU target: `A100` preferred, `A10` acceptable, `T4` only for low-cost testing
-- Pinned Python stack: `drapixai_ai/requirements.txt`
+- Quality-proven rollback stack: `drapixai_ai/requirements.txt` (not approved for public production because its resolved dependency audit is not clean)
+- Public-launch candidate: `drapixai_ai/requirements.security-candidate.txt`, promoted only after the A100 direct/SDK quality gate
 - Required system packages: `curl`, `ffmpeg`, `git`, `libgl1`, `libglib2.0-0`, `libgomp1`, `libsm6`, `libxext6`, `libxrender1`, `redis-server`
 
 Do not approve production quality from Windows/local smoke images. Production quality gates must run on the RunPod stack above with AutoMasker, normal resolution, normal inference steps, and the expanded matrix.
@@ -33,6 +36,23 @@ Use these three files as the source of truth:
 - `deploy/env/api.production.env`
 - `deploy/env/web.production.env`
 - `deploy/env/ai.production.env`
+
+### Database migration gate
+
+For a fresh database, deploy schema changes with:
+
+```bash
+npm --prefix apps/api run prisma:migrate:deploy
+```
+
+For an existing database previously managed with `prisma db push`, take a verified backup first. Confirm that its schema matches `apps/api/prisma/schema.prisma`, then baseline the initial migration without executing its table-creation SQL:
+
+```bash
+cd apps/api
+npx prisma migrate resolve --applied 20260713150000_initial_launch_schema
+```
+
+Do not run the initial migration directly against populated tables. Future releases must add a new migration and use `prisma migrate deploy`; `prisma db push` remains a local prototyping command only.
 
 On Windows, you can create those files with generated secrets first:
 
@@ -153,6 +173,7 @@ Required:
 - `DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/catvton`
 - `DRAPIXAI_TRYON_ENGINE=catvton`
 - `DRAPIXAI_GARMENT_CACHE_DIR=/workspace/drapixai/runtime/garments`
+- `DRAPIXAI_MIN_QUALITY_SCORE=0.95`
 - `DRAPIXAI_ADMIN_TOKEN`
 - `DRAPIXAI_AI_SERVICE_TOKEN`
 
@@ -177,18 +198,26 @@ Recommended defaults already match the A100 path:
 These are hard launch gates, not recommendations:
 
 - `DRAPIXAI_CORS_ORIGINS` must list exact production origins. Never use `*` in production.
+- The API and AI services must both enforce a minimum publishable quality score of `0.95`; latency above 12 seconds is a performance-review condition, not permission to use a lower-quality generation path.
 - `JWT_SECRET`, `NEXTAUTH_SECRET`, `ADMIN_SESSION_SECRET`, `DASHBOARD_SESSION_SECRET`, `DRAPIXAI_ADMIN_TOKEN`, and `DRAPIXAI_AI_SERVICE_TOKEN` must be long random secrets.
 - RunPod setup scripts must generate admin/API/database/object-storage secrets at setup time and must not write fixed credentials into generated env files.
 - `npm --prefix apps/api run test:launch` must pass before release; it includes tracked env-file, generated-artifact, source-secret, and operator-log redaction checks so provider tokens and credential-bearing service URLs cannot be committed or printed accidentally.
+- The full resolved graph in `drapixai_ai/requirements.security-candidate.txt` must pass `pip-audit` with only the three documented deployment-inapplicable exceptions in `docs/ai-runtime-security.md`. A top-level-only `--no-deps` audit is not a launch gate.
 - `DRAPIXAI_AUTH_SYNC_TOKEN` must be the same long random secret on the web and API services so Google login sync is server-to-server only.
 - The same `DRAPIXAI_AI_SERVICE_TOKEN` must be configured on the API and AI service.
 - Run `bash deploy/scripts/validate-production-env-set.sh` after editing production env files to verify shared secrets match across API, web, and AI.
 - The AI service must run with `DRAPIXAI_ENV=production` on RunPod so missing service/admin tokens fail startup.
+- CatVTON output safety must remain enabled with `DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK=0`; RunPod preflight verifies its safety checker, feature extractor, and replacement image before startup.
+- API and Shopify catalog image writes must fail closed when object storage is unavailable. Keep `DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK=0` in production so temporary node disks never become an accidental data store.
 - Public upload paths only accept `jpg`, `jpeg`, `png`, and `webp` images.
 - `/ready` must not expose detailed internal errors in production unless `DRAPIXAI_EXPOSE_READY_DETAILS=1` is intentionally set for staging.
 - The storefront SDK must use confirmed `productId` or a ready cache key; public production traffic should not rely on arbitrary shopper-provided garment uploads.
 - SDK try-on and render routes must block expired trials and explicitly inactive subscription states before queuing generation, not only after monthly quota is exhausted.
 - Storefront domain verification must use HTTPS in production. The `DRAPIXAI_ALLOW_INSECURE_STORE_VERIFICATION=1` HTTP fallback is only for local development and must not be set on production API services.
+- Production SDK keys must never auto-bind to the first caller-supplied domain. Keep `DRAPIXAI_ALLOW_SDK_DOMAIN_AUTO_BIND=0`; configure and verify the storefront domain through the protected dashboard before installing the SDK. Public SDK validation derives the domain from the request origin and ignores caller-provided domain payloads.
+- Production SDK requests must also require a completed storefront ownership check (`storeVerifiedAt`). Saving a domain is not sufficient; the brand must publish the dashboard-provided verification meta tag and complete verification before shopper traffic is accepted.
+- New API keys use high-entropy `dpx_` values with indexed SHA-256 digest lookup. Keep `DRAPIXAI_ALLOW_LEGACY_API_KEYS=0` in production so random invalid requests cannot trigger sequential bcrypt checks across historical keys. Before rollout, rotate every pre-launch 32-character API key through the dashboard and update its storefront installation.
+- Keep `DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER=0`. The supported public flow is binary `POST /sdk/tryon`; the historical `/sdk/render` queue has no production consumer and fails closed with `410 Gone`.
 - Account store setup, storefront verification, and catalog feed sync errors must return stable failure codes/reasons rather than raw upstream exception text.
 - Admin dashboard traffic must go through the same-origin Next admin proxy. Do not expose admin API keys to browser JSON responses or `localStorage`.
 - Brand dashboard API keys may be displayed for SDK installation, but must not be persisted in browser `localStorage`; the encrypted httpOnly dashboard session, sealed with `DASHBOARD_SESSION_SECRET`, is the source of truth. Brand dashboard management calls must go through the same-origin Next dashboard proxy, which forwards the key plus `DRAPIXAI_DASHBOARD_PROXY_TOKEN` only server-side. Backend account, analytics, catalog, garment, and mapping management routes must reject direct storefront-key calls that do not include the proxy token. Dashboard session validation must also forward the same private proxy token when checking an existing key. Google OAuth may keep the issued API key in the server-side NextAuth JWT only; browser-visible NextAuth sessions must not expose it.
@@ -331,6 +360,8 @@ These are the current recommended assumptions for Runpod A100:
 
 ### Assumptions that still need live confirmation
 
+- the secure CUDA 12.6 candidate passes its full dependency audit and xFormers kernel check on the selected A100 driver
+- the enabled CatVTON safety checker stays inside the 12-second warm SDK target without changing accepted-result realism
 - one complete `/sdk/tryon` request returns an image successfully
 - model path is valid and complete on Runpod
 - worker remains stable under actual diffusion workload
@@ -432,7 +463,7 @@ This proves:
 
 It intentionally skips final `/sdk/tryon`. Full image generation, quality score, warnings, and latency must still be proven on RunPod A100 with `DRAPIXAI_SMOKE_SKIP_TRYON` unset.
 
-## 10. Staging Checklist
+## 10. Staging Verification
 
 Before calling anything launch-ready, complete this list:
 
@@ -450,13 +481,13 @@ Before calling anything launch-ready, complete this list:
 12. One real `/sdk/tryon` call returns a real image
 13. Env validation passes for `api`, `web`, and `ai`
 
-## 10. Deploy / No-Deploy Gate
+## 11. Release Decision
 
 ### Deploy only if all are true
 
 - web build passes
 - API build passes
-- local schema sync passes
+- `prisma migrate deploy` passes on a clean verification database
 - staging env files are complete
 - edge host is reachable over HTTPS
 - API is reachable over HTTPS
@@ -472,9 +503,14 @@ Before calling anything launch-ready, complete this list:
 - storage writes fail or generated images cannot be retrieved
 - Redis is unstable or worker queue stalls
 
-## 10. Remaining Blockers After Today
+## 12. Remaining Launch Evidence
 
-- live Runpod A100 validation
-- real SMTP verification
-- real Google OAuth verification, if enabled
-- one successful end-to-end public try-on result on Linux GPU
+- replace the remaining `DRAPIXAI_AI_URL` placeholder with the next private/restricted live GPU endpoint
+- promote the secure runtime only after A100 direct/SDK parity, output-safety, quality, and latency validation
+- pass the rights-cleared 50-case upper-body matrix with one candidate, score at least `0.95`, no warnings, and recorded latency
+- deploy migrations to the production PostgreSQL database and prove API/Redis/AI readiness through the public HTTPS edge
+- confirm production object-storage write/read/delete behavior with local fallback disabled
+- confirm one real SMTP delivery and its `EmailLog` audit row
+- complete real Google OAuth verification only if Google login remains enabled at launch
+- supply Shopify Partner credentials, complete a development-store Theme App Extension test, and satisfy Shopify review requirements before advertising one-click Shopify installation
+- run one successful public SDK try-on from a verified storefront domain and record its image, headers, latency, and quality decision

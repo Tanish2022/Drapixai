@@ -40,7 +40,7 @@ def main() -> int:
     headers = parse_headers(headers_path)
     header = lambda name: headers.get(name.lower(), "").strip()
 
-    min_quality = float(os.getenv("DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE", "0.90"))
+    min_quality = float(os.getenv("DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE", "0.95"))
     max_latency_ms = int(os.getenv("DRAPIXAI_LAUNCH_TARGET_LATENCY_MS", "12000"))
 
     quality = parse_float(header("x-drapixai-quality-score"))

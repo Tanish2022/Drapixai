@@ -42,7 +42,11 @@ if ($AiUrl) {
 
 if ($WebUrl) {
   $webHealth = Get-Json "$($WebUrl.TrimEnd('/'))/api/health"
-  Assert-Check "Web /api/health" ($webHealth.status -eq "ok") $webHealth
+  Assert-Check "Web /api/health status" ($webHealth.status -eq "operational") $webHealth
+  Assert-Check "Web storefront ready" ($webHealth.services.storefront -eq $true) $webHealth
+  Assert-Check "Web API ready" ($webHealth.services.api -eq $true) $webHealth
+  Assert-Check "Web data ready" ($webHealth.services.data -eq $true) $webHealth
+  Assert-Check "Web AI ready" ($webHealth.services.ai -eq $true) $webHealth
 }
 
 Write-Host "Live stack proof completed."

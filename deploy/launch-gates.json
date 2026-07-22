@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "repository": [
+    {
+      "id": "api-build",
+      "label": "API production build",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "build"]
+    },
+    {
+      "id": "web-build",
+      "label": "Web production build",
+      "runner": "npm",
+      "args": ["--prefix", "apps/web", "run", "build"]
+    },
+    {
+      "id": "launch-contracts",
+      "label": "Launch contract and secret-safety tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:launch"]
+    },
+    {
+      "id": "authorization",
+      "label": "RBAC and tenant-isolation tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:authorization"]
+    },
+    {
+      "id": "storefront-tokens",
+      "label": "Short-lived product-scoped storefront-token tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:storefront-tokens"]
+    },
+    {
+      "id": "cors-origin-cache",
+      "label": "Verified storefront CORS cache and query-amplification tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:cors-origin-cache"]
+    },
+    {
+      "id": "image-upload-security",
+      "label": "Image signature and decompression-bomb upload tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:image-upload-security"]
+    },
+    {
+      "id": "shopify-contracts",
+      "label": "Shopify signature and app-proxy contract tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:shopify"]
+    },
+    {
+      "id": "prisma-schema",
+      "label": "Prisma schema validation",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "exec", "prisma", "validate", "--", "--schema", "apps/api/prisma/schema.prisma"]
+    },
+    {
+      "id": "edge-compose",
+      "label": "Hardened edge Compose manifest",
+      "runner": "docker",
+      "args": ["compose", "--env-file", "deploy/env/api.production.example", "-f", "deploy/docker-compose.edge.yml", "config", "--quiet"]
+    },
+    {
+      "id": "ai-compose",
+      "label": "Hardened AI Compose manifest",
+      "runner": "docker",
+      "args": ["compose", "--env-file", "deploy/env/ai.production.example", "-f", "deploy/docker-compose.ai.yml", "config", "--quiet"]
+    },
+    {
+      "id": "api-dependency-audit",
+      "label": "API production dependency audit",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "audit", "--omit=dev", "--audit-level=high"]
+    },
+    {
+      "id": "web-dependency-audit",
+      "label": "Web production dependency audit",
+      "runner": "npm",
+      "args": ["--prefix", "apps/web", "audit", "--omit=dev", "--audit-level=high"]
+    },
+    {
+      "id": "python-compile",
+      "label": "Production Python compile validation",
+      "runner": "python",
+      "args": ["-m", "compileall", "-q", "drapixai_ai", "deploy/runpod"]
+    },
+    {
+      "id": "transient-spool",
+      "label": "Transient shopper-image spool validation",
+      "runner": "python",
+      "args": ["-m", "drapixai_ai.scripts.validate_transient_spool"]
+    },
+    {
+      "id": "quality-regressions",
+      "label": "CPU quality-scoring regression suite",
+      "runner": "python",
+      "args": ["-m", "drapixai_ai.scripts.validate_garment_skin_detection"]
+    },
+    {
+      "id": "neutral-garment-regressions",
+      "label": "Neutral-garment scorer regression suite",
+      "runner": "python",
+      "args": ["-m", "drapixai_ai.scripts.validate_tryon_scorer_neutral_garments"]
+    },
+    {
+      "id": "matrix-tooling",
+      "label": "50-case quality-matrix tooling validation",
+      "runner": "python",
+      "args": ["deploy/runpod/validate_upper_body_50_tooling.py"]
+    },
+    {
+      "id": "csp-source",
+      "label": "Nonce-based production CSP source validation",
+      "runner": "node",
+      "args": ["scripts/verify-production-csp.mjs"]
+    }
+  ],
+  "releaseEvidence": [
+    {
+      "id": "clean-release-commit",
+      "label": "Exact clean release commit recorded"
+    },
+    {
+      "id": "disposable-db-migration",
+      "label": "Migrations pass on disposable PostgreSQL and immutable audit triggers reject mutation"
+    },
+    {
+      "id": "container-image-scan",
+      "label": "Built container images have no unresolved high or critical findings"
+    },
+    {
+      "id": "two-tenant-staging",
+      "label": "Two-tenant live security boundary test passes on production-like staging"
+    },
+    {
+      "id": "audit-chain-staging",
+      "label": "Staging immutable audit hash chain verifies as valid"
+    },
+    {
+      "id": "retention-staging",
+      "label": "Retention deletion, retry, URL clearing, and audit evidence verified"
+    },
+    {
+      "id": "private-services",
+      "label": "Database, Redis, object-storage admin, and GPU services have no public listener"
+    },
+    {
+      "id": "backup-restore",
+      "label": "Backup restore and rollback drill completed"
+    },
+    {
+      "id": "secret-rotation",
+      "label": "Production secrets rotated and revocation drill completed"
+    },
+    {
+      "id": "alerts",
+      "label": "Security, availability, queue, and quality alerts delivered to an operator"
+    },
+    {
+      "id": "sdk-quality-parity",
+      "label": "Public SDK try-on matches approved Standard direct quality and latency targets"
+    },
+    {
+      "id": "quality-matrix",
+      "label": "Rights-cleared 50-case upper-body matrix meets the approved launch threshold"
+    },
+    {
+      "id": "authorized-pentest",
+      "label": "Authorized independent penetration test has no unresolved high or critical findings"
+    }
+  ]
+}

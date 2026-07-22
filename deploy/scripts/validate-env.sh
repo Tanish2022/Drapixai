@@ -88,6 +88,24 @@ require_min_length() {
   fi
 }
 
+require_base64_bytes() {
+  local name="$1"
+  local expected="$2"
+  local value="${!name:-}"
+  python3 - "$name" "$value" "$expected" <<'PY'
+import base64
+import sys
+
+name, value, expected = sys.argv[1], sys.argv[2], int(sys.argv[3])
+try:
+    decoded = base64.b64decode(value, validate=True)
+except Exception:
+    raise SystemExit(f"Environment variable must be valid base64: {name}")
+if len(decoded) != expected:
+    raise SystemExit(f"Environment variable {name} must decode to exactly {expected} bytes")
+PY
+}
+
 require_pair_or_none() {
   local first="$1"
   local second="$2"
@@ -118,6 +136,10 @@ case "$profile" in
       DRAPIXAI_CORS_ORIGINS
       DRAPIXAI_ADMIN_TOKEN
       DRAPIXAI_ADMIN_PASSWORD
+      DRAPIXAI_ADMIN_TOTP_SECRET
+      DRAPIXAI_STOREFRONT_TOKEN_SECRET
+      DRAPIXAI_AUDIT_LOG_SECRET
+      DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION
       S3_BUCKET
       AWS_REGION
       AWS_ACCESS_KEY_ID
@@ -149,6 +171,7 @@ case "$profile" in
       DRAPIXAI_DEVICE
       DRAPIXAI_CUDA_DEVICE
       DRAPIXAI_REDIS_URL
+      DRAPIXAI_REDIS_PASSWORD
       DRAPIXAI_TRYON_ENGINE
       DRAPIXAI_MODEL_DIR
       DRAPIXAI_CATVTON_MODEL_DIR
@@ -198,22 +221,70 @@ if [[ "$profile" == "api" ]]; then
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_PASSWORD 12
+  require_min_length DRAPIXAI_ADMIN_TOTP_SECRET 16
+  require_min_length DRAPIXAI_STOREFRONT_TOKEN_SECRET 32
+  require_min_length DRAPIXAI_AUDIT_LOG_SECRET 32
+  require_equals DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION "aws:kms"
+  require_var DRAPIXAI_S3_KMS_KEY_ID
+  if [[ "$DATABASE_URL" != *"sslmode=verify-full"* ]]; then
+    echo "DATABASE_URL must set sslmode=verify-full" >&2
+    exit 1
+  fi
+  if [[ "$REDIS_URL" != rediss://* ]]; then
+    echo "REDIS_URL must use rediss:// in production" >&2
+    exit 1
+  fi
+  if [[ -n "${S3_ENDPOINT:-}" && "$S3_ENDPOINT" != https://* ]]; then
+    echo "S3_ENDPOINT must use https:// in production" >&2
+    exit 1
+  fi
   require_not_equals DRAPIXAI_CORS_ORIGINS "*"
   require_equals DRAPIXAI_REQUIRE_GARMENT_CACHE "1"
+  require_equals DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER "0"
+  require_equals DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK "0"
+  require_equals DRAPIXAI_GARMENT_APPROVAL_REQUIRED "1"
   require_equals DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON "0"
   require_equals DRAPIXAI_SDK_GENERATION_SOURCE "original_verified"
+  require_number_at_least DRAPIXAI_EXCELLENT_QUALITY_SCORE "0.95"
+  require_number_at_least DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE "0.95"
+  require_equals DRAPIXAI_EXCELLENT_LATENCY_MS "10000"
+  require_equals DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS "12000"
+  require_equals DRAPIXAI_ENABLE_LOWER_BODY "0"
+  if [[ "${DRAPIXAI_SHOPIFY_ENABLED:-0}" == "1" ]]; then
+    for name in SHOPIFY_API_KEY SHOPIFY_API_SECRET DRAPIXAI_PUBLIC_API_BASE_URL DRAPIXAI_WEB_BASE_URL DRAPIXAI_SHOPIFY_STATE_SECRET DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY DRAPIXAI_STOREFRONT_TOKEN_SECRET; do
+      require_var "$name"
+      reject_placeholder "$name"
+    done
+    require_min_length SHOPIFY_API_KEY 16
+    require_min_length SHOPIFY_API_SECRET 32
+    require_min_length DRAPIXAI_SHOPIFY_STATE_SECRET 32
+    require_base64_bytes DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY 32
+    require_equals SHOPIFY_USE_LEGACY_INSTALL_FLOW "0"
+    require_equals DRAPIXAI_SHOPIFY_AUTO_PREPARE "1"
+    require_var DRAPIXAI_SHOPIFY_IMAGE_HOSTS
+    require_not_equals DRAPIXAI_SHOPIFY_IMAGE_HOSTS "*"
+  fi
 fi
 
 if [[ "$profile" == "ai" ]]; then
+  require_min_length DRAPIXAI_REDIS_PASSWORD 32
   require_equals DRAPIXAI_ENV "production"
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_equals DRAPIXAI_TRYON_ENGINE "catvton"
+  require_equals DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK "0"
+  require_equals DRAPIXAI_CATVTON_MODEL_REVISION "2969fcf85fe62f2036605716f0b56f0b81d01d79"
+  require_equals DRAPIXAI_CATVTON_GIT_COMMIT "7818397f25613beedb3d861a34769f607cfcf3b1"
+  require_equals DRAPIXAI_CATVTON_BASE_REVISION "8a4288a76071f7280aedbdb3253bdb9e9d5d84bb"
+  require_equals DRAPIXAI_CATVTON_VAE_REVISION "31f26fdeee1355a5c34592e401dd41e45d25a493"
+  require_var DRAPIXAI_CATVTON_BASE_MODEL
+  require_var DRAPIXAI_CATVTON_VAE_MODEL
   require_equals DRAPIXAI_CANDIDATE_COUNT "1"
-  require_number_at_least DRAPIXAI_MIN_QUALITY_SCORE "0.9"
+  require_number_at_least DRAPIXAI_MIN_QUALITY_SCORE "0.95"
   require_equals DRAPIXAI_GARMENT_CACHE_VERSION "v3-1024x1365"
   require_equals DRAPIXAI_GARMENT_TARGET_WIDTH "1024"
   require_equals DRAPIXAI_GARMENT_TARGET_HEIGHT "1365"
+  require_equals DRAPIXAI_GARMENT_CONDITION_MAX_EDGE "1536"
   require_equals DRAPIXAI_ENABLE_FINAL_OUTPUT_UPSCALE "1"
   require_equals DRAPIXAI_OUTPUT_WIDTH "1024"
   require_equals DRAPIXAI_OUTPUT_HEIGHT "1365"

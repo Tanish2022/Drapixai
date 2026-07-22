@@ -12,8 +12,8 @@ apps/web/tsconfig.tsbuildinfo
 logs
 models
 uploads
-.env
-apps/api/.env
-apps/web/.env.local
-drapixai_ai/.env
-
+**/.env
+**/.env.*
+deploy/env/*.production.env
+!**/*.example
+!**/*.sample

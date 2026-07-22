@@ -12,7 +12,11 @@
     "build": "npm --prefix apps/api run build && npm --prefix apps/web run build",
     "preflight:local": "powershell -ExecutionPolicy Bypass -File deploy\\scripts\\local-preflight.ps1",
     "prove:live": "powershell -ExecutionPolicy Bypass -File deploy\\scripts\\prove-live-stack.ps1",
-    "test:launch": "npm --prefix apps/api run test:launch"
+    "launch:report": "node scripts/launch-gate-report.mjs --scope=all",
+    "launch:report:repository": "node scripts/launch-gate-report.mjs --scope=repository",
+    "test:launch": "npm --prefix apps/api run test:launch",
+    "test:shopify": "npm --prefix apps/api run test:shopify",
+    "test:storefront-key-lifecycle": "npm --prefix apps/api run test:storefront-key-lifecycle"
   },
   "devDependencies": {
     "typescript": "^5.3.0"

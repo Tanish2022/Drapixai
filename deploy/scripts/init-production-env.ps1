@@ -27,6 +27,25 @@ function New-SecretValue {
     $builder.ToString()
 }
 
+function New-Base64Key {
+    $bytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    [Convert]::ToBase64String($bytes)
+}
+
+function New-Base32Secret {
+    $alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    $bytes = New-Object byte[] 20
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $bits = -join ($bytes | ForEach-Object { [Convert]::ToString($_, 2).PadLeft(8, '0') })
+    $builder = New-Object System.Text.StringBuilder
+    for ($offset = 0; $offset -lt $bits.Length; $offset += 5) {
+        $chunk = $bits.Substring($offset, [Math]::Min(5, $bits.Length - $offset)).PadRight(5, '0')
+        [void]$builder.Append($alphabet[[Convert]::ToInt32($chunk, 2)])
+    }
+    $builder.ToString()
+}
+
 function Set-KeyValue {
     param(
         [string]$Content,
@@ -70,12 +89,17 @@ $apiDomain = "$ApiSubdomain.$Domain"
 $jwtSecret = New-SecretValue
 $adminToken = New-SecretValue
 $adminPassword = New-SecretValue
+$adminTotpSecret = New-Base32Secret
 $nextAuthSecret = New-SecretValue
 $adminSessionSecret = New-SecretValue
 $dashboardSessionSecret = New-SecretValue
 $authSyncToken = New-SecretValue
 $dashboardProxyToken = New-SecretValue
 $aiServiceToken = New-SecretValue
+$shopifyStateSecret = New-SecretValue
+$storefrontTokenSecret = New-SecretValue
+$auditLogSecret = New-SecretValue
+$shopifyEncryptionKey = New-Base64Key
 
 Write-EnvFile `
     -SourcePath (Join-Path $envDir "api.production.example") `
@@ -89,6 +113,13 @@ Write-EnvFile `
         "DRAPIXAI_CORS_ORIGINS" = "https://$Domain,https://www.$Domain"
         "DRAPIXAI_ADMIN_EMAIL" = $AdminEmail
         "DRAPIXAI_ADMIN_PASSWORD" = $adminPassword
+        "DRAPIXAI_ADMIN_TOTP_SECRET" = $adminTotpSecret
+        "DRAPIXAI_PUBLIC_API_BASE_URL" = "https://$apiDomain"
+        "DRAPIXAI_WEB_BASE_URL" = "https://$Domain"
+        "DRAPIXAI_SHOPIFY_STATE_SECRET" = $shopifyStateSecret
+        "DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY" = $shopifyEncryptionKey
+        "DRAPIXAI_STOREFRONT_TOKEN_SECRET" = $storefrontTokenSecret
+        "DRAPIXAI_AUDIT_LOG_SECRET" = $auditLogSecret
         "BILLING_UPGRADE_URL" = "https://$Domain/pricing"
         "S3_BUCKET" = $S3Bucket
         "AWS_REGION" = $AwsRegion
@@ -110,6 +141,7 @@ Write-EnvFile `
         "DRAPIXAI_DASHBOARD_PROXY_TOKEN" = $dashboardProxyToken
         "NEXT_PUBLIC_GOOGLE_AUTH_ENABLED" = "0"
         "NEXT_PUBLIC_DEMO_VIDEO_URL" = ""
+        "NEXT_PUBLIC_SHOPIFY_APP_INSTALL_URL" = ""
         "NEXT_PUBLIC_ADMIN_EMAIL" = $AdminEmail
     }
 
@@ -136,6 +168,8 @@ Write-Host "- AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY"
 Write-Host "- DRAPIXAI_S3_ACCESS_KEY_ID / DRAPIXAI_S3_SECRET_ACCESS_KEY"
 Write-Host "- SMTP_HOST / SMTP_USER / SMTP_PASS"
 Write-Host "- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET if Google login is enabled"
+Write-Host "- SHOPIFY_API_KEY / SHOPIFY_API_SECRET and set DRAPIXAI_SHOPIFY_ENABLED=1 when the Shopify app is created"
+Write-Host "- NEXT_PUBLIC_SHOPIFY_APP_INSTALL_URL after the Shopify listing or install link exists"
 Write-Host ""
 Write-Host "Next validation commands on Linux or WSL:"
 Write-Host "  set -a"

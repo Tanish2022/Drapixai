@@ -143,6 +143,15 @@ function Test-EnvFile {
   Add-Check "Env file: $RelativePath" (Test-Path $path) $path
 }
 
+function Get-JsonEndpoint {
+  param([string]$Url)
+  try {
+    return Invoke-RestMethod -Uri $Url -Method Get -TimeoutSec 10
+  } catch {
+    return $null
+  }
+}
+
 Push-Location $root
 try {
   Add-Check "Workspace" (Test-Path "package.json") $root
@@ -177,6 +186,23 @@ try {
     Add-Check "Python venv imports" ($LASTEXITCODE -eq 0) (($importCheck | Select-Object -First 1) -join "")
   }
 
+  $localSecretFile = Join-Path $root "runtime/local-stack.env"
+  $localSecretsReady = Test-Path -LiteralPath $localSecretFile
+  if ($localSecretsReady) {
+    $localSecretValues = @{}
+    foreach ($line in Get-Content -LiteralPath $localSecretFile) {
+      if ($line -match '^([A-Z0-9_]+)=(.+)$') {
+        $localSecretValues[$Matches[1]] = $Matches[2].Trim()
+      }
+    }
+    foreach ($key in @("DASHBOARD_SESSION_SECRET", "ADMIN_SESSION_SECRET", "DRAPIXAI_DASHBOARD_PROXY_TOKEN", "DRAPIXAI_AUTH_SYNC_TOKEN")) {
+      if (-not $localSecretValues.ContainsKey($key) -or $localSecretValues[$key].Length -lt 32) {
+        $localSecretsReady = $false
+      }
+    }
+  }
+  Add-Check "Local runtime secrets" $localSecretsReady "runtime/local-stack.env has strong shared API/web test secrets"
+
   $ports = @(
     @{ Name = "Postgres"; Port = $postgresPort },
     @{ Name = "Redis"; Port = $redisPort },
@@ -189,6 +215,39 @@ try {
   foreach ($port in $ports) {
     Add-Check "$($port.Name) port $($port.Port)" (Test-LocalPortOpen $port.Port) (Get-PortOwnerDetail $port.Port)
   }
+
+  $apiHealth = Get-JsonEndpoint "http://127.0.0.1:$apiPort/health"
+  Add-Check "API health" ($null -ne $apiHealth -and $apiHealth.status -eq "ok") "http://127.0.0.1:$apiPort/health"
+
+  $apiReady = Get-JsonEndpoint "http://127.0.0.1:$apiPort/ready"
+  $apiDependenciesReady = (
+    $null -ne $apiReady -and
+    $apiReady.status -eq "ready" -and
+    $apiReady.checks.database.ready -eq $true -and
+    $apiReady.checks.redis -eq $true -and
+    $apiReady.checks.ai.status -eq "ready"
+  )
+  Add-Check "API dependencies ready" $apiDependenciesReady "API -> Postgres, Redis, and AI"
+
+  $aiReady = Get-JsonEndpoint "http://127.0.0.1:$aiApiPort/ready"
+  $aiWorkerReady = (
+    $null -ne $aiReady -and
+    $aiReady.status -eq "ready" -and
+    $aiReady.model_ready -eq $true -and
+    $aiReady.worker_ready -eq $true
+  )
+  Add-Check "AI model and worker ready" $aiWorkerReady "http://127.0.0.1:$aiApiPort/ready"
+
+  $webHealth = Get-JsonEndpoint "http://127.0.0.1:$webPort/api/health"
+  $webOperational = (
+    $null -ne $webHealth -and
+    $webHealth.status -eq "operational" -and
+    $webHealth.services.storefront -eq $true -and
+    $webHealth.services.api -eq $true -and
+    $webHealth.services.data -eq $true -and
+    $webHealth.services.ai -eq $true
+  )
+  Add-Check "Web operational" $webOperational "http://127.0.0.1:$webPort/api/health"
 
   Write-Host "DrapixAI local preflight"
   Write-Host "======================="
@@ -206,11 +265,15 @@ try {
     Write-Host "  `$env:DRAPIXAI_POSTGRES_PORT=5433; docker-compose up -d --force-recreate postgres"
     Write-Host "  # Then point local API DATABASE_URL at localhost:5433."
     Write-Host "  npm --prefix apps/api run prisma:generate"
+    Write-Host "  npm --prefix apps/api run prisma:migrate:deploy"
+    Write-Host "  # For an older db-push database, back it up and follow deploy/production-readiness.md before baselining."
     Write-Host "  npm --prefix apps/api run build"
     Write-Host "  npm --prefix apps/web run build"
+    Write-Host "  npm run start:local  # Generates shared local session/proxy secrets"
     Write-Host "  npm run dev:api"
     Write-Host "  npm run dev:web"
     Write-Host "  uvicorn drapixai_ai.api.ai_server:app --host 0.0.0.0 --port 8080"
+    Write-Host "  python -m drapixai_ai.worker.gpu_worker"
     exit 1
   }
 

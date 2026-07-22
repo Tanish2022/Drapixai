@@ -83,7 +83,11 @@ fi
 if [[ -n "${WEB_URL:-}" ]]; then
   echo "==> Web health"
   web_health="$(fetch_json "${WEB_URL%/}/api/health")"
-  printf '%s' "$web_health" | json_assert "web /api/health" "status" '"ok"'
+  printf '%s' "$web_health" | json_assert "web /api/health status" "status" '"operational"'
+  printf '%s' "$web_health" | json_assert "web storefront ready" "services.storefront" 'true'
+  printf '%s' "$web_health" | json_assert "web api ready" "services.api" 'true'
+  printf '%s' "$web_health" | json_assert "web data ready" "services.data" 'true'
+  printf '%s' "$web_health" | json_assert "web ai ready" "services.ai" 'true'
 fi
 
 if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then

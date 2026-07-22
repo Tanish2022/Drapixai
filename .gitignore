@@ -8,10 +8,12 @@ node_modules/
 .env.*.local
 apps/**/.env.local
 apps/**/.env.*.local
+apps/shopify/shopify.app.toml
 dist/
 build/
 apps/api/dist/
 *.log
+*.rdb
 .DS_Store
 uploads/
 logs/
@@ -30,6 +32,7 @@ drapixai_runpod_*.patch
 runpod_*.env
 runpod_smoke_*.py
 tmp_*
+tmp/
 *.pem
 deploy/env/*.production.env
 output/

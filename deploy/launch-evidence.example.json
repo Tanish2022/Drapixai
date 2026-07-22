@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "releaseCommit": "REPLACE_WITH_40_CHARACTER_GIT_COMMIT",
+  "gates": {
+    "disposable-db-migration": {
+      "status": "PENDING",
+      "evidence": "release-record/migrations.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "container-image-scan": {
+      "status": "PENDING",
+      "evidence": "release-record/container-scan.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "two-tenant-staging": {
+      "status": "PENDING",
+      "evidence": "release-record/live-security-boundaries.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "audit-chain-staging": {
+      "status": "PENDING",
+      "evidence": "release-record/audit-chain.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "retention-staging": {
+      "status": "PENDING",
+      "evidence": "release-record/retention.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "private-services": {
+      "status": "PENDING",
+      "evidence": "release-record/network-exposure.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "backup-restore": {
+      "status": "PENDING",
+      "evidence": "release-record/backup-restore.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "secret-rotation": {
+      "status": "PENDING",
+      "evidence": "release-record/secret-rotation.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "alerts": {
+      "status": "PENDING",
+      "evidence": "release-record/alert-delivery.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "sdk-quality-parity": {
+      "status": "PENDING",
+      "evidence": "release-record/sdk-quality-parity.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "quality-matrix": {
+      "status": "PENDING",
+      "evidence": "release-record/upper-body-50-summary.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com"
+    },
+    "authorized-pentest": {
+      "status": "PENDING",
+      "evidence": "release-record/pentest-final-report.pdf",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "independent-tester@example.com"
+    }
+  }
+}

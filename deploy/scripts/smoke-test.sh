@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 if [[ -z "${API_URL:-}" ]]; then
   echo "Set API_URL before running smoke-test.sh" >&2
   exit 1
@@ -26,6 +29,7 @@ DOMAIN="${DOMAIN:-staging.drapixai.com}"
 ORIGIN_URL="${ORIGIN_URL:-https://${DOMAIN}}"
 GARMENT_ID="${GARMENT_ID:-smoke-upper-garment}"
 PRODUCT_ID="${PRODUCT_ID:-smoke-upper-product}"
+GARMENT_CATEGORY="${GARMENT_CATEGORY:-shirt}"
 OUTPUT_FILE="${OUTPUT_FILE:-/tmp/drapixai-smoke.png}"
 HEADERS_FILE="${HEADERS_FILE:-/tmp/drapixai-smoke.headers}"
 DASHBOARD_PROXY_TOKEN="${DRAPIXAI_DASHBOARD_PROXY_TOKEN:-${DASHBOARD_PROXY_TOKEN:-}}"
@@ -64,6 +68,14 @@ if [[ -z "$api_key" || -z "$token" ]]; then
   exit 1
 fi
 
+if [[ "${DRAPIXAI_SMOKE_PREPARE_ACCOUNT:-0}" == "1" ]]; then
+  echo "==> preparing development-only verified smoke storefront"
+  (
+    cd "$APP_ROOT/apps/api"
+    npx ts-node src/scripts/prepare-smoke-account.ts "$EMAIL" "$DOMAIN"
+  )
+fi
+
 echo "==> validating SDK key"
 curl --fail --silent --show-error \
   -X POST "${API_URL%/}/sdk/validate" \
@@ -87,7 +99,7 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -F "cloth_image=@${CLOTH_IMAGE}" \
     -F "garment_id=${GARMENT_ID}" \
     -F "product_name=DrapixAI Smoke Upper Garment" \
-    -F "category=shirt")"
+    -F "category=${GARMENT_CATEGORY}")"
 
   cache_key="$(printf '%s' "$garment_json" | json_field cacheKey)"
   if [[ -z "$cache_key" ]]; then
@@ -103,7 +115,7 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -H "Content-Type: application/json" \
     -H "Origin: ${ORIGIN_URL}" \
     "${dashboard_proxy_header_args[@]}" \
-    -d "{\"items\":[{\"productId\":\"${PRODUCT_ID}\",\"productName\":\"DrapixAI Smoke Product\",\"category\":\"shirt\",\"garmentType\":\"upper\"}]}" >/dev/null
+    -d "{\"items\":[{\"productId\":\"${PRODUCT_ID}\",\"productName\":\"DrapixAI Smoke Product\",\"category\":\"${GARMENT_CATEGORY}\",\"garmentType\":\"upper\"}]}" >/dev/null
 
   curl --fail --silent --show-error \
     -X POST "${API_URL%/}/sdk/matches/${GARMENT_ID}/confirm" \
@@ -114,7 +126,7 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -d "{\"productId\":\"${PRODUCT_ID}\"}" >/dev/null
 
   echo "==> running SDK try-on through confirmed cached product mapping"
-  curl --fail --silent --show-error \
+  sdk_http_status="$(curl --silent --show-error \
     -X POST "${API_URL%/}/sdk/tryon" \
     -H "Authorization: Bearer ${api_key}" \
     -H "Origin: ${ORIGIN_URL}" \
@@ -123,7 +135,14 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -F "garment_type=upper" \
     -F "quality=standard" \
     -D "$HEADERS_FILE" \
-    -o "$OUTPUT_FILE"
+    -o "$OUTPUT_FILE" \
+    -w '%{http_code}')"
+  if [[ ! "$sdk_http_status" =~ ^2[0-9][0-9]$ ]]; then
+    echo "SDK try-on failed with HTTP ${sdk_http_status}:" >&2
+    cat "$OUTPUT_FILE" >&2
+    echo >&2
+    exit 1
+  fi
   test -s "$OUTPUT_FILE"
   echo "Saved try-on output to $OUTPUT_FILE"
   echo "Saved response headers to $HEADERS_FILE"
