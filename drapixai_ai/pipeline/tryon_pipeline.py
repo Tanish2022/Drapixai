@@ -55,6 +55,32 @@ class DrapixAITryOnPipeline:
     def _normalize_quality(quality: str | None) -> str:
         return "standard"
 
+    @staticmethod
+    def _parse_garment_type(value: str | None) -> tuple[str, str | None]:
+        normalized = (value or "upper").strip().lower().replace("-", "_")
+        category = None
+        if ":" in normalized:
+            garment_type, category = normalized.split(":", 1)
+        else:
+            garment_type = normalized
+            if garment_type in {"jeans", "pants", "trousers", "shorts", "skirt", "leggings", "joggers"}:
+                category = garment_type
+                garment_type = "lower"
+        if garment_type in {"lower_body"}:
+            garment_type = "lower"
+        if garment_type in {"upper_body"}:
+            garment_type = "upper"
+        return garment_type, category or None
+
+    @staticmethod
+    def _condition_garment(image: Image.Image) -> Image.Image:
+        max_edge = max(1024, settings.garment_condition_max_edge)
+        if max(image.size) <= max_edge:
+            return image
+        conditioned = image.copy()
+        conditioned.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+        return conditioned
+
     def run_tryon_with_metadata(
         self,
         person: Image.Image,
@@ -68,9 +94,10 @@ class DrapixAITryOnPipeline:
         timings: dict[str, int | list[int]] = {}
         quality_mode = self._normalize_quality(quality)
         candidates: list[TryOnCandidate] = []
+        condition_cloth = self._condition_garment(cloth)
         analysis_start = time.perf_counter()
         person_analysis = analyze_person(person)
-        garment_analysis = analyze_garment(cloth)
+        garment_analysis = analyze_garment(condition_cloth)
         timings["analysis_ms"] = int((time.perf_counter() - analysis_start) * 1000)
         input_warnings = sorted(
             set([*person_analysis.validation_warnings, *garment_analysis.warnings])
@@ -83,25 +110,50 @@ class DrapixAITryOnPipeline:
             generate_start = time.perf_counter()
             image = self.engine.generate(
                 person,
-                cloth,
+                condition_cloth,
                 inference_steps=inference_steps,
                 guidance_scale=guidance_scale,
                 seed=seed,
                 garment_type=garment_type,
             )
             generate_ms.append(int((time.perf_counter() - generate_start) * 1000))
+            safety_blocked = bool(getattr(self.engine, "last_safety_blocked", False))
             postprocess_start = time.perf_counter()
-            image = apply_quality_boosters(image, person=person, garment=cloth)
+            if not safety_blocked:
+                image = apply_quality_boosters(
+                    image,
+                    person=person,
+                    garment=condition_cloth,
+                    garment_type=garment_type,
+                    tryon_mask=getattr(self.engine, "last_generation_mask", None),
+                )
             postprocess_ms.append(int((time.perf_counter() - postprocess_start) * 1000))
-            candidates.append(TryOnCandidate(image=image, seed=seed))
+            candidates.append(
+                TryOnCandidate(
+                    image=image,
+                    seed=seed,
+                    warnings=["SAFETY_CHECK_BLOCKED"] if safety_blocked else [],
+                    metadata={"safety_blocked": safety_blocked},
+                )
+            )
 
         timings["candidate_generate_ms"] = generate_ms
         timings["candidate_postprocess_ms"] = postprocess_ms
         scoring_start = time.perf_counter()
-        best, candidate_scores, warnings = self.scorer.choose_best(person, cloth, candidates)
+        best, candidate_scores, warnings = self.scorer.choose_best(person, condition_cloth, candidates, garment_type=garment_type)
         timings["scoring_ms"] = int((time.perf_counter() - scoring_start) * 1000)
         timings["pipeline_total_ms"] = int((time.perf_counter() - pipeline_start) * 1000)
         warnings = sorted(set([*warnings, *input_warnings]))
+        normalized_garment_type, lower_category = self._parse_garment_type(garment_type)
+        quality_profile = (
+            f"lower_body_v1_{lower_category}" if normalized_garment_type == "lower" and lower_category else
+            "lower_body_v1" if normalized_garment_type == "lower" else
+            "upper_body_standard"
+        )
+        if quality_profile == "lower_body_v1":
+            warnings = sorted(set([*warnings, "LOWER_BODY_V1_REVIEW_REQUIRED"]))
+        if normalized_garment_type == "lower" and lower_category:
+            warnings = sorted(set([*warnings, "LOWER_BODY_V1_REVIEW_REQUIRED", f"LOWER_BODY_PROFILE:{lower_category.upper()}"]))
         if (best.score or 0.0) < settings.min_quality_score:
             warnings = sorted(set([*warnings, "QUALITY_SCORE_BELOW_THRESHOLD"]))
 
@@ -115,10 +167,15 @@ class DrapixAITryOnPipeline:
             metadata={
                 "selected_seed": best.seed,
                 "quality_mode": quality_mode,
+                "quality_profile": quality_profile,
+                "garment_type": normalized_garment_type,
+                "garment_category": lower_category,
                 "person_width": person_analysis.width,
                 "person_height": person_analysis.height,
-                "garment_width": garment_analysis.width,
-                "garment_height": garment_analysis.height,
+                "garment_width": cloth.width,
+                "garment_height": cloth.height,
+                "garment_condition_width": garment_analysis.width,
+                "garment_condition_height": garment_analysis.height,
                 "garment_foreground_ratio": garment_analysis.foreground_ratio,
                 "garment_bbox_ratio": garment_analysis.bbox_ratio,
                 "garment_background_ratio": garment_analysis.background_ratio,

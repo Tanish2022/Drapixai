@@ -7,6 +7,18 @@ from PIL import Image, ImageFilter
 
 from drapixai_ai.engines.base import TryOnCandidate
 from drapixai_ai.preprocess.garment_analyzer import prepare_garment_for_tryon
+from drapixai_ai.preprocess.lower_body_regions import build_lower_body_region_masks
+
+
+LOWER_BODY_CATEGORY_PROFILES: dict[str, dict[str, float | str]] = {
+    "jeans": {"label": "jeans", "coverage_min": 0.60, "hem_min": 0.50, "shoe_weight": 0.06, "crotch_weight": 0.03, "crotch_min": 0.55},
+    "pants": {"label": "pants", "coverage_min": 0.60, "hem_min": 0.50, "shoe_weight": 0.06, "crotch_weight": 0.03, "crotch_min": 0.55},
+    "trousers": {"label": "trousers", "coverage_min": 0.60, "hem_min": 0.50, "shoe_weight": 0.06, "crotch_weight": 0.03, "crotch_min": 0.55},
+    "shorts": {"label": "shorts", "coverage_min": 0.42, "hem_min": 0.56, "shoe_weight": 0.03, "crotch_weight": 0.04, "crotch_min": 0.50},
+    "skirt": {"label": "skirt", "coverage_min": 0.48, "hem_min": 0.58, "shoe_weight": 0.03, "crotch_weight": 0.01, "crotch_min": 0.0},
+    "leggings": {"label": "leggings", "coverage_min": 0.64, "hem_min": 0.48, "shoe_weight": 0.05, "crotch_weight": 0.04, "crotch_min": 0.58},
+    "joggers": {"label": "joggers", "coverage_min": 0.58, "hem_min": 0.48, "shoe_weight": 0.07, "crotch_weight": 0.02, "crotch_min": 0.52},
+}
 
 
 @dataclass(frozen=True)
@@ -29,10 +41,15 @@ class TryOnScorer:
         person: Image.Image,
         garment: Image.Image,
         candidate: Image.Image,
+        *,
+        garment_type: str | None = None,
     ) -> TryOnScore:
         person_rgb = self._rgb(person, candidate.size)
         garment_rgb = prepare_garment_for_tryon(garment, candidate.size)
         candidate_rgb = self._rgb(candidate, candidate.size)
+        normalized_garment_type, lower_category = self._parse_garment_type(garment_type)
+        if normalized_garment_type == "lower":
+            return self._score_lower_body_candidate(person_rgb, garment_rgb, candidate_rgb, category=lower_category)
 
         color_similarity = self._color_similarity(garment_rgb, candidate_rgb)
         body_similarity = self._body_similarity(person_rgb, candidate_rgb)
@@ -126,25 +143,179 @@ class TryOnScorer:
         person: Image.Image,
         garment: Image.Image,
         candidates: list[TryOnCandidate],
+        *,
+        garment_type: str | None = None,
     ) -> tuple[TryOnCandidate, list[float], list[str]]:
         scored: list[TryOnCandidate] = []
         candidate_scores: list[float] = []
 
         for candidate in candidates:
-            result = self.score_candidate(person, garment, candidate.image)
+            if candidate.metadata.get("safety_blocked"):
+                candidate_scores.append(0.0)
+                scored.append(
+                    TryOnCandidate(
+                        image=candidate.image,
+                        seed=candidate.seed,
+                        score=0.0,
+                        warnings=sorted(set([*candidate.warnings, "SAFETY_CHECK_BLOCKED"])),
+                        metadata=candidate.metadata,
+                    )
+                )
+                continue
+
+            result = self.score_candidate(person, garment, candidate.image, garment_type=garment_type)
             candidate_scores.append(result.score)
             scored.append(
                 TryOnCandidate(
                     image=candidate.image,
                     seed=candidate.seed,
                     score=result.score,
-                    warnings=result.warnings,
+                    warnings=sorted(set([*candidate.warnings, *result.warnings])),
                     metadata={**candidate.metadata, **result.metrics},
                 )
             )
 
         best = max(scored, key=lambda item: item.score or 0.0)
         return best, candidate_scores, sorted(set(best.warnings))
+
+    def _score_lower_body_candidate(
+        self,
+        person: Image.Image,
+        garment: Image.Image,
+        candidate: Image.Image,
+        *,
+        category: str | None = None,
+    ) -> TryOnScore:
+        profile = LOWER_BODY_CATEGORY_PROFILES.get(category or "", LOWER_BODY_CATEGORY_PROFILES["pants"])
+        region_masks = build_lower_body_region_masks(candidate, category)
+        color_similarity = self._color_similarity(garment, candidate)
+        texture_similarity = self._texture_similarity(garment, candidate)
+        face_similarity = self._face_similarity(person, candidate)
+        upper_body_preservation = self._upper_body_preservation(person, candidate)
+        background_cast_score = self._background_cast_score(person, garment, candidate)
+        pose_preservation = self._lower_pose_preservation(person, candidate)
+        shoe_preservation = self._shoe_preservation(person, candidate, region_masks["shoe"])
+        waistband_alignment = self._waistband_alignment(candidate, region_masks["waist"])
+        left_leg_integrity = self._single_leg_integrity(candidate, "left")
+        right_leg_integrity = self._single_leg_integrity(candidate, "right")
+        knee_preservation = self._knee_preservation(candidate, region_masks["knee"])
+        ankle_preservation = self._ankle_preservation(candidate, region_masks["ankle"])
+        lower_garment_coverage = self._lower_garment_coverage_score(garment, candidate)
+        hem_alignment = self._lower_hem_alignment(candidate, region_masks["hem"])
+        crotch_artifact_score = self._crotch_artifact_score(candidate, region_masks["crotch"])
+        edge_quality = self._edge_quality(candidate)
+        artifact_score = self._artifact_score(candidate)
+        rectangular_artifact_score = self._rectangular_artifact_score(candidate)
+        realism_score = self._realism_score(candidate)
+
+        score = (
+            0.14 * face_similarity
+            + 0.13 * upper_body_preservation
+            + 0.12 * pose_preservation
+            + 0.10 * color_similarity
+            + 0.09 * texture_similarity
+            + 0.08 * lower_garment_coverage
+            + 0.07 * waistband_alignment
+            + 0.06 * min(left_leg_integrity, right_leg_integrity)
+            + float(profile["shoe_weight"]) * shoe_preservation
+            + 0.05 * knee_preservation
+            + 0.04 * ankle_preservation
+            + 0.03 * hem_alignment
+            + float(profile["crotch_weight"]) * crotch_artifact_score
+            + 0.03 * edge_quality
+            + 0.03 * artifact_score
+            + 0.02 * rectangular_artifact_score
+            + 0.01 * background_cast_score
+            + 0.01 * realism_score
+        )
+        score = float(max(0.0, min(1.0, score)))
+
+        warnings: list[str] = []
+        if color_similarity < 0.45:
+            warnings.append("LOWER_GARMENT_COLOR_DRIFT")
+        if texture_similarity < 0.45:
+            warnings.append("LOWER_GARMENT_TEXTURE_DRIFT")
+        if face_similarity < 0.50:
+            warnings.append("FACE_CHANGED_RISK")
+        if upper_body_preservation < 0.58:
+            warnings.append("UPPER_BODY_CHANGED_RISK")
+        if background_cast_score < 0.72:
+            warnings.append("BACKGROUND_COLOR_CAST_RISK")
+        if pose_preservation < 0.55:
+            warnings.append("LOWER_BODY_POSE_CHANGED_RISK")
+        if shoe_preservation < 0.55:
+            warnings.append("SHOE_CHANGED_RISK")
+        if waistband_alignment < 0.50:
+            warnings.append("WAISTBAND_MISALIGNED")
+        if left_leg_integrity < 0.50:
+            warnings.append("LEFT_LEG_ARTIFACT_RISK")
+        if right_leg_integrity < 0.50:
+            warnings.append("RIGHT_LEG_ARTIFACT_RISK")
+        if knee_preservation < 0.50:
+            warnings.append("KNEE_ARTIFACT_RISK")
+        if ankle_preservation < 0.50:
+            warnings.append("ANKLE_ARTIFACT_RISK")
+        if lower_garment_coverage < float(profile["coverage_min"]):
+            warnings.append("LOWER_GARMENT_COVERAGE_INCOMPLETE")
+        if hem_alignment < float(profile["hem_min"]):
+            warnings.append(f"{str(profile['label']).upper()}_HEM_ALIGNMENT_RISK")
+        if crotch_artifact_score < float(profile["crotch_min"]):
+            warnings.append("CROTCH_ARTIFACT_RISK")
+        if artifact_score < 0.55:
+            warnings.append("IMAGE_ARTIFACT_RISK")
+
+        return TryOnScore(
+            score=score,
+            warnings=warnings,
+            metrics={
+                "face_preservation": face_similarity,
+                "upper_body_preservation": upper_body_preservation,
+                "background_cast_score": background_cast_score,
+                "pose_preservation": pose_preservation,
+                "shoe_preservation": shoe_preservation,
+                "waistband_alignment": waistband_alignment,
+                "left_leg_integrity": left_leg_integrity,
+                "right_leg_integrity": right_leg_integrity,
+                "knee_preservation": knee_preservation,
+                "ankle_preservation": ankle_preservation,
+                "lower_garment_color_similarity": color_similarity,
+                "lower_garment_texture_similarity": texture_similarity,
+                "lower_garment_coverage": lower_garment_coverage,
+                "hem_alignment": hem_alignment,
+                "crotch_artifact_score": crotch_artifact_score,
+                "edge_quality": edge_quality,
+                "artifact_score": artifact_score,
+                "rectangular_artifact_score": rectangular_artifact_score,
+                "overall_realism": realism_score,
+                "lower_body_category_profile": float(self._category_profile_code(str(profile["label"]))),
+                f"{str(profile['label'])}_profile_score": score,
+            },
+        )
+
+    @staticmethod
+    def _parse_garment_type(value: str | None) -> tuple[str, str | None]:
+        normalized = (value or "upper").strip().lower().replace("-", "_")
+        category = None
+        if ":" in normalized:
+            garment_type, category = normalized.split(":", 1)
+        else:
+            garment_type = normalized
+            if garment_type in LOWER_BODY_CATEGORY_PROFILES:
+                category = garment_type
+                garment_type = "lower"
+        if garment_type in {"lower_body"}:
+            garment_type = "lower"
+        if garment_type in {"upper_body"}:
+            garment_type = "upper"
+        return garment_type, category or None
+
+    @staticmethod
+    def _category_profile_code(category: str) -> int:
+        order = ["jeans", "pants", "trousers", "shorts", "skirt", "leggings", "joggers"]
+        try:
+            return order.index(category) + 1
+        except ValueError:
+            return 0
 
     @staticmethod
     def _rgb(image: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -279,21 +450,61 @@ class TryOnScorer:
         return float(max(0.0, min(1.0, 0.55 * boundary_score + 0.45 * separation_score)))
 
     @staticmethod
-    def _foreground_pixels(image: Image.Image) -> np.ndarray:
+    def _foreground_mask_array(arr: np.ndarray) -> np.ndarray:
+        """Separate a product garment from its plain preparation canvas.
+
+        Neutral black, white, and gray fabrics must remain foreground. Chroma
+        thresholds incorrectly classify those garments as background and make
+        coverage/hem scores follow a logo or print instead of the fabric.
+        """
+        h, w = arr.shape[:2]
+        sample = max(2, min(h, w) // 18)
+        corners = np.concatenate(
+            [
+                arr[:sample, :sample].reshape(-1, 3),
+                arr[:sample, -sample:].reshape(-1, 3),
+                arr[-sample:, :sample].reshape(-1, 3),
+                arr[-sample:, -sample:].reshape(-1, 3),
+            ],
+            axis=0,
+        )
+        background = np.median(corners, axis=0)
+        distance = np.linalg.norm(arr - background, axis=2)
+        luma_gap = np.abs(arr.mean(axis=2) - float(background.mean()))
+        return (distance > 0.045) | (luma_gap > 0.028)
+
+    @classmethod
+    def _foreground_pixels(cls, image: Image.Image) -> np.ndarray:
         arr = np.asarray(image.convert("RGB")).astype(np.float32) / 255.0
-        # Prepared garments sit on a white canvas. Exclude background and very dark buttons.
-        foreground = (arr.mean(axis=2) < 0.94) & (arr.std(axis=2) > 0.015)
+        foreground = cls._foreground_mask_array(arr)
         pixels = arr[foreground]
         if pixels.size == 0:
             return arr.reshape(-1, 3)
         return pixels
 
+    @classmethod
+    def _foreground_palette(cls, image: Image.Image, colors: int = 8) -> np.ndarray:
+        pixels = cls._foreground_pixels(image)
+        if len(pixels) > 50_000:
+            indices = np.linspace(0, len(pixels) - 1, 50_000, dtype=np.int64)
+            pixels = pixels[indices]
+        bins = np.clip((pixels * 15.0).astype(np.int16), 0, 15)
+        packed = bins[:, 0] * 256 + bins[:, 1] * 16 + bins[:, 2]
+        values, counts = np.unique(packed, return_counts=True)
+        order = np.argsort(counts)[::-1][: max(1, colors)]
+        palette = []
+        for value in values[order]:
+            member = packed == value
+            palette.append(pixels[member].mean(axis=0))
+        return np.asarray(palette, dtype=np.float32)
+
     def _untucked_hem_presence(self, garment: Image.Image, candidate: Image.Image) -> float:
         garment_arr = np.asarray(garment.convert("RGB")).astype(np.float32) / 255.0
         h, w = garment_arr.shape[:2]
         garment_lower = garment_arr[int(h * 0.58) : int(h * 0.90), int(w * 0.24) : int(w * 0.76)]
+        garment_foreground = self._foreground_mask_array(garment_arr)
         garment_lower_pixels = garment_lower[
-            (garment_lower.mean(axis=2) < 0.94) & (garment_lower.std(axis=2) > 0.015)
+            garment_foreground[int(h * 0.58) : int(h * 0.90), int(w * 0.24) : int(w * 0.76)]
         ]
         if garment_lower_pixels.size == 0:
             return 0.65
@@ -387,22 +598,41 @@ class TryOnScorer:
     @staticmethod
     def _sleeve_style(garment_arr: np.ndarray) -> str:
         h, w = garment_arr.shape[:2]
-        foreground = (garment_arr.mean(axis=2) < 0.94) & (garment_arr.std(axis=2) > 0.015)
-        side = foreground & (
-            (np.arange(w)[None, :] < w * 0.36) | (np.arange(w)[None, :] > w * 0.64)
-        )
-        side_window = side[int(h * 0.36) : int(h * 0.88)]
-        if side_window.size == 0:
+        foreground = TryOnScorer._foreground_mask_array(garment_arr)
+        ys, xs = np.where(foreground)
+        if xs.size == 0 or ys.size == 0:
             return "unknown"
-        row_coverage = side_window.mean(axis=1)
-        visible_rows = np.where(row_coverage > 0.035)[0]
+
+        x0, x1 = int(xs.min()), int(xs.max()) + 1
+        y0, y1 = int(ys.min()), int(ys.max()) + 1
+        bbox_h = max(1, y1 - y0)
+        bbox_w = max(1, x1 - x0)
+        torso_y0 = y0 + int(bbox_h * 0.58)
+        torso_y1 = y0 + int(bbox_h * 0.88)
+        torso_rows = foreground[torso_y0:torso_y1]
+        row_edges = []
+        for row in torso_rows:
+            columns = np.where(row)[0]
+            if columns.size:
+                row_edges.append((int(columns.min()), int(columns.max())))
+        if not row_edges:
+            return "unknown"
+
+        body_left = int(np.median([edge[0] for edge in row_edges]))
+        body_right = int(np.median([edge[1] for edge in row_edges]))
+        margin = max(2, int(bbox_w * 0.025))
+        xx = np.arange(w)[None, :]
+        sleeve = foreground & ((xx < body_left - margin) | (xx > body_right + margin))
+        sleeve_window = sleeve[y0:y1]
+        row_coverage = sleeve_window.sum(axis=1) / max(1, bbox_w)
+        visible_rows = np.where(row_coverage > 0.018)[0]
         if visible_rows.size == 0:
             return "short_sleeve"
-        sleeve_bottom = (int(h * 0.36) + int(visible_rows.max())) / max(1, h)
-        lower_coverage = float(side[int(h * 0.58) : int(h * 0.84)].mean())
-        if sleeve_bottom < 0.50:
+        sleeve_bottom = int(visible_rows.max()) / max(1, bbox_h)
+        lower_coverage = float(sleeve_window[int(bbox_h * 0.58) : int(bbox_h * 0.84)].mean())
+        if sleeve_bottom < 0.52:
             return "short_sleeve"
-        if sleeve_bottom < 0.66:
+        if sleeve_bottom < 0.68:
             return "rolled_sleeve"
         if lower_coverage <= 0.045:
             return "unknown"
@@ -427,22 +657,182 @@ class TryOnScorer:
         return 0.755
 
     def _garment_coverage_score(self, garment: Image.Image, candidate: Image.Image) -> float:
-        garment_color = np.median(self._foreground_pixels(garment), axis=0)
+        garment_palette = self._foreground_palette(garment)
+        sleeve_style = self._sleeve_style(np.asarray(garment.convert("RGB")).astype(np.float32) / 255.0)
         arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
         h, w = arr.shape[:2]
         yy, xx = np.mgrid[0:h, 0:w]
-        torso = (yy > h * 0.32) & (yy < h * 0.82) & (xx > w * 0.20) & (xx < w * 0.80)
-        left_sleeve = (yy > h * 0.36) & (yy < h * 0.76) & (xx > w * 0.08) & (xx < w * 0.32)
-        right_sleeve = (yy > h * 0.36) & (yy < h * 0.76) & (xx > w * 0.68) & (xx < w * 0.92)
+        torso = (yy > h * 0.32) & (yy < h * 0.78) & (xx > w * 0.26) & (xx < w * 0.74)
+        sleeve_bottom = 0.57 if sleeve_style == "short_sleeve" else 0.68 if sleeve_style == "rolled_sleeve" else 0.76
+        left_sleeve = (yy > h * 0.36) & (yy < h * sleeve_bottom) & (xx > w * 0.10) & (xx < w * 0.34)
+        right_sleeve = (yy > h * 0.36) & (yy < h * sleeve_bottom) & (xx > w * 0.66) & (xx < w * 0.90)
         region = torso | left_sleeve | right_sleeve
         if not region.any():
             return 0.45
         pixels = arr[region]
-        color_distance = np.linalg.norm(pixels - garment_color, axis=1)
-        close = color_distance < 0.30
+        color_distance = np.linalg.norm(pixels[:, None, :] - garment_palette[None, :, :], axis=2).min(axis=1)
+        close = color_distance < 0.24
         coverage = float(close.mean())
-        mean_similarity = 1.0 - min(1.0, float(np.linalg.norm(np.median(pixels, axis=0) - garment_color)) * 1.4)
-        return float(max(0.0, min(1.0, 0.70 * min(1.0, coverage * 1.65) + 0.30 * mean_similarity)))
+        palette_similarity = 1.0 - min(1.0, float(np.median(color_distance)) * 1.8)
+        return float(max(0.0, min(1.0, 0.75 * min(1.0, coverage * 1.45) + 0.25 * palette_similarity)))
+
+    def _upper_body_preservation(self, person: Image.Image, candidate: Image.Image) -> float:
+        person_arr = np.asarray(person.convert("RGB")).astype(np.float32) / 255.0
+        candidate_arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = candidate_arr.shape[:2]
+        region = np.zeros((h, w), dtype=bool)
+        region[: int(h * 0.44), :] = True
+        region[int(h * 0.44) : int(h * 0.62), : int(w * 0.18)] = True
+        region[int(h * 0.44) : int(h * 0.62), int(w * 0.82) :] = True
+        diff = np.abs(person_arr[region] - candidate_arr[region]).mean() if region.any() else 0.3
+        edge_diff = abs(float(self._pose_edge_map(person)[region].mean()) - float(self._pose_edge_map(candidate)[region].mean())) if region.any() else 0.2
+        return float(max(0.0, min(1.0, 1.0 - diff * 2.4 - edge_diff * 1.5)))
+
+    def _shoe_preservation(
+        self,
+        person: Image.Image,
+        candidate: Image.Image,
+        region_mask: Image.Image | None = None,
+    ) -> float:
+        person_arr = np.asarray(person.convert("RGB")).astype(np.float32) / 255.0
+        candidate_arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = candidate_arr.shape[:2]
+        if region_mask is None:
+            shoe = np.zeros((h, w), dtype=bool)
+            shoe[int(h * 0.88) :, int(w * 0.20) : int(w * 0.80)] = True
+        else:
+            shoe = self._region_bool(region_mask, (w, h))
+        diff = np.abs(person_arr[shoe] - candidate_arr[shoe]).mean() if shoe.any() else 0.25
+        return float(max(0.0, min(1.0, 1.0 - diff * 2.2)))
+
+    def _lower_pose_preservation(self, person: Image.Image, candidate: Image.Image) -> float:
+        person_edges = self._pose_edge_map(person)
+        candidate_edges = self._pose_edge_map(candidate)
+        h, w = person_edges.shape
+        region = np.zeros((h, w), dtype=bool)
+        region[int(h * 0.48) : int(h * 0.90), int(w * 0.18) : int(w * 0.82)] = True
+        p = person_edges[region]
+        c = candidate_edges[region]
+        if p.size == 0 or c.size == 0:
+            return 0.55
+        density_score = 1.0 - min(1.0, abs(float(p.mean()) - float(c.mean())) * 5.0)
+        overlap = float((p & c).sum() / max(1, (p | c).sum()))
+        row_score = 1.0 - min(1.0, float(np.abs(person_edges[region].mean() - candidate_edges[region].mean())) * 6.0)
+        return float(max(0.0, min(1.0, 0.40 * density_score + 0.40 * overlap + 0.20 * row_score)))
+
+    @classmethod
+    def _waistband_alignment(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+        edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        h, w = edges.shape
+        if region_mask is None:
+            band = edges[int(h * 0.43) : int(h * 0.55), int(w * 0.24) : int(w * 0.76)]
+        else:
+            band = cls._region_crop(edges, region_mask, (w, h))
+        if band.size == 0:
+            return 0.45
+        row_profile = band.mean(axis=1)
+        line_strength = float(row_profile.max()) if row_profile.size else 0.0
+        continuity = float((band > 0.18).mean())
+        return float(max(0.0, min(1.0, line_strength * 3.0 + continuity * 2.0)))
+
+    @staticmethod
+    def _single_leg_integrity(candidate: Image.Image, side: str) -> float:
+        edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        h, w = edges.shape
+        x0, x1 = (int(w * 0.22), int(w * 0.50)) if side == "left" else (int(w * 0.50), int(w * 0.78))
+        leg = edges[int(h * 0.55) : int(h * 0.90), x0:x1]
+        if leg.size == 0:
+            return 0.35
+        density = float((leg > 0.16).mean())
+        row_presence = float(((leg > 0.16).mean(axis=1) > 0.025).mean())
+        if density < 0.01:
+            return 0.30
+        if density > 0.42:
+            return 0.45
+        return float(max(0.0, min(1.0, 0.45 + row_presence * 0.45 + (1.0 - abs(density - 0.12) * 3.0) * 0.10)))
+
+    @classmethod
+    def _knee_preservation(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+        edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        h, w = edges.shape
+        knees = (
+            edges[int(h * 0.64) : int(h * 0.75), int(w * 0.22) : int(w * 0.78)]
+            if region_mask is None
+            else edges[cls._region_bool(region_mask, (w, h))]
+        )
+        if knees.size == 0:
+            return 0.45
+        density = float((knees > 0.18).mean())
+        return float(max(0.0, min(1.0, 1.0 - abs(density - 0.13) * 3.5)))
+
+    @classmethod
+    def _ankle_preservation(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+        edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        h, w = edges.shape
+        ankles = (
+            edges[int(h * 0.82) : int(h * 0.92), int(w * 0.24) : int(w * 0.76)]
+            if region_mask is None
+            else edges[cls._region_bool(region_mask, (w, h))]
+        )
+        if ankles.size == 0:
+            return 0.45
+        density = float((ankles > 0.18).mean())
+        return float(max(0.0, min(1.0, 1.0 - abs(density - 0.12) * 4.0)))
+
+    def _lower_garment_coverage_score(self, garment: Image.Image, candidate: Image.Image) -> float:
+        garment_color = np.median(self._foreground_pixels(garment), axis=0)
+        arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = arr.shape[:2]
+        region = arr[int(h * 0.48) : int(h * 0.88), int(w * 0.22) : int(w * 0.78)]
+        if region.size == 0:
+            return 0.45
+        color_distance = np.linalg.norm(region - garment_color, axis=2)
+        close = color_distance < 0.31
+        coverage = float(close.mean())
+        mean_similarity = 1.0 - min(1.0, float(np.linalg.norm(np.median(region.reshape(-1, 3), axis=0) - garment_color)) * 1.4)
+        return float(max(0.0, min(1.0, 0.70 * min(1.0, coverage * 1.7) + 0.30 * mean_similarity)))
+
+    @classmethod
+    def _lower_hem_alignment(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+        edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
+        h, w = edges.shape
+        hem = (
+            edges[int(h * 0.80) : int(h * 0.92), int(w * 0.24) : int(w * 0.76)]
+            if region_mask is None
+            else cls._region_crop(edges, region_mask, (w, h))
+        )
+        if hem.size == 0:
+            return 0.45
+        row_profile = hem.mean(axis=1)
+        return float(max(0.0, min(1.0, float(row_profile.max()) * 3.2)))
+
+    @classmethod
+    def _crotch_artifact_score(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+        arr = np.asarray(candidate.convert("RGB")).astype(np.float32) / 255.0
+        h, w = arr.shape[:2]
+        region = (
+            arr[int(h * 0.50) : int(h * 0.66), int(w * 0.38) : int(w * 0.62)]
+            if region_mask is None
+            else arr[cls._region_bool(region_mask, (w, h))]
+        )
+        if region.size == 0:
+            return 0.50
+        clipped = float(((region < 0.015) | (region > 0.985)).mean())
+        texture = float(region.std())
+        texture_score = 1.0 - min(1.0, abs(texture - 0.18) * 2.5)
+        return float(max(0.0, min(1.0, texture_score - clipped * 2.0)))
+
+    @staticmethod
+    def _region_bool(mask: Image.Image, size: tuple[int, int]) -> np.ndarray:
+        return np.asarray(mask.convert("L").resize(size, Image.Resampling.NEAREST)) > 127
+
+    @classmethod
+    def _region_crop(cls, values: np.ndarray, mask: Image.Image, size: tuple[int, int]) -> np.ndarray:
+        region = cls._region_bool(mask, size)
+        ys, xs = np.where(region)
+        if not len(xs) or not len(ys):
+            return values[0:0, 0:0]
+        return values[int(ys.min()) : int(ys.max()) + 1, int(xs.min()) : int(xs.max()) + 1]
 
     @staticmethod
     def _edge_quality(candidate: Image.Image) -> float:

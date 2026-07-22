@@ -1,11 +1,20 @@
-version: "3.9"
-
 services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    volumes:
-      - ai_redis_data:/data
+    env_file:
+      - ./env/ai.production.env
+    command: ["sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$$DRAPIXAI_REDIS_PASSWORD\""]
+    tmpfs:
+      - /data:size=256m,mode=0700
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    networks:
+      - ai-private
 
   ai-api:
     build:
@@ -15,19 +24,27 @@ services:
     env_file:
       - ./env/ai.production.env
     environment:
-      DRAPIXAI_REDIS_URL: redis://redis:6379/0
+      DRAPIXAI_REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379/0
     command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
     depends_on:
       - redis
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
-      - ../models:/workspace/drapixai/models
+      - ../models:/workspace/drapixai/models:ro
       - ai_runtime:/workspace/drapixai/runtime
-    device_requests:
-      - driver: nvidia
-        count: all
-        capabilities: ["gpu"]
+      - ai_hf_cache:/workspace/.cache/huggingface
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    shm_size: 8gb
+    networks:
+      - ai-private
+    gpus: all
 
   ai-worker:
     build:
@@ -37,18 +54,30 @@ services:
     env_file:
       - ./env/ai.production.env
     environment:
-      DRAPIXAI_REDIS_URL: redis://redis:6379/0
+      DRAPIXAI_REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379/0
     command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-worker.sh"]
     depends_on:
       - redis
     volumes:
-      - ../models:/workspace/drapixai/models
+      - ../models:/workspace/drapixai/models:ro
       - ai_runtime:/workspace/drapixai/runtime
-    device_requests:
-      - driver: nvidia
-        count: all
-        capabilities: ["gpu"]
+      - ai_hf_cache:/workspace/.cache/huggingface
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    shm_size: 8gb
+    networks:
+      - ai-private
+    gpus: all
 
 volumes:
-  ai_redis_data:
   ai_runtime:
+  ai_hf_cache:
+
+networks:
+  ai-private:
+    internal: true

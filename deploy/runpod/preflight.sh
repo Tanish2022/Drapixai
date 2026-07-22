@@ -87,6 +87,54 @@ echo "U2NET_HOME=$U2NET_HOME"
   echo "Missing CatVTON SCHP checkpoint under $DRAPIXAI_MODEL_DIR" >&2
   exit 1
 }
+[[ -d "$DRAPIXAI_CATVTON_BASE_MODEL" ]] || {
+  echo "Missing pinned Stable Diffusion base model: $DRAPIXAI_CATVTON_BASE_MODEL" >&2
+  exit 1
+}
+if [[ "${DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK:-0}" == "0" ]]; then
+  [[ -d "$DRAPIXAI_CATVTON_BASE_MODEL/safety_checker" ]] || {
+    echo "Missing Stable Diffusion safety checker under $DRAPIXAI_CATVTON_BASE_MODEL" >&2
+    exit 1
+  }
+  [[ -d "$DRAPIXAI_CATVTON_BASE_MODEL/feature_extractor" ]] || {
+    echo "Missing Stable Diffusion safety feature extractor under $DRAPIXAI_CATVTON_BASE_MODEL" >&2
+    exit 1
+  }
+  [[ -f "$DRAPIXAI_APP_ROOT/drapixai_ai/third_party/CatVTON/resource/img/NSFW.jpg" ]] || {
+    echo "Missing CatVTON safety replacement image" >&2
+    exit 1
+  }
+fi
+[[ -d "$DRAPIXAI_CATVTON_VAE_MODEL" ]] || {
+  echo "Missing pinned VAE model: $DRAPIXAI_CATVTON_VAE_MODEL" >&2
+  exit 1
+}
+
+MODEL_LOCK="$(dirname "$DRAPIXAI_MODEL_DIR")/model-lock.json"
+[[ -f "$MODEL_LOCK" ]] || {
+  echo "Missing immutable model lock: $MODEL_LOCK" >&2
+  exit 1
+}
+python - "$MODEL_LOCK" <<'PY'
+import json
+import os
+import sys
+
+lock = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = {
+    item.get("repo_id"): item.get("revision")
+    for item in lock.get("models", [])
+    if isinstance(item, dict)
+}
+expected = {
+    os.environ["DRAPIXAI_CATVTON_REPO_ID"]: os.environ["DRAPIXAI_CATVTON_MODEL_REVISION"],
+    os.environ["DRAPIXAI_CATVTON_BASE_REPO_ID"]: os.environ["DRAPIXAI_CATVTON_BASE_REVISION"],
+    os.environ["DRAPIXAI_CATVTON_VAE_REPO_ID"]: os.environ["DRAPIXAI_CATVTON_VAE_REVISION"],
+}
+if actual != expected:
+    raise SystemExit(f"Model lock mismatch: expected {expected}, found {actual}")
+print("Immutable model revisions verified.")
+PY
 
 echo
 echo "== Torch / CUDA =="
@@ -122,23 +170,23 @@ expected = {
     "uvicorn": "0.30.6",
     "redis": "5.0.8",
     "rq": "1.16.2",
-    "python-multipart": "0.0.9",
-    "requests": "2.32.3",
+    "python-multipart": "0.0.32",
+    "requests": "2.34.2",
     "boto3": "1.34.131",
     "accelerate": None,
     "transformers": "4.46.3",
     "diffusers": "0.31.0",
     "safetensors": None,
     "einops": "0.7.0",
-    "pillow": "10.3.0",
+    "pillow": "12.3.0",
     "numpy": "1.26.4",
-    "opencv-python": "4.10.0.84",
+    "opencv-python-headless": "4.10.0.84",
     "scipy": "1.13.1",
     "scikit-image": "0.24.0",
-    "matplotlib": "3.9.1",
+    "matplotlib": "3.9.4",
     "PyYAML": "6.0.1",
     "tqdm": "4.66.4",
-    "rembg": "2.0.57",
+    "rembg": "2.0.69",
     "onnxruntime": "1.23.2",
     "fvcore": "0.1.5.post20221221",
     "cloudpickle": "3.0.0",
@@ -189,6 +237,10 @@ if errors:
     raise SystemExit(1)
 PY
 
+echo
+echo "== CPU Quality Regressions =="
+python -m drapixai_ai.scripts.validate_garment_skin_detection
+python -m drapixai_ai.scripts.validate_tryon_scorer_neutral_garments
 
 echo
 echo "== Launch Script Syntax =="
@@ -196,12 +248,16 @@ for script in \
   "$DRAPIXAI_APP_ROOT/deploy/scripts/smoke-test.sh" \
   "$DRAPIXAI_APP_ROOT/deploy/runpod/setup-fresh-runpod.sh" \
   "$DRAPIXAI_APP_ROOT/deploy/runpod/setup-sdk-api-stack.sh" \
+  "$DRAPIXAI_APP_ROOT/deploy/runpod/start-redis.sh" \
   "$DRAPIXAI_APP_ROOT/deploy/runpod/start-all.sh" \
+  "$DRAPIXAI_APP_ROOT/deploy/runpod/prepare-security-candidate.sh" \
   "$DRAPIXAI_APP_ROOT/deploy/runpod/run-launch-tryon-test.sh"; do
   [[ -f "$script" ]] || { echo "Missing launch script: $script" >&2; exit 1; }
   bash -n "$script"
   echo "syntax ok: ${script#$DRAPIXAI_APP_ROOT/}"
 done
+
+python "$DRAPIXAI_APP_ROOT/deploy/runpod/validate_upper_body_50_tooling.py"
 echo
 echo "== Redis target =="
 redact_url_credentials "$DRAPIXAI_REDIS_URL"

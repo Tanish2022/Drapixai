@@ -70,37 +70,71 @@ check_services() {
 }
 
 run_direct_tryon() {
-  log "Running direct Standard CatVTON try-on"
+  log "Running direct Standard CatVTON try-on through the warm AI API"
   mkdir -p "$RESULT_DIR"
-  if [[ ! -e "$ASSET_DIR/person.jpg" || "$(realpath "$PERSON_IMAGE")" != "$(realpath "$ASSET_DIR/person.jpg")" ]]; then
-    cp "$PERSON_IMAGE" "$ASSET_DIR/person.jpg"
+  local started ended ai_service_token headers_file
+  ai_service_token="${DRAPIXAI_AI_SERVICE_TOKEN:-}"
+  if [[ -z "$ai_service_token" ]]; then
+    ai_service_token="$(read_env_value DRAPIXAI_AI_SERVICE_TOKEN "$APP_ROOT/deploy/env/ai.production.env")"
   fi
-  if [[ ! -e "$ASSET_DIR/garment.jpg" || "$(realpath "$CLOTH_IMAGE")" != "$(realpath "$ASSET_DIR/garment.jpg")" ]]; then
-    cp "$CLOTH_IMAGE" "$ASSET_DIR/garment.jpg"
+  if [[ -z "$ai_service_token" ]]; then
+    echo "Missing DRAPIXAI_AI_SERVICE_TOKEN for authenticated direct AI smoke." >&2
+    exit 1
   fi
-  local started ended
+  headers_file="$RESULT_DIR/direct_standard.headers"
   started="$("$PYTHON_BIN" - <<'PY'
 import time
 print(time.time())
 PY
 )"
-  cd "$APP_ROOT"
-  "$PYTHON_BIN" deploy/runpod/smoke_tryon.py
+  curl --fail --silent --show-error \
+    -X POST "${AI_URL%/}/ai/tryon" \
+    -H "x-drapixai-service-token: ${ai_service_token}" \
+    -F "user_id=launch-direct-smoke" \
+    -F "person_image=@${PERSON_IMAGE}" \
+    -F "cloth_image=@${CLOTH_IMAGE}" \
+    -F "garment_type=upper" \
+    -F "quality=standard" \
+    -D "$headers_file" \
+    -o "$RESULT_DIR/direct_standard.png"
   ended="$("$PYTHON_BIN" - <<'PY'
 import time
 print(time.time())
 PY
 )"
-  cp "$ASSET_DIR/result_direct.png" "$RESULT_DIR/direct_standard.png"
-  cp "$ASSET_DIR/result_direct.json" "$RESULT_DIR/direct_standard.json"
-  "$PYTHON_BIN" - "$started" "$ended" "$RESULT_DIR/direct_standard.json" <<'PY'
+  "$PYTHON_BIN" - "$started" "$ended" "$headers_file" "$RESULT_DIR/direct_standard.json" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-started, ended, metadata_path = float(sys.argv[1]), float(sys.argv[2]), Path(sys.argv[3])
-data = json.loads(metadata_path.read_text())
-data["wall_latency_ms"] = int((ended - started) * 1000)
+started, ended = float(sys.argv[1]), float(sys.argv[2])
+headers_path, metadata_path = Path(sys.argv[3]), Path(sys.argv[4])
+headers = {}
+for line in headers_path.read_text(errors="ignore").splitlines():
+    if ":" in line:
+        key, value = line.split(":", 1)
+        headers[key.strip().lower()] = value.strip()
+
+def parse_json_header(name, fallback):
+    try:
+        return json.loads(headers.get(name, ""))
+    except json.JSONDecodeError:
+        return fallback
+
+warnings = [item for item in headers.get("x-drapixai-warnings", "").split(",") if item]
+timings = parse_json_header("x-drapixai-timing-json", {})
+quality_metrics = parse_json_header("x-drapixai-quality-json", {})
+data = {
+    "engine": headers.get("x-drapixai-engine"),
+    "quality_score": float(headers.get("x-drapixai-quality-score") or 0),
+    "candidate_count": int(headers.get("x-drapixai-candidate-count") or 0),
+    "warnings": warnings,
+    "metadata": {"timings": timings, **quality_metrics},
+    "processing_ms": int(headers.get("x-drapixai-processing-ms") or 0),
+    "quality_mode": headers.get("x-drapixai-quality-mode"),
+    "garment_source": headers.get("x-drapixai-garment-source"),
+    "wall_latency_ms": int((ended - started) * 1000),
+}
 metadata_path.write_text(json.dumps(data, indent=2))
 print(json.dumps({
     "direct_quality_score": data.get("quality_score"),
@@ -125,14 +159,16 @@ run_sdk_tryon() {
 
   API_URL="$API_URL" \
   DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token" \
+  DRAPIXAI_SMOKE_PREPARE_ACCOUNT=1 \
   PERSON_IMAGE="$PERSON_IMAGE" \
   CLOTH_IMAGE="$CLOTH_IMAGE" \
   OUTPUT_FILE="$RESULT_DIR/sdk_standard.png" \
   HEADERS_FILE="$RESULT_DIR/sdk_standard.headers" \
   DOMAIN="staging.drapixai.com" \
   ORIGIN_URL="https://staging.drapixai.com" \
-  GARMENT_ID="launch-green-shirt" \
-  PRODUCT_ID="launch-green-shirt-product" \
+  GARMENT_ID="launch-graphic-tee" \
+  PRODUCT_ID="launch-graphic-tee-product" \
+  GARMENT_CATEGORY="tshirt" \
     bash "$APP_ROOT/deploy/scripts/smoke-test.sh"
 }
 
@@ -140,6 +176,7 @@ write_summary() {
   log "Writing summary"
   "$PYTHON_BIN" - "$RESULT_DIR" <<'PY'
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -189,7 +226,7 @@ if sdk_score_raw:
     match = re.search(r"[0-9]+(?:\.[0-9]+)?", sdk_score_raw)
     sdk_score = float(match.group(0)) if match else None
 
-min_quality = float(os.getenv("DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE", "0.90"))
+min_quality = float(os.getenv("DRAPIXAI_LAUNCH_MIN_QUALITY_SCORE", "0.95"))
 max_latency_ms = int(os.getenv("DRAPIXAI_LAUNCH_TARGET_LATENCY_MS", "12000"))
 failures = []
 if direct_score is None:

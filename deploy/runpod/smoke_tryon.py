@@ -3,16 +3,22 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
+import sys
 from pathlib import Path
 
 from PIL import Image
+
+APP_ROOT = Path(os.getenv("DRAPIXAI_APP_ROOT", Path(__file__).resolve().parents[2]))
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.pipeline.tryon_pipeline import DrapixAITryOnPipeline
 
 
 def main() -> None:
-    base = Path("/workspace/drapixai/runtime/test_assets")
+    base = Path(os.getenv("DRAPIXAI_TEST_ASSET_DIR", APP_ROOT / "runtime" / "test_assets"))
     person = Image.open(base / "person.jpg").convert("RGB")
 
     garment_path = base / "garment.jpg"

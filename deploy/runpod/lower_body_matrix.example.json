@@ -1,0 +1,51 @@
+[
+  {
+    "slug": "jeans-front-standing-01",
+    "person_path": "runtime/test_assets/lower_body/person_front_standing_01.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/jeans_blue_front.png",
+    "category": "jeans",
+    "notes": "Front-facing full-body person, visible waist, knees, ankles, and shoes."
+  },
+  {
+    "slug": "pants-slight-pose-01",
+    "person_path": "runtime/test_assets/lower_body/person_slight_pose_01.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/pants_black_front.png",
+    "category": "pants",
+    "notes": "Mild leg separation pose for waistband, leg integrity, and shoe preservation checks."
+  },
+  {
+    "slug": "trousers-front-standing-01",
+    "person_path": "runtime/test_assets/lower_body/person_front_standing_02.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/trousers_black_front.png",
+    "category": "trousers",
+    "notes": "Formal trousers case for long-leg structure, waistband alignment, and hem checks."
+  },
+  {
+    "slug": "shorts-front-standing-01",
+    "person_path": "runtime/test_assets/lower_body/person_front_standing_03.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/shorts_denim_front.png",
+    "category": "shorts",
+    "notes": "Visible waist, knees, legs, and shoes for shorts coverage checks."
+  },
+  {
+    "slug": "skirt-front-standing-01",
+    "person_path": "runtime/test_assets/lower_body/person_front_standing_04.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/skirt_front.png",
+    "category": "skirt",
+    "notes": "Front-facing skirt case for waistband, hem alignment, and leg preservation checks."
+  },
+  {
+    "slug": "leggings-front-standing-01",
+    "person_path": "runtime/test_assets/lower_body/person_front_standing_05.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/leggings_front.png",
+    "category": "leggings",
+    "notes": "Full-length fitted lower garment for leg integrity and texture preservation checks."
+  },
+  {
+    "slug": "joggers-front-standing-01",
+    "person_path": "runtime/test_assets/lower_body/person_front_standing_06.png",
+    "garment_path": "runtime/test_assets/lower_body/garments/joggers_front.png",
+    "category": "joggers",
+    "notes": "Full-length relaxed lower garment for cuff, ankle, and shoe preservation checks."
+  }
+]

@@ -1,0 +1,21 @@
+diff --git a/model/pipeline.py b/model/pipeline.py
+index fa5da27..6fb1535 100644
+--- a/model/pipeline.py
++++ b/model/pipeline.py
+@@ -25,6 +25,7 @@ class CatVTONPipeline:
+         self, 
+         base_ckpt, 
+         attn_ckpt, 
++        vae_ckpt="stabilityai/sd-vae-ft-mse",
+         attn_ckpt_version="mix",
+         weight_dtype=torch.float32,
+         device='cuda',
+@@ -37,7 +38,7 @@ class CatVTONPipeline:
+         self.skip_safety_check = skip_safety_check
+ 
+         self.noise_scheduler = DDIMScheduler.from_pretrained(base_ckpt, subfolder="scheduler")
+-        self.vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device, dtype=weight_dtype)
++        self.vae = AutoencoderKL.from_pretrained(vae_ckpt).to(device, dtype=weight_dtype)
+         if not skip_safety_check:
+             self.feature_extractor = CLIPImageProcessor.from_pretrained(base_ckpt, subfolder="feature_extractor")
+             self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(base_ckpt, subfolder="safety_checker").to(device, dtype=weight_dtype)

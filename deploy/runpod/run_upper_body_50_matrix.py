@@ -1,256 +1,340 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
+import subprocess
+import sys
 import time
 import traceback
-import urllib.request
 from dataclasses import asdict, dataclass
-from io import BytesIO
 from pathlib import Path
-from urllib.parse import urlparse
 
 from PIL import Image
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.pipeline.tryon_pipeline import DrapixAITryOnPipeline
-from drapixai_ai.services.garment_preprocessor import GarmentValidationError, preprocess_garment
+from drapixai_ai.preprocess.person_validator import validate_person_image
+from drapixai_ai.services.garment_preprocessor import (
+    GarmentPreprocessOptions,
+    preprocess_garment,
+)
 
 
-APP_ROOT = Path(os.getenv("DRAPIXAI_APP_ROOT", Path.cwd()))
-OUTPUT_ROOT = Path(os.getenv("DRAPIXAI_UPPER_BODY_50_DIR", APP_ROOT / "runtime" / "upper_body_50_matrix"))
-CATVTON_EXAMPLE_ROOT = APP_ROOT / "drapixai_ai" / "third_party" / "CatVTON" / "resource" / "demo" / "example"
+APP_ROOT = Path(os.getenv("DRAPIXAI_APP_ROOT", Path.cwd())).resolve()
+MATRIX_FILE = Path(
+    os.getenv(
+        "DRAPIXAI_UPPER_BODY_50_MANIFEST",
+        APP_ROOT / "runtime" / "test_assets" / "upper_body_50_manifest.json",
+    )
+).resolve()
+OUTPUT_ROOT = Path(
+    os.getenv(
+        "DRAPIXAI_UPPER_BODY_50_DIR",
+        APP_ROOT / "runtime" / "upper_body_50_matrix",
+    )
+).resolve()
+MIN_QUALITY_SCORE = float(os.getenv("DRAPIXAI_MATRIX_MIN_QUALITY_SCORE", "0.95"))
+TARGET_LATENCY_MS = int(os.getenv("DRAPIXAI_MATRIX_TARGET_LATENCY_MS", "12000"))
 
-
-@dataclass(frozen=True)
-class PersonSpec:
-    slug: str
-    gender: str
-    body_profile: str
-    pose_profile: str
-    path: str
-
-
-@dataclass(frozen=True)
-class GarmentSpec:
-    slug: str
-    segment: str
-    label: str
-    source_url: str = ""
-    local_path: str = ""
-    notes: str = ""
+EXPECTED_SEGMENTS = {
+    "shirt": 8,
+    "tshirt": 8,
+    "polo": 6,
+    "hoodie_sweatshirt": 6,
+    "blouse_top": 6,
+    "short_kurti": 6,
+    "sleeveless_top": 4,
+    "edge_case": 6,
+}
+REQUIRED_GENDERS = {"men", "women"}
+REQUIRED_BODY_PROFILES = {"slim", "average", "broad"}
+REQUIRED_POSE_PROFILES = {"front_straight_arms", "front_slight_bend", "front_relaxed"}
+SAFE_SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{2,79}$")
 
 
 @dataclass(frozen=True)
 class MatrixCase:
     index: int
     slug: str
-    person: PersonSpec
-    garment: GarmentSpec
+    segment: str
+    person_path: Path
+    garment_path: Path
+    gender: str
+    body_profile: str
+    pose_profile: str
+    garment_label: str
+    garment_profile: str | None
+    notes: str
+    rights_approved: bool
 
 
-PEOPLE = [
-    PersonSpec("men_model_5", "men", "average", "front_relaxed", "person/men/model_5.png"),
-    PersonSpec("men_model_7", "men", "slim", "front_straight_arms", "person/men/model_7.png"),
-    PersonSpec("men_simon_1", "men", "broad", "front_slight_bend", "person/men/Simon_1.png"),
-    PersonSpec("men_yifeng_0", "men", "average", "front_relaxed", "person/men/Yifeng_0.png"),
-    PersonSpec("women_049713", "women", "average", "front_straight_arms", "person/women/049713_0.jpg"),
-    PersonSpec("women_model_3", "women", "slim", "front_relaxed", "person/women/1-model_3.png"),
-    PersonSpec("women_model_4", "women", "average", "front_slight_bend", "person/women/2-model_4.png"),
-    PersonSpec("women_model_8", "women", "broad", "front_relaxed", "person/women/model_8.png"),
-]
+@dataclass(frozen=True)
+class PreparedCase:
+    case: MatrixCase
+    person_hash: str
+    garment_hash: str
+    processed_garment_path: Path
+    preprocess_metadata: dict[str, object]
 
 
-GARMENTS = [
-    # 8 shirts
-    GarmentSpec("shirt_black_oversized", "shirt", "black oversized shirt", "https://wrogn.com/products/solid-oversized-casual-shirt-black-wtsh0381m", notes="dark solid"),
-    GarmentSpec("shirt_black_textured", "shirt", "black textured shirt", "https://wrogn.com/products/solid-textured-comfort-fit-shirt-black-wush2852f", notes="dark texture"),
-    GarmentSpec("shirt_khaki_linen", "shirt", "khaki linen shirt", "https://wrogn.com/products/solid-khaki-full-sleeve-shirt", notes="light neutral"),
-    GarmentSpec("shirt_olive_linen", "shirt", "olive linen shirt", "https://wrogn.com/products/solid-linen-blend-shirt-olive-wvsh0094s-c", notes="green/olive"),
-    GarmentSpec("shirt_blue_linen", "shirt", "blue slim linen shirt", "https://wrogn.com/products/solid-slim-fit-linen-shirt-blue-wsh01fssl0579s", notes="blue solid"),
-    GarmentSpec("shirt_blue_checks", "shirt", "blue checked shirt", "https://wrogn.com/products/textured-checks-cotton-shirt-blue-wtsh9691w", notes="checked"),
-    GarmentSpec("shirt_green_folded_cuff", "shirt", "green folded cuff shirt", "https://m.media-amazon.com/images/I/71a-0tfK5PL._SL1500_.jpg", notes="direct image folded cuff"),
-    GarmentSpec("shirt_local_white_blouse", "shirt", "white shirt/blouse local", local_path="condition/upper/23255574_53383833_1000.jpg", notes="white garment"),
-    # 8 t-shirts
-    GarmentSpec("tshirt_offwhite_typographic", "tshirt", "off white typographic t-shirt", "https://wrogn.com/products/the-wrogn-mind-printed-t-shirt", notes="graphic"),
-    GarmentSpec("tshirt_offwhite_heavy_print", "tshirt", "off white heavy print t-shirt", "https://wrogn.com/products/wrogn-begins-here-printed-t-shirt", notes="graphic"),
-    GarmentSpec("tshirt_offwhite_back_print", "tshirt", "off white back printed t-shirt", "https://wrogn.com/products/wrogn-canvas-off-white-oversized-t-shirt", notes="oversized"),
-    GarmentSpec("tshirt_white_graphic", "tshirt", "white oversized graphic t-shirt", "https://wrogn.com/products/oversized-graphic-t-shirt-by-wrogn-statement-placement-print-white-wuts5317m", notes="white graphic"),
-    GarmentSpec("tshirt_green_fade", "tshirt", "green fade oversized t-shirt", "https://wrogn.com/products/wrogn-fade-oversized-t-shirt", notes="green color"),
-    GarmentSpec("tshirt_light_blue", "tshirt", "light blue t-shirt", "https://wrogn.com/products/wrogn-champ-printed-t-shirt", notes="light color"),
-    GarmentSpec("tshirt_black_placement", "tshirt", "black placement printed t-shirt", "https://wrogn.com/products/oversized-placement-printed-t-shirt-black-wuts5409m", notes="dark graphic"),
-    GarmentSpec("tshirt_local_graphic", "tshirt", "local graphic t-shirt", local_path="condition/upper/24083449_54173465_2048.jpg", notes="local graphic"),
-    # 6 polos
-    GarmentSpec("polo_grey", "polo", "grey polo", "https://wrogn.com/products/perfectly-grey-polo-t-shirt"),
-    GarmentSpec("polo_rust_oversized", "polo", "rust oversized polo", "https://wrogn.com/products/classic-oversized-polo-t-shirt-rust-wvts9141mp"),
-    GarmentSpec("polo_black_solid", "polo", "black solid polo", "https://wrogn.com/products/sharp-solid-polo-t-shirt"),
-    GarmentSpec("polo_dark_green", "polo", "dark green polo", "https://wrogn.com/products/solid-oversized-polo-t-shirt-dark-green-wuts1711m"),
-    GarmentSpec("polo_white_striped", "polo", "white striped polo", "https://wrogn.com/products/striped-polo-t-shirt-white-wuts2641f"),
-    GarmentSpec("polo_green_textured", "polo", "green textured polo", "https://wrogn.com/products/solid-textured-slim-fit-polo-t-shirt-green-wuts9088w-a"),
-    # 6 hoodies/sweatshirts
-    GarmentSpec("hoodie_blue", "hoodie", "blue hoodie", "https://wrogn.com/products/wrogn-enough-blue-hoodie"),
-    GarmentSpec("hoodie_black", "hoodie", "black hoodie", "https://wrogn.com/products/wrogn-enough-black-hoodie"),
-    GarmentSpec("hoodie_light_green", "hoodie", "light green hoodie", "https://wrogn.com/products/solid-regular-fit-hoodie-light-green-wvss9996nw-d"),
-    GarmentSpec("sweatshirt_black_print", "hoodie", "black printed sweatshirt", "https://wrogn.com/products/classic-black-back-printed-sweatshirt"),
-    GarmentSpec("sweatshirt_black_comfort", "hoodie", "black comfort sweatshirt", "https://wrogn.com/products/wrogn-graphic-printed-comfort-fit-sweatshirt-black-wvss9092f"),
-    GarmentSpec("hoodie_black_graphic", "hoodie", "black graphic hoodie sweatshirt", "https://wrogn.com/products/wrogn-comfort-fit-graphic-hoodie-sweatshirt-black-wvss9077f"),
-    # 6 blouses/tops
-    GarmentSpec("top_local_plain_light", "blouse_top", "local plain light top", local_path="condition/upper/21514384_52353349_1000.jpg"),
-    GarmentSpec("top_local_printed_dark", "blouse_top", "local printed dark top", local_path="condition/upper/22790049_53294275_1000.jpg"),
-    GarmentSpec("top_pink_foliage", "blouse_top", "pink foliage short top", "https://www.libas.in/products/pink-printed-cotton-a-line-short-kurti-43001"),
-    GarmentSpec("top_pink_aline", "blouse_top", "pink a-line top", "https://www.libas.in/products/pink-printed-cotton-a-line-short-kurti-43029"),
-    GarmentSpec("top_blue_aline", "blouse_top", "blue a-line top", "https://www.libas.in/products/blue-printed-cotton-a-line-short-kurti-43031"),
-    GarmentSpec("top_local_white", "blouse_top", "local white blouse", local_path="condition/upper/23255574_53383833_1000.jpg"),
-    # 6 short kurtis
-    GarmentSpec("kurti_charcoal_printed", "short_kurti", "charcoal printed short kurti", "https://www.libas.in/products/chalcoal-grey-cotton-printed-short-kurti"),
-    GarmentSpec("kurti_blue_abstract", "short_kurti", "blue abstract short kurti", "https://www.libas.in/products/blue-abstract-printed-cotton-a-line-short-kurti-98342"),
-    GarmentSpec("kurti_multi_printed", "short_kurti", "multi printed short kurti", "https://www.libas.in/products/multi-printed-cotton-straight-short-kurti-29371or"),
-    GarmentSpec("kurti_red_anarkali", "short_kurti", "red anarkali short kurti", "https://www.libas.in/products/red-printed-cotton-anarkali-short-kurti-29386o"),
-    GarmentSpec("kurti_green_straight", "short_kurti", "green straight short kurti", "https://www.libas.in/products/green-printed-cotton-straight-short-kurti-29534"),
-    GarmentSpec("kurti_olive_straight", "short_kurti", "olive straight short kurti", "https://www.libas.in/collections/short-kurtis/products/olive-printed-cotton-straight-short-kurti-98267"),
-    # 4 sleeveless tops
-    GarmentSpec("sleeveless_pink", "sleeveless_top", "pink sleeveless short kurti", "https://www.libas.in/products/pink-printed-cotton-anarkali-short-kurti-29377o"),
-    GarmentSpec("sleeveless_blue_blend", "sleeveless_top", "blue sleeveless short kurti", "https://www.libas.in/products/blue-printed-cotton-blend-straight-short-kurti-98256h"),
-    GarmentSpec("sleeveless_navy", "sleeveless_top", "navy sleeveless short kurti", "https://www.libas.in/products/navy-blue-printed-cotton-straight-short-kurti-98269r"),
-    GarmentSpec("sleeveless_local_print", "sleeveless_top", "local printed top sleeveless check", local_path="condition/upper/22790049_53294275_1000.jpg"),
-    # 6 edge cases
-    GarmentSpec("edge_green_shirt", "edge_case", "green folded cuff shirt", "https://m.media-amazon.com/images/I/71a-0tfK5PL._SL1500_.jpg", notes="green shade fidelity"),
-    GarmentSpec("edge_white_polo", "edge_case", "white striped polo", "https://wrogn.com/products/striped-polo-t-shirt-white-wuts2641f", notes="white garment"),
-    GarmentSpec("edge_black_shirt", "edge_case", "black oversized shirt", "https://wrogn.com/products/solid-oversized-casual-shirt-black-wtsh0381m", notes="black garment"),
-    GarmentSpec("edge_busy_kurti", "edge_case", "busy multi print kurti", "https://www.libas.in/products/multi-printed-cotton-straight-short-kurti-29371or", notes="busy print"),
-    GarmentSpec("edge_low_contrast", "edge_case", "khaki low contrast shirt", "https://wrogn.com/products/solid-khaki-full-sleeve-shirt", notes="low contrast"),
-    GarmentSpec("edge_structured_collar", "edge_case", "structured blue linen shirt", "https://wrogn.com/products/solid-slim-fit-linen-shirt-blue-wsh01fssl0579s", notes="structured collar"),
-]
+def _resolve_asset_path(value: object) -> Path:
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("ASSET_PATH_REQUIRED")
+    if raw.lower().startswith(("http://", "https://")):
+        raise ValueError("REMOTE_ASSET_URL_NOT_ALLOWED")
+    path = Path(raw)
+    return path.resolve() if path.is_absolute() else (APP_ROOT / path).resolve()
 
 
-def _request_bytes(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(request, timeout=90) as response:
-        return response.read()
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
-def _shopify_json_url(product_url: str) -> str:
-    parsed = urlparse(product_url)
-    parts = [part for part in parsed.path.split("/") if part]
-    if "products" not in parts:
-        return product_url
-    handle = parts[parts.index("products") + 1]
-    return f"{parsed.scheme}://{parsed.netloc}/products/{handle}.js"
-
-
-def _resolve_garment_bytes(garment: GarmentSpec) -> tuple[bytes, str]:
-    if garment.local_path:
-        path = CATVTON_EXAMPLE_ROOT / garment.local_path
-        return path.read_bytes(), str(path)
-
-    if not garment.source_url:
-        raise ValueError(f"No source URL or local path for {garment.slug}")
-
-    if garment.source_url.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-        return _request_bytes(garment.source_url), garment.source_url
-
-    product_json_url = _shopify_json_url(garment.source_url)
-    product_payload = json.loads(_request_bytes(product_json_url).decode("utf-8"))
-    images = product_payload.get("images") or []
-    if not images:
-        raise ValueError(f"No Shopify images found for {garment.source_url}")
-    image_url = images[0]
-    if image_url.startswith("//"):
-        image_url = f"https:{image_url}"
-    return _request_bytes(image_url), image_url
-
-
-def _load_person(person: PersonSpec) -> Image.Image:
-    path = CATVTON_EXAMPLE_ROOT / person.path
-    if not path.exists():
-        raise FileNotFoundError(f"Missing bundled person asset: {path}")
-    return Image.open(path).convert("RGB")
-
-
-def _load_image(image_bytes: bytes) -> Image.Image:
-    return Image.open(BytesIO(image_bytes)).convert("RGB")
+def _rgb_on_white(image: Image.Image) -> Image.Image:
+    if image.mode not in ("RGBA", "LA"):
+        return image.convert("RGB")
+    rgba = image.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    return Image.alpha_composite(background, rgba).convert("RGB")
 
 
 def _save_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _build_cases() -> list[MatrixCase]:
+def _git_metadata() -> dict[str, object]:
+    def run(*args: str) -> str | None:
+        completed = subprocess.run(
+            ["git", "-C", str(APP_ROOT), *args],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        return completed.stdout.strip() if completed.returncode == 0 else None
+
+    return {
+        "commit": run("rev-parse", "HEAD"),
+        "branch": run("branch", "--show-current"),
+        "dirty": bool(run("status", "--porcelain")),
+    }
+
+
+def _load_manifest() -> tuple[list[MatrixCase], dict[str, object]]:
+    if not MATRIX_FILE.exists():
+        raise FileNotFoundError(
+            f"Missing strict matrix manifest: {MATRIX_FILE}. "
+            "Use 50 local, rights-approved person/garment pairs; remote product URLs are not accepted."
+        )
+    payload = json.loads(MATRIX_FILE.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("cases"), list):
+        raise ValueError("MATRIX_MANIFEST_INVALID")
+    if payload.get("rights_confirmed") is not True:
+        raise ValueError("MATRIX_RIGHTS_NOT_CONFIRMED")
+    rights_scope = str(payload.get("rights_scope") or "").strip().lower()
+    if rights_scope not in {"internal_qa", "public_catalog"}:
+        raise ValueError("MATRIX_RIGHTS_SCOPE_INVALID")
+
     cases: list[MatrixCase] = []
-    for index, garment in enumerate(GARMENTS, start=1):
-        person = PEOPLE[(index - 1) % len(PEOPLE)]
+    for index, raw in enumerate(payload["cases"], start=1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"MATRIX_CASE_INVALID:{index}")
+        slug = str(raw.get("slug") or "").strip().lower()
+        if not SAFE_SLUG.fullmatch(slug):
+            raise ValueError(f"MATRIX_SLUG_INVALID:{index}:{slug}")
         cases.append(
             MatrixCase(
                 index=index,
-                slug=f"{index:02d}_{garment.segment}_{garment.slug}_{person.slug}",
-                person=person,
-                garment=garment,
+                slug=slug,
+                segment=str(raw.get("segment") or "").strip().lower(),
+                person_path=_resolve_asset_path(raw.get("person_path")),
+                garment_path=_resolve_asset_path(raw.get("garment_path")),
+                gender=str(raw.get("gender") or "").strip().lower(),
+                body_profile=str(raw.get("body_profile") or "").strip().lower(),
+                pose_profile=str(raw.get("pose_profile") or "").strip().lower(),
+                garment_label=str(raw.get("garment_label") or "").strip(),
+                garment_profile=(str(raw.get("garment_profile") or "").strip().lower() or None),
+                notes=str(raw.get("notes") or "").strip(),
+                rights_approved=raw.get("rights_approved") is True,
             )
         )
-    return cases
+
+    if len(cases) != 50:
+        raise ValueError(f"MATRIX_REQUIRES_EXACTLY_50_CASES:{len(cases)}")
+    if len({case.slug for case in cases}) != len(cases):
+        raise ValueError("MATRIX_SLUGS_MUST_BE_UNIQUE")
+
+    segment_counts = {
+        segment: sum(case.segment == segment for case in cases)
+        for segment in EXPECTED_SEGMENTS
+    }
+    unknown_segments = sorted({case.segment for case in cases} - set(EXPECTED_SEGMENTS))
+    if segment_counts != EXPECTED_SEGMENTS or unknown_segments:
+        raise ValueError(
+            f"MATRIX_SEGMENT_COUNTS_INVALID:expected={EXPECTED_SEGMENTS}:actual={segment_counts}:unknown={unknown_segments}"
+        )
+    if {case.gender for case in cases} != REQUIRED_GENDERS:
+        raise ValueError("MATRIX_GENDER_COVERAGE_INVALID")
+    if not REQUIRED_BODY_PROFILES.issubset({case.body_profile for case in cases}):
+        raise ValueError("MATRIX_BODY_PROFILE_COVERAGE_INVALID")
+    if not REQUIRED_POSE_PROFILES.issubset({case.pose_profile for case in cases}):
+        raise ValueError("MATRIX_POSE_PROFILE_COVERAGE_INVALID")
+    if any(not case.rights_approved for case in cases):
+        raise ValueError("MATRIX_CASE_RIGHTS_NOT_APPROVED")
+
+    return cases, {
+        "rights_scope": rights_scope,
+        "rights_reference": str(payload.get("rights_reference") or "").strip(),
+        "segment_counts": segment_counts,
+    }
 
 
-def main() -> None:
+def _preflight(cases: list[MatrixCase], manifest_metadata: dict[str, object]) -> list[PreparedCase]:
+    preflight_root = OUTPUT_ROOT / "preflight"
+    preflight_root.mkdir(parents=True, exist_ok=True)
+    prepared: list[PreparedCase] = []
+    failures: list[dict[str, object]] = []
+    seen_garments: dict[str, str] = {}
+    person_hashes: set[str] = set()
+
+    for case in cases:
+        try:
+            if not case.person_path.is_file():
+                raise FileNotFoundError(f"PERSON_FILE_MISSING:{case.person_path}")
+            if not case.garment_path.is_file():
+                raise FileNotFoundError(f"GARMENT_FILE_MISSING:{case.garment_path}")
+
+            person_bytes = case.person_path.read_bytes()
+            garment_bytes = case.garment_path.read_bytes()
+            person_hash = _sha256(person_bytes)
+            garment_hash = _sha256(garment_bytes)
+            duplicate_slug = seen_garments.get(garment_hash)
+            if duplicate_slug:
+                raise ValueError(f"DUPLICATE_GARMENT_SOURCE:{duplicate_slug}")
+            seen_garments[garment_hash] = case.slug
+            person_hashes.add(person_hash)
+
+            with Image.open(case.person_path) as source:
+                person = source.convert("RGB")
+            person_validation = validate_person_image(person)
+            if not person_validation.ok:
+                raise ValueError(f"PERSON_VALIDATION_FAILED:{','.join(person_validation.warnings)}")
+
+            preprocess = preprocess_garment(
+                garment_bytes,
+                options=GarmentPreprocessOptions(
+                    garment_profile=case.garment_profile,
+                    category_hint=case.segment,
+                    product_name=case.garment_label,
+                    garment_id=case.slug,
+                    garment_type="upper",
+                ),
+            )
+            if preprocess.warnings:
+                raise ValueError(f"GARMENT_PREPROCESS_WARNINGS:{','.join(preprocess.warnings)}")
+            processed_path = preflight_root / f"{case.index:02d}_{case.slug}_garment.png"
+            preprocess.image.save(processed_path, format="PNG")
+            preprocess_metadata = {
+                "mode": "strict",
+                "profile_key": preprocess.profile_key,
+                "profile_label": preprocess.profile_label,
+                "support_level": preprocess.support_level,
+                "did_process": preprocess.did_process,
+                "reason": preprocess.reason,
+                "warnings": list(preprocess.warnings),
+            }
+            prepared.append(
+                PreparedCase(
+                    case=case,
+                    person_hash=person_hash,
+                    garment_hash=garment_hash,
+                    processed_garment_path=processed_path,
+                    preprocess_metadata=preprocess_metadata,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            failures.append({"slug": case.slug, "error": str(exc)})
+
+    if len(person_hashes) < 8:
+        failures.append({"error": f"MATRIX_REQUIRES_AT_LEAST_8_UNIQUE_PEOPLE:{len(person_hashes)}"})
+    report = {
+        "manifest": str(MATRIX_FILE),
+        "manifest_metadata": manifest_metadata,
+        "defined_cases": len(cases),
+        "prepared_cases": len(prepared),
+        "unique_person_sources": len(person_hashes),
+        "unique_garment_sources": len(seen_garments),
+        "failures": failures,
+    }
+    _save_json(OUTPUT_ROOT / "preflight.json", report)
+    if failures or len(prepared) != 50:
+        raise RuntimeError(
+            f"STRICT_MATRIX_PREFLIGHT_FAILED:{len(failures)}; see {OUTPUT_ROOT / 'preflight.json'}"
+        )
+    return prepared
+
+
+def _result_gate_failures(result: object, latency_ms: int) -> list[str]:
+    failures: list[str] = []
+    quality_score = float(getattr(result, "quality_score", 0.0) or 0.0)
+    warnings = list(getattr(result, "warnings", []) or [])
+    if quality_score < MIN_QUALITY_SCORE:
+        failures.append(f"QUALITY_BELOW_{MIN_QUALITY_SCORE:.2f}:{quality_score:.6f}")
+    if getattr(result, "candidate_count", None) != 1:
+        failures.append(f"CANDIDATE_COUNT_NOT_ONE:{getattr(result, 'candidate_count', None)}")
+    if warnings:
+        failures.append(f"WARNINGS_PRESENT:{','.join(warnings)}")
+    if latency_ms > TARGET_LATENCY_MS:
+        failures.append(f"LATENCY_ABOVE_{TARGET_LATENCY_MS}:{latency_ms}")
+    if str(getattr(result, "engine", "")).lower() != "catvton":
+        failures.append(f"ENGINE_NOT_CATVTON:{getattr(result, 'engine', None)}")
+    return failures
+
+
+def main() -> int:
+    if settings.tryon_engine.lower() != "catvton":
+        raise RuntimeError(f"STRICT_MATRIX_REQUIRES_CATVTON:{settings.tryon_engine}")
+    if not 0.0 <= MIN_QUALITY_SCORE <= 1.0:
+        raise ValueError("DRAPIXAI_MATRIX_MIN_QUALITY_SCORE must be between 0 and 1")
+    if TARGET_LATENCY_MS <= 0:
+        raise ValueError("DRAPIXAI_MATRIX_TARGET_LATENCY_MS must be positive")
+
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-    cases = _build_cases()
+    cases, manifest_metadata = _load_manifest()
+    prepared = _preflight(cases, manifest_metadata)
+
     start = int(os.getenv("DRAPIXAI_MATRIX_START", "0") or "0")
     limit = int(os.getenv("DRAPIXAI_MATRIX_LIMIT", "0") or "0")
-    selected_cases = cases[start:]
+    selected = prepared[start:]
     if limit > 0:
-        selected_cases = selected_cases[:limit]
+        selected = selected[:limit]
+    if not selected:
+        raise ValueError("MATRIX_SELECTION_EMPTY")
 
     pipeline = DrapixAITryOnPipeline()
     summary: list[dict[str, object]] = []
-    expected_counts: dict[str, int] = {}
-    for garment in GARMENTS:
-        expected_counts[garment.segment] = expected_counts.get(garment.segment, 0) + 1
-
-    for case in selected_cases:
-        case_dir = OUTPUT_ROOT / case.slug
+    for prepared_case in selected:
+        case = prepared_case.case
+        case_dir = OUTPUT_ROOT / f"{case.index:02d}_{case.slug}"
         case_dir.mkdir(parents=True, exist_ok=True)
         entry: dict[str, object] = {
-            "index": case.index,
-            "slug": case.slug,
-            "person": asdict(case.person),
-            "garment": asdict(case.garment),
+            "case": {**asdict(case), "person_path": str(case.person_path), "garment_path": str(case.garment_path)},
+            "person_sha256": prepared_case.person_hash,
+            "garment_sha256": prepared_case.garment_hash,
+            "preprocess": prepared_case.preprocess_metadata,
             "status": "pending",
             "quality_mode": "standard",
-            "settings": {
-                "engine": settings.tryon_engine,
-                "inference_steps": settings.inference_steps,
-                "guidance_scale": settings.guidance_scale,
-                "input_max_side": settings.input_max_side,
-                "min_quality_score": settings.min_quality_score,
-                "target_tryon_ms": settings.target_tryon_ms,
-            },
         }
         try:
-            person = _load_person(case.person)
+            with Image.open(case.person_path) as source:
+                person = source.convert("RGB")
+            with Image.open(prepared_case.processed_garment_path) as source:
+                garment = _rgb_on_white(source)
             person.save(case_dir / "person.png", format="PNG")
-            garment_bytes, resolved_garment_url = _resolve_garment_bytes(case.garment)
-            (case_dir / "garment_source.bin").write_bytes(garment_bytes)
-            entry["resolved_garment_url"] = resolved_garment_url
-
-            try:
-                preprocess = preprocess_garment(garment_bytes)
-                entry["preprocess"] = {
-                    "mode": "strict",
-                    "did_process": preprocess.did_process,
-                    "reason": preprocess.reason,
-                    "warnings": preprocess.warnings,
-                }
-            except GarmentValidationError as exc:
-                preprocess = preprocess_garment(garment_bytes, bypass_validation=True)
-                entry["preprocess"] = {
-                    "mode": "bypass_validation",
-                    "original_error": exc.reason,
-                    "did_process": preprocess.did_process,
-                    "reason": preprocess.reason,
-                    "warnings": preprocess.warnings,
-                }
-
-            garment = preprocess.image.convert("RGB")
-            garment.save(case_dir / "garment_processed.png", format="PNG")
+            garment.save(case_dir / "garment.png", format="PNG")
 
             started_at = time.perf_counter()
             result = pipeline.run_tryon_with_metadata(
@@ -263,39 +347,77 @@ def main() -> None:
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
             result.image.save(case_dir / "result.png", format="PNG")
-            entry["status"] = "succeeded"
-            entry["latency_ms"] = latency_ms
-            entry["result_metadata"] = {
-                "engine": result.engine,
-                "quality_score": result.quality_score,
-                "candidate_count": result.candidate_count,
-                "candidate_scores": result.candidate_scores,
-                "warnings": result.warnings,
-                "metadata": result.metadata,
-            }
+            gate_failures = _result_gate_failures(result, latency_ms)
+            entry.update(
+                {
+                    "status": "rejected" if gate_failures else "passed",
+                    "latency_ms": latency_ms,
+                    "gate_failures": gate_failures,
+                    "result_metadata": {
+                        "engine": result.engine,
+                        "quality_score": result.quality_score,
+                        "candidate_count": result.candidate_count,
+                        "candidate_scores": result.candidate_scores,
+                        "warnings": result.warnings,
+                        "metadata": result.metadata,
+                    },
+                }
+            )
         except Exception as exc:  # noqa: BLE001
-            entry["status"] = "failed"
-            entry["error"] = str(exc)
-            entry["traceback"] = traceback.format_exc()
-
+            entry.update(
+                {
+                    "status": "generation_failed",
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                }
+            )
         summary.append(entry)
         _save_json(case_dir / "summary.json", entry)
         print(f"{case.slug}: {entry['status']}")
 
-    succeeded = sum(1 for item in summary if item["status"] == "succeeded")
-    failed = sum(1 for item in summary if item["status"] == "failed")
+    statuses = {name: sum(item["status"] == name for item in summary) for name in ("passed", "rejected", "generation_failed")}
+    quality_scores = [
+        float(item["result_metadata"]["quality_score"])
+        for item in summary
+        if isinstance(item.get("result_metadata"), dict)
+    ]
     report = {
+        "matrix_file": str(MATRIX_FILE),
         "output_root": str(OUTPUT_ROOT),
+        "git": _git_metadata(),
+        "manifest_metadata": manifest_metadata,
         "total_defined_cases": len(cases),
-        "selected_cases": len(selected_cases),
-        "succeeded": succeeded,
-        "failed": failed,
-        "expected_segment_counts": expected_counts,
+        "selected_cases": len(selected),
+        "full_matrix_run": len(selected) == 50,
+        "quality_mode": "standard",
+        "gates": {
+            "engine": "catvton",
+            "candidate_count": 1,
+            "min_quality_score": MIN_QUALITY_SCORE,
+            "target_latency_ms": TARGET_LATENCY_MS,
+            "warnings_allowed": 0,
+        },
+        "statuses": statuses,
+        "average_quality_score": sum(quality_scores) / len(quality_scores) if quality_scores else None,
         "cases": summary,
     }
     _save_json(OUTPUT_ROOT / "summary.json", report)
+    catalog_command = [
+        sys.executable,
+        str(APP_ROOT / "deploy" / "runpod" / "build_upper_body_50_catalog.py"),
+        "--summary",
+        str(OUTPUT_ROOT / "summary.json"),
+    ]
+    catalog = subprocess.run(catalog_command, capture_output=True, text=True, check=False)
+    report["catalog"] = {
+        "status": "created" if catalog.returncode == 0 else "failed",
+        "stdout": catalog.stdout.strip(),
+        "stderr": catalog.stderr.strip(),
+    }
+    _save_json(OUTPUT_ROOT / "summary.json", report)
     print(OUTPUT_ROOT / "summary.json")
+    return 0 if statuses["passed"] == len(selected) and catalog.returncode == 0 else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

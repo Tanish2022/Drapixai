@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import io
 import json
 import os
@@ -12,6 +13,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Hea
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from PIL import Image
+from rq import Worker
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.queue.redis_queue import get_redis
@@ -23,6 +25,7 @@ from drapixai_ai.services.garment_preprocessor import (
 )
 from drapixai_ai.services.garment_rules import resolve_garment_rule
 from drapixai_ai.services.logger import get_logger
+from drapixai_ai.services.lower_body_validator import validate_lower_body_person
 from drapixai_ai.services.tryon_service import TryOnService
 from drapixai_ai.services.upper_body_validator import is_upper_body
 
@@ -38,6 +41,7 @@ class TryOnBase64Request(BaseModel):
     cloth_image_base64: Optional[str] = Field(default=None, max_length=settings.request_max_bytes * 2)
     quality: Optional[str] = Field(default=None)
     garment_type: Optional[str] = Field(default=None)
+    garment_category: Optional[str] = Field(default=None)
     cloth_cache_key: Optional[str] = Field(default=None)
 
 
@@ -48,7 +52,12 @@ class GarmentBase64Request(BaseModel):
     category: Optional[str] = Field(default=None)
     product_name: Optional[str] = Field(default=None)
     garment_profile: Optional[str] = Field(default=None)
+    garment_type: Optional[str] = Field(default=None)
     admin_bypass: Optional[bool] = Field(default=False)
+
+
+class GarmentCacheDeleteRequest(BaseModel):
+    cache_key: str = Field(..., min_length=1, max_length=512)
 
 
 def _decode_base64_image(value: Optional[str], field_name: str) -> bytes:
@@ -71,6 +80,10 @@ def _require_production_config() -> None:
         missing.append("DRAPIXAI_AI_SERVICE_TOKEN")
     if not settings.admin_token:
         missing.append("DRAPIXAI_ADMIN_TOKEN")
+    if not settings.redis_password:
+        missing.append("DRAPIXAI_REDIS_PASSWORD")
+    if settings.catvton_skip_safety_check:
+        raise RuntimeError("PRODUCTION_CONFIG_INVALID DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK must equal 0")
     if missing:
         raise RuntimeError(f"PRODUCTION_CONFIG_INVALID missing={','.join(missing)}")
 
@@ -78,7 +91,12 @@ def _require_production_config() -> None:
 def _validate_image_bytes(image_bytes: bytes, field_name: str) -> None:
     try:
         with Image.open(io.BytesIO(image_bytes)) as image:
+            width, height = image.size
+            if width <= 0 or height <= 0 or width * height > settings.request_max_pixels:
+                raise HTTPException(status_code=413, detail=f"{field_name.upper()}_PIXEL_LIMIT")
             image.verify()
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=400, detail=f"INVALID_{field_name.upper()}")
 
@@ -107,8 +125,98 @@ def _model_ready() -> bool:
     )
 
 
+def _worker_ready(connection) -> bool:
+    for worker in Worker.all(connection=connection):
+        if settings.queue_name not in worker.queue_names():
+            continue
+        if worker.get_state() in {"idle", "busy"}:
+            return True
+    return False
+
+
 def _is_admin(token: Optional[str]) -> bool:
-    return bool(settings.admin_token) and token == settings.admin_token
+    return bool(settings.admin_token) and hmac.compare_digest(token or "", settings.admin_token)
+
+
+def _normalize_garment_type(value: Optional[str]) -> str:
+    normalized = (value or "upper").strip().lower().replace("-", "_")
+    if normalized in {"upper", "upper_body"}:
+        return "upper"
+    if normalized in {"lower", "lower_body"}:
+        if not settings.enable_lower_body:
+            raise HTTPException(status_code=400, detail="LOWER_BODY_NOT_ENABLED")
+        return "lower"
+    raise HTTPException(status_code=400, detail="UNSUPPORTED_GARMENT_TYPE")
+
+
+def _normalize_lower_category(value: Optional[str]) -> Optional[str]:
+    normalized = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "denim_jeans": "jeans",
+        "denim_pants": "jeans",
+        "pant": "pants",
+        "trouser": "trousers",
+        "short": "shorts",
+        "denim_shorts": "shorts",
+        "mini_skirt": "skirt",
+        "pencil_skirt": "skirt",
+        "a_line_skirt": "skirt",
+        "legging": "leggings",
+        "tights": "leggings",
+        "yoga_pants": "leggings",
+        "jogger": "joggers",
+        "sweatpants": "joggers",
+        "track_pants": "joggers",
+    }
+    normalized = aliases.get(normalized, normalized)
+    allowed = {item.strip().lower() for item in settings.lower_body_allowed_categories.split(",") if item.strip()}
+    if not normalized:
+        return None
+    if normalized not in allowed:
+        raise HTTPException(status_code=422, detail="GARMENT_INVALID:LOWER_BODY_CATEGORY_NOT_ALLOWED")
+    return normalized
+
+
+def _tryon_profile_type(garment_type: str, garment_category: Optional[str]) -> str:
+    if garment_type != "lower":
+        return garment_type
+    category = _normalize_lower_category(garment_category)
+    return f"lower:{category}" if category else "lower"
+
+
+def _validate_person_for_garment_type(person_bytes: bytes, garment_type: str) -> None:
+    if garment_type == "upper":
+        if settings.enforce_upper_body:
+            ok, reason = is_upper_body(person_bytes)
+            if not ok:
+                raise HTTPException(status_code=400, detail=f"UPPER_BODY_ONLY:{reason}")
+        return
+
+    result = validate_lower_body_person(person_bytes)
+    if not result.ok:
+        raise HTTPException(status_code=400, detail=f"LOWER_BODY_INVALID:{result.reason}")
+
+
+def _ensure_lower_garment_rule_allowed(rule_key: str, support_level: str, garment_type: str) -> None:
+    if support_level != "future_lower_beta":
+        return
+    allowed = {item.strip() for item in settings.lower_body_allowed_categories.split(",") if item.strip()}
+    if garment_type != "lower" or rule_key not in allowed:
+        raise HTTPException(status_code=422, detail="GARMENT_INVALID:LOWER_BODY_NOT_ENABLED")
+
+
+def _cache_version_for_garment_type(garment_type: str) -> str:
+    if garment_type == "lower":
+        return settings.lower_body_cache_version
+    return settings.garment_cache_version
+
+
+def _rule_warnings(rule) -> list[str]:
+    if rule.support_level == "beta":
+        return [f"BETA_CATEGORY:{rule.key.upper()}"]
+    if rule.support_level == "future_lower_beta":
+        return [f"LOWER_BODY_V1_CATEGORY:{rule.key.upper()}", "LOWER_BODY_V1_REVIEW_REQUIRED"]
+    return []
 
 
 _require_production_config()
@@ -120,7 +228,7 @@ async def request_logger(request, call_next):
     request.state.request_id = request_id
     if request.url.path.startswith("/ai/") and settings.ai_service_token:
         token = request.headers.get("x-drapixai-service-token", "")
-        if token != settings.ai_service_token:
+        if not hmac.compare_digest(token, settings.ai_service_token):
             logger.warning(
                 "ai_service_token_rejected",
                 extra={
@@ -138,6 +246,9 @@ async def request_logger(request, call_next):
     response = await call_next(request)
     duration_ms = int((time.time() - start) * 1000)
     response.headers["x-request-id"] = request_id
+    if request.url.path.startswith("/ai/"):
+        response.headers["Cache-Control"] = "no-store, private"
+        response.headers["Pragma"] = "no-cache"
     logger.info(
         "request_complete",
         extra={
@@ -157,12 +268,24 @@ async def health() -> dict:
 
 
 @app.get("/ready")
-async def ready() -> dict:
+async def ready() -> Response:
     try:
-        get_redis().ping()
-        return {"status": "ready", "model_ready": _model_ready(), "engine": settings.tryon_engine}
+        connection = get_redis()
+        connection.ping()
+        model_ready = _model_ready()
+        worker_ready = _worker_ready(connection)
+        payload = {
+            "status": "ready" if model_ready and worker_ready else "not_ready",
+            "model_ready": model_ready,
+            "worker_ready": worker_ready,
+            "engine": settings.tryon_engine,
+        }
+        return JSONResponse(payload, status_code=200 if model_ready and worker_ready else 503)
     except Exception:
-        return {"status": "not_ready", "model_ready": _model_ready(), "engine": settings.tryon_engine}
+        return JSONResponse(
+            {"status": "not_ready", "model_ready": _model_ready(), "worker_ready": False, "engine": settings.tryon_engine},
+            status_code=503,
+        )
 
 
 @app.post("/ai/tryon")
@@ -173,6 +296,7 @@ async def tryon(
     cloth_image: Optional[UploadFile] = File(default=None),
     quality: Optional[str] = Form(default=None),
     garment_type: Optional[str] = Form(default=None),
+    garment_category: Optional[str] = Form(default=None),
     cloth_cache_key: Optional[str] = Form(default=None),
 ):
     quality_mode = _quality_mode(quality)
@@ -195,22 +319,18 @@ async def tryon(
     _validate_image_bytes(person_bytes, "person_image")
     _validate_image_bytes(cloth_bytes, "cloth_image")
 
-    if garment_type and garment_type.lower() != "upper":
-        raise HTTPException(status_code=400, detail="UPPER_BODY_ONLY")
-
-    if settings.enforce_upper_body and (garment_type or "upper").lower() == "upper":
-        ok, reason = is_upper_body(person_bytes)
-        if not ok:
-            raise HTTPException(status_code=400, detail=f"UPPER_BODY_ONLY:{reason}")
+    normalized_garment_type = _normalize_garment_type(garment_type)
+    profile_garment_type = _tryon_profile_type(normalized_garment_type, garment_category)
+    _validate_person_for_garment_type(person_bytes, normalized_garment_type)
 
     try:
         job = service.enqueue_tryon(
             user_id=user_id,
-            person_b64=base64.b64encode(person_bytes).decode("utf-8"),
-            cloth_b64=base64.b64encode(cloth_bytes).decode("utf-8"),
+            person_bytes=person_bytes,
+            cloth_bytes=cloth_bytes,
             quality=quality_mode,
             request_id=getattr(request.state, "request_id", None),
-            garment_type=garment_type,
+            garment_type=profile_garment_type,
         )
     except PermissionError:
         raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
@@ -256,6 +376,26 @@ async def tryon(
             "long_sleeve_preservation",
             "pose_preservation",
             "garment_coverage",
+            "upper_body_preservation",
+            "shoe_preservation",
+            "waistband_alignment",
+            "left_leg_integrity",
+            "right_leg_integrity",
+            "knee_preservation",
+            "ankle_preservation",
+            "lower_garment_color_similarity",
+            "lower_garment_texture_similarity",
+            "lower_garment_coverage",
+            "hem_alignment",
+            "crotch_artifact_score",
+            "lower_body_category_profile",
+            "jeans_profile_score",
+            "pants_profile_score",
+            "trousers_profile_score",
+            "shorts_profile_score",
+            "skirt_profile_score",
+            "leggings_profile_score",
+            "joggers_profile_score",
         }
     }
     headers = {
@@ -267,6 +407,7 @@ async def tryon(
         "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
         "x-drapixai-quality-json": json.dumps(quality_metrics, separators=(",", ":")),
         "x-drapixai-quality-mode": quality_mode,
+        "x-drapixai-quality-profile": str(metadata.get("quality_profile", "")),
         "x-drapixai-garment-source": garment_source,
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
@@ -275,19 +416,16 @@ async def tryon(
 @app.post("/ai/tryon/base64")
 async def tryon_base64(payload: TryOnBase64Request, request: Request):
     quality_mode = _quality_mode(payload.quality)
-    if payload.garment_type and payload.garment_type.lower() != "upper":
-        raise HTTPException(status_code=400, detail="UPPER_BODY_ONLY")
+    normalized_garment_type = _normalize_garment_type(payload.garment_type)
+    profile_garment_type = _tryon_profile_type(normalized_garment_type, payload.garment_category)
 
     person_bytes = _decode_base64_image(payload.person_image_base64, "person_image")
     if len(person_bytes) > settings.request_max_bytes:
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
     _validate_image_bytes(person_bytes, "person_image")
-    if settings.enforce_upper_body and (payload.garment_type or "upper").lower() == "upper":
-        ok, reason = is_upper_body(person_bytes)
-        if not ok:
-            raise HTTPException(status_code=400, detail=f"UPPER_BODY_ONLY:{reason}")
+    _validate_person_for_garment_type(person_bytes, normalized_garment_type)
 
-    cloth_b64 = payload.cloth_image_base64 or ""
+    cloth_bytes = b""
     garment_source = "direct_upload"
     if payload.cloth_cache_key:
         hit = garment_cache.get(payload.cloth_cache_key)
@@ -296,23 +434,22 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         if len(hit.image_bytes) > settings.request_max_bytes:
             raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
         _validate_image_bytes(hit.image_bytes, "cloth_image")
-        cloth_b64 = base64.b64encode(hit.image_bytes).decode("utf-8")
+        cloth_bytes = hit.image_bytes
         garment_source = "cache"
     else:
         cloth_bytes = _decode_base64_image(payload.cloth_image_base64, "cloth_image")
         if len(cloth_bytes) > settings.request_max_bytes:
             raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
         _validate_image_bytes(cloth_bytes, "cloth_image")
-        cloth_b64 = base64.b64encode(cloth_bytes).decode("utf-8")
 
     try:
         job = service.enqueue_tryon(
             user_id=payload.user_id,
-            person_b64=payload.person_image_base64,
-            cloth_b64=cloth_b64,
+            person_bytes=person_bytes,
+            cloth_bytes=cloth_bytes,
             quality=quality_mode,
             request_id=getattr(request.state, "request_id", None),
-            garment_type=payload.garment_type,
+            garment_type=profile_garment_type,
         )
     except PermissionError:
         raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
@@ -358,6 +495,26 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
             "long_sleeve_preservation",
             "pose_preservation",
             "garment_coverage",
+            "upper_body_preservation",
+            "shoe_preservation",
+            "waistband_alignment",
+            "left_leg_integrity",
+            "right_leg_integrity",
+            "knee_preservation",
+            "ankle_preservation",
+            "lower_garment_color_similarity",
+            "lower_garment_texture_similarity",
+            "lower_garment_coverage",
+            "hem_alignment",
+            "crotch_artifact_score",
+            "lower_body_category_profile",
+            "jeans_profile_score",
+            "pants_profile_score",
+            "trousers_profile_score",
+            "shorts_profile_score",
+            "skirt_profile_score",
+            "leggings_profile_score",
+            "joggers_profile_score",
         }
     }
     headers = {
@@ -369,6 +526,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         "x-drapixai-timing-json": json.dumps(result.get("timings", {}), separators=(",", ":")),
         "x-drapixai-quality-json": json.dumps(quality_metrics, separators=(",", ":")),
         "x-drapixai-quality-mode": quality_mode,
+        "x-drapixai-quality-profile": str(metadata.get("quality_profile", "")),
         "x-drapixai-garment-source": garment_source,
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
@@ -382,6 +540,7 @@ async def garment_preprocess(
     category: Optional[str] = Form(default=None),
     product_name: Optional[str] = Form(default=None),
     garment_profile: Optional[str] = Form(default=None),
+    garment_type: Optional[str] = Form(default=None),
     admin_bypass: Optional[bool] = Form(default=False),
     x_admin_token: Optional[str] = Header(default=None),
 ):
@@ -391,8 +550,16 @@ async def garment_preprocess(
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
     image_hash = garment_cache.compute_hash(cloth_bytes)
+    normalized_garment_type = _normalize_garment_type(garment_type)
     rule = resolve_garment_rule(garment_profile, category, product_name, garment_id)
-    cache_key = garment_cache.build_key(image_hash, brand_id, garment_id, rule.key)
+    _ensure_lower_garment_rule_allowed(rule.key, rule.support_level, normalized_garment_type)
+    cache_key = garment_cache.build_key(
+        image_hash,
+        brand_id,
+        garment_id,
+        rule.key,
+        version=_cache_version_for_garment_type(normalized_garment_type),
+    )
     cache_hit = garment_cache.get(cache_key)
     if cache_hit:
         return {
@@ -403,7 +570,8 @@ async def garment_preprocess(
             "profile_key": rule.key,
             "profile_label": rule.label,
             "support_level": rule.support_level,
-            "warnings": [f"BETA_CATEGORY:{rule.key.upper()}"] if rule.support_level == "beta" else [],
+            "garment_type": normalized_garment_type,
+            "warnings": _rule_warnings(rule),
         }
 
     bypass_allowed = bool(admin_bypass) and bool(settings.admin_token) and settings.admin_token == (x_admin_token or "")
@@ -416,6 +584,7 @@ async def garment_preprocess(
                 category_hint=category,
                 product_name=product_name,
                 garment_id=garment_id,
+                garment_type=normalized_garment_type,
             ),
         )
     except GarmentValidationError as exc:
@@ -432,6 +601,7 @@ async def garment_preprocess(
         "profile_key": result.profile_key,
         "profile_label": result.profile_label,
         "support_level": result.support_level,
+        "garment_type": normalized_garment_type,
         "warnings": list(result.warnings),
     }
 
@@ -458,6 +628,11 @@ async def garment_cache_health(x_admin_token: Optional[str] = Header(default=Non
     return garment_cache.health_check()
 
 
+@app.post("/ai/garment/cache/delete")
+async def garment_cache_delete(payload: GarmentCacheDeleteRequest):
+    return {"deleted": garment_cache.delete(payload.cache_key)}
+
+
 @app.post("/ai/garment/preprocess/base64")
 async def garment_preprocess_base64(
     payload: GarmentBase64Request,
@@ -469,8 +644,16 @@ async def garment_preprocess_base64(
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
 
     image_hash = garment_cache.compute_hash(cloth_bytes)
+    normalized_garment_type = _normalize_garment_type(payload.garment_type)
     rule = resolve_garment_rule(payload.garment_profile, payload.category, payload.product_name, payload.garment_id)
-    cache_key = garment_cache.build_key(image_hash, payload.brand_id, payload.garment_id, rule.key)
+    _ensure_lower_garment_rule_allowed(rule.key, rule.support_level, normalized_garment_type)
+    cache_key = garment_cache.build_key(
+        image_hash,
+        payload.brand_id,
+        payload.garment_id,
+        rule.key,
+        version=_cache_version_for_garment_type(normalized_garment_type),
+    )
     cache_hit = garment_cache.get(cache_key)
     if cache_hit:
         return {
@@ -481,7 +664,8 @@ async def garment_preprocess_base64(
             "profile_key": rule.key,
             "profile_label": rule.label,
             "support_level": rule.support_level,
-            "warnings": [f"BETA_CATEGORY:{rule.key.upper()}"] if rule.support_level == "beta" else [],
+            "garment_type": normalized_garment_type,
+            "warnings": _rule_warnings(rule),
         }
 
     bypass_allowed = bool(payload.admin_bypass) and bool(settings.admin_token) and settings.admin_token == (x_admin_token or "")
@@ -494,6 +678,7 @@ async def garment_preprocess_base64(
                 category_hint=payload.category,
                 product_name=payload.product_name,
                 garment_id=payload.garment_id,
+                garment_type=normalized_garment_type,
             ),
         )
     except GarmentValidationError as exc:
@@ -511,5 +696,6 @@ async def garment_preprocess_base64(
         "profile_key": result.profile_key,
         "profile_label": result.profile_label,
         "support_level": result.support_level,
+        "garment_type": normalized_garment_type,
         "warnings": list(result.warnings),
     }

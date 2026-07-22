@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import io
 import os
 import sys
@@ -16,6 +15,12 @@ from drapixai_ai.configs.settings import settings
 from drapixai_ai.pipeline.tryon_pipeline import DrapixAITryOnPipeline
 from drapixai_ai.queue.redis_queue import get_queue, get_redis
 from drapixai_ai.services.logger import get_logger
+from drapixai_ai.services.transient_spool import (
+    cleanup_expired_transients,
+    delete_transient,
+    read_transient_bytes,
+    write_transient_bytes,
+)
 
 
 _PIPELINE: DrapixAITryOnPipeline | None = None
@@ -54,9 +59,12 @@ def _get_pipeline() -> DrapixAITryOnPipeline:
     return _PIPELINE
 
 
-def _decode_image(data_b64: str, *, preserve_white_background: bool = False) -> Image.Image:
-    raw = base64.b64decode(data_b64)
+def _decode_image(reference: str, *, preserve_white_background: bool = False) -> Image.Image:
+    raw = read_transient_bytes(reference)
     image = Image.open(io.BytesIO(raw))
+    width, height = image.size
+    if width <= 0 or height <= 0 or width * height > settings.request_max_pixels:
+        raise ValueError("IMAGE_PIXEL_LIMIT")
     if preserve_white_background and image.mode in ("RGBA", "LA"):
         rgba = image.convert("RGBA")
         background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
@@ -64,10 +72,10 @@ def _decode_image(data_b64: str, *, preserve_white_background: bool = False) -> 
     return image.convert("RGB")
 
 
-def _encode_image(image: Image.Image) -> str:
+def _store_output_image(image: Image.Image) -> str:
     buf = io.BytesIO()
     image.save(buf, format=settings.output_format.upper())
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+    return write_transient_bytes(buf.getvalue())
 
 
 def _finalize_output_image(image: Image.Image) -> Image.Image:
@@ -81,13 +89,20 @@ def _finalize_output_image(image: Image.Image) -> Image.Image:
 
 
 def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
+    cleanup_expired_transients()
     job_started_at_ms = int(time.time() * 1000)
     total_start = time.perf_counter()
     decode_start = time.perf_counter()
     pipeline = _get_pipeline()
 
-    person = _decode_image(payload["person_image"])
-    cloth = _decode_image(payload["cloth_image"], preserve_white_background=True)
+    person_ref = payload.get("person_image_ref")
+    cloth_ref = payload.get("cloth_image_ref")
+    try:
+        person = _decode_image(person_ref)
+        cloth = _decode_image(cloth_ref, preserve_white_background=True)
+    finally:
+        delete_transient(person_ref)
+        delete_transient(cloth_ref)
     decode_ms = int((time.perf_counter() - decode_start) * 1000)
 
     logger.info(
@@ -115,7 +130,7 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     output_image = _finalize_output_image(result.image)
     output_upscale_ms = int((time.perf_counter() - encode_start) * 1000)
     encode_start = time.perf_counter()
-    image_base64 = _encode_image(output_image)
+    output_image_ref = _store_output_image(output_image)
     encode_ms = int((time.perf_counter() - encode_start) * 1000)
     total_ms = int((time.perf_counter() - total_start) * 1000)
     enqueued_at_ms = payload.get("enqueued_at_ms")
@@ -163,7 +178,7 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     return {
-        "image_base64": image_base64,
+        "output_image_ref": output_image_ref,
         "format": settings.output_format,
         "engine": result.engine,
         "quality_score": result.quality_score,
@@ -177,6 +192,7 @@ def run_tryon_job(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def main() -> None:
+    cleanup_expired_transients()
     use_cuda = settings.device == "cuda" and torch.cuda.is_available()
     if use_cuda:
         torch.cuda.set_device(settings.cuda_device_index)

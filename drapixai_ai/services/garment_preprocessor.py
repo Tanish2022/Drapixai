@@ -20,6 +20,7 @@ class GarmentPreprocessOptions:
     category_hint: str | None = None
     product_name: str | None = None
     garment_id: str | None = None
+    garment_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -101,28 +102,56 @@ def _skin_mask(rgb: np.ndarray) -> np.ndarray:
     )
 
 
-def _skin_ratios(image: Image.Image) -> Tuple[float, float]:
+def _skin_signals(image: Image.Image) -> Tuple[float, float, int]:
     rgba = image.convert("RGBA")
     rgb = np.asarray(rgba.convert("RGB"))
     alpha = np.asarray(rgba.getchannel("A")) > settings.garment_alpha_threshold
     if not alpha.any():
-        return 0.0, 0.0
+        return 0.0, 0.0, 0
 
     skin = _skin_mask(rgb) & alpha
-    total_skin_ratio = float(skin.sum() / alpha.sum())
-
     bbox = _foreground_bbox(rgba)
     if bbox is None:
-        return total_skin_ratio, 0.0
-    _x0, y0, _x1, y1 = bbox
+        return 0.0, 0.0, 0
+    x0, y0, x1, y1 = bbox
+    crop_w = max(1, x1 - x0 + 1)
     crop_h = max(1, y1 - y0 + 1)
-    top_end = min(rgba.height, y0 + max(1, int(crop_h * 0.35)))
-    top_alpha = alpha[y0:top_end, :]
+    center_x0 = x0 + int(crop_w * 0.22)
+    center_x1 = x1 - int(crop_w * 0.22) + 1
+    top_end = min(rgba.height, y0 + max(1, int(crop_h * 0.24)))
+    top_alpha = alpha[y0:top_end, center_x0:center_x1]
     if not top_alpha.any():
-        return total_skin_ratio, 0.0
-    top_skin = skin[y0:top_end, :]
-    top_skin_ratio = float(top_skin.sum() / top_alpha.sum())
-    return total_skin_ratio, top_skin_ratio
+        top_skin_ratio = 0.0
+    else:
+        top_skin = skin[y0:top_end, center_x0:center_x1]
+        top_skin_ratio = float(top_skin.sum() / top_alpha.sum())
+
+    side_width = max(1, int(crop_w * 0.20))
+    side_y0 = y0 + int(crop_h * 0.16)
+    exposed_region = np.zeros_like(alpha, dtype=bool)
+    exposed_region[y0:top_end, center_x0:center_x1] = True
+    exposed_region[side_y0 : y1 + 1, x0 : x0 + side_width] = True
+    exposed_region[side_y0 : y1 + 1, x1 - side_width + 1 : x1 + 1] = True
+    exposed_skin = skin & exposed_region
+    exposed_skin_ratio = float(exposed_skin.sum() / alpha.sum())
+
+    component_count = 0
+    try:
+        import cv2  # type: ignore
+
+        count, _labels, stats, _centroids = cv2.connectedComponentsWithStats(
+            skin.astype(np.uint8),
+            connectivity=8,
+        )
+        minimum_component_area = max(24, int(alpha.sum() * 0.0015))
+        component_count = sum(
+            int(stats[index, cv2.CC_STAT_AREA]) >= minimum_component_area
+            for index in range(1, count)
+        )
+    except Exception:
+        component_count = 2 if exposed_skin_ratio > 0.08 else 0
+
+    return exposed_skin_ratio, top_skin_ratio, component_count
 
 
 def _blur_score(image: Image.Image) -> float:
@@ -165,8 +194,8 @@ def _validate_isolated_garment(image: Image.Image, rule: GarmentRule) -> None:
     if aspect_ratio > rule.max_aspect_ratio:
         raise GarmentValidationError("GARMENT_TOO_LONG")
 
-    skin_ratio, top_skin_ratio = _skin_ratios(image)
-    if (
+    skin_ratio, top_skin_ratio, skin_component_count = _skin_signals(image)
+    if skin_component_count >= 2 and (
         skin_ratio > rule.skin_ratio_threshold
         or top_skin_ratio > rule.top_skin_ratio_threshold
     ):
@@ -217,7 +246,22 @@ def preprocess_garment(
     image = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
     opts = options or GarmentPreprocessOptions()
     rule = resolve_garment_rule(opts.garment_profile, opts.category_hint, opts.product_name, opts.garment_id)
-    warnings: tuple[str, ...] = (f"BETA_CATEGORY:{rule.key.upper()}",) if rule.support_level == "beta" else ()
+    garment_type = (opts.garment_type or "upper").strip().lower()
+    lower_allowed = (
+        settings.enable_lower_body
+        and garment_type == "lower"
+        and rule.key in {item.strip() for item in settings.lower_body_allowed_categories.split(",") if item.strip()}
+    )
+    warnings: tuple[str, ...] = (
+        (f"BETA_CATEGORY:{rule.key.upper()}",)
+        if rule.support_level == "beta"
+        else (f"FUTURE_LOWER_BODY_CATEGORY:{rule.key.upper()}",)
+        if rule.support_level == "future_lower_beta"
+        else ()
+    )
+
+    if rule.support_level == "future_lower_beta" and not lower_allowed:
+        raise GarmentValidationError("LOWER_BODY_NOT_ENABLED")
 
     if not bypass_validation:
         if rule.support_level == "unsupported":

@@ -47,10 +47,10 @@ Pinned Python packages:
 - `einops==0.7.0`
 - `pillow==10.3.0`
 - `numpy==1.26.4`
-- `opencv-python==4.10.0.84`
+- `opencv-python-headless==4.10.0.84`
 - `scipy==1.13.1`
 - `scikit-image==0.24.0`
-- `matplotlib==3.9.1`
+- `matplotlib==3.9.4`
 - `PyYAML==6.0.1`
 - `tqdm==4.66.4`
 - `rembg==2.0.57`

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image, ImageEnhance, ImageFilter, ImageStat
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageStat
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.preprocess.garment_analyzer import isolate_garment
+from drapixai_ai.preprocess.mask_builder import build_lower_body_mask_for_category
 
 
 def apply_quality_boosters(
@@ -12,6 +13,8 @@ def apply_quality_boosters(
     *,
     person: Image.Image,
     garment: Image.Image,
+    garment_type: str | None = None,
+    tryon_mask: Image.Image | None = None,
 ) -> Image.Image:
     """Apply enabled post-generation quality boosters.
 
@@ -21,30 +24,89 @@ def apply_quality_boosters(
     """
 
     result = image.convert("RGB")
+    person_resized = person.convert("RGB").resize(result.size, Image.Resampling.LANCZOS)
+    lower_category = _lower_category(garment_type)
+    lower_region = (
+        _build_lower_postprocess_mask(person_resized, lower_category, tryon_mask)
+        if lower_category is not None
+        else None
+    )
 
     if settings.enable_garment_color_fix:
-        result = _match_garment_color(result, garment)
+        result = _match_garment_color(
+            result,
+            garment,
+            region_mask=lower_region,
+            strength=(settings.lower_body_color_fix_strength if lower_region is not None else None),
+        )
 
     if settings.enable_natural_lighting_fix:
-        result = _naturalize_lighting(result, person)
+        lit = _naturalize_lighting(result, person_resized if lower_region is not None else person)
+        result = _composite_region(result, lit, lower_region)
 
-    result = _protect_background_color(result, person, garment)
+    if lower_region is None:
+        result = _protect_background_color(result, person_resized, garment)
 
     if settings.enable_fashion_polish:
-        result = _apply_fashion_polish(result, garment)
+        result = _apply_fashion_polish(result, garment, region_mask=lower_region)
 
-    if settings.enable_person_context_restore:
+    if lower_region is not None:
+        result = _restore_fabric_detail(result, garment, lower_region)
+
+    if lower_region is None and settings.enable_person_context_restore:
         result = _restore_person_context(result, person, garment)
 
     if settings.enable_refinement:
-        result = _harmonize_luma(result, person)
-        result = _restore_garment_saturation(result, garment)
-        result = ImageEnhance.Contrast(result).enhance(1.015)
+        refined = _harmonize_luma(result, person_resized if lower_region is not None else person)
+        refined = _restore_garment_saturation(refined, garment)
+        refined = ImageEnhance.Contrast(refined).enhance(1.015)
+        result = _composite_region(result, refined, lower_region)
 
     if settings.enable_upscale:
-        result = _detail_restore(result)
+        result = _composite_region(result, _detail_restore(result), lower_region)
+
+    if lower_region is not None and settings.lower_body_restore_context:
+        result = Image.composite(result, person_resized, lower_region)
 
     return result
+
+
+def _lower_category(garment_type: str | None) -> str | None:
+    normalized = (garment_type or "").strip().lower().replace("-", "_")
+    if ":" in normalized:
+        garment_family, category = normalized.split(":", 1)
+        return category if garment_family in {"lower", "lower_body"} else None
+    if normalized in {"jeans", "pants", "trousers", "shorts", "skirt", "leggings", "joggers"}:
+        return normalized
+    if normalized in {"lower", "lower_body"}:
+        return "pants"
+    return None
+
+
+def _build_lower_postprocess_mask(
+    person: Image.Image,
+    category: str,
+    tryon_mask: Image.Image | None,
+) -> Image.Image:
+    category_mask = build_lower_body_mask_for_category(person, category).convert("L")
+    if tryon_mask is not None:
+        engine_mask = tryon_mask.convert("L").resize(person.size, Image.Resampling.LANCZOS)
+        category_mask = ImageChops.darker(category_mask, engine_mask)
+
+    inset = max(0, settings.lower_body_postprocess_mask_inset)
+    if inset:
+        filter_size = inset * 2 + 1
+        category_mask = category_mask.filter(ImageFilter.MinFilter(size=filter_size))
+    feather = max(0, settings.lower_body_postprocess_feather)
+    if feather:
+        category_mask = category_mask.filter(ImageFilter.GaussianBlur(radius=feather))
+    return category_mask
+
+
+def _composite_region(base: Image.Image, effect: Image.Image, region_mask: Image.Image | None) -> Image.Image:
+    if region_mask is None:
+        return effect
+    return Image.composite(effect.convert("RGB"), base.convert("RGB"), region_mask)
 
 
 def _mean_luma(image: Image.Image) -> float:
@@ -95,33 +157,53 @@ def _naturalize_lighting(image: Image.Image, person: Image.Image) -> Image.Image
     return Image.blend(result, sharpened, 0.28 * strength)
 
 
-def _match_garment_color(image: Image.Image, garment: Image.Image) -> Image.Image:
-    garment_pixels = _garment_foreground_pixels(garment)
+def _match_garment_color(
+    image: Image.Image,
+    garment: Image.Image,
+    *,
+    region_mask: Image.Image | None = None,
+    strength: float | None = None,
+) -> Image.Image:
+    lower_mode = region_mask is not None
+    garment_pixels = _garment_foreground_pixels(garment, preserve_neutral=lower_mode)
     if garment_pixels.size == 0:
         return image
 
     arr = np.asarray(image.convert("RGB")).astype(np.float32)
-    target = np.median(garment_pixels.astype(np.float32), axis=0)
-    mask = _generated_garment_mask(arr, target)
+    garment_stats = (
+        _sample_pixels(garment_pixels.astype(np.float32))
+        if lower_mode
+        else garment_pixels.astype(np.float32)
+    )
+    target = np.median(garment_stats, axis=0)
+    mask = _generated_garment_mask(arr, target, region_mask=region_mask)
     if float(mask.mean()) < 0.035:
         return image
 
     source_pixels = arr[mask]
-    source = np.median(source_pixels, axis=0)
-    strength = max(0.0, min(0.98, settings.garment_color_fix_strength))
+    source_stats = _sample_pixels(source_pixels) if lower_mode else source_pixels
+    source = np.median(source_stats, axis=0)
+    correction_strength = settings.garment_color_fix_strength if strength is None else strength
+    correction_strength = max(0.0, min(0.98, correction_strength))
     corrected = arr.copy()
 
     # Preserve generated lighting/texture by applying a bounded garment-level
     # color and contrast correction instead of repainting each pixel flat.
-    target_p10 = np.percentile(garment_pixels.astype(np.float32), 10, axis=0)
-    target_p90 = np.percentile(garment_pixels.astype(np.float32), 90, axis=0)
-    source_p10 = np.percentile(source_pixels, 10, axis=0)
-    source_p90 = np.percentile(source_pixels, 90, axis=0)
+    target_p10 = np.percentile(garment_stats, 10, axis=0)
+    target_p90 = np.percentile(garment_stats, 90, axis=0)
+    source_p10 = np.percentile(source_stats, 10, axis=0)
+    source_p90 = np.percentile(source_stats, 90, axis=0)
     source_range = np.maximum(12.0, source_p90 - source_p10)
     target_range = np.maximum(12.0, target_p90 - target_p10)
-    gain = np.clip(target_range / source_range, 0.82, 1.22)
-    rgb_delta = np.clip(target - source, -48.0, 48.0)
-    adjusted = (corrected[mask] - source) * (1.0 + (gain - 1.0) * strength) + source + rgb_delta * strength
+    gain_bounds = (0.90, 1.10) if lower_mode else (0.82, 1.22)
+    delta_limit = 36.0 if lower_mode else 48.0
+    gain = np.clip(target_range / source_range, *gain_bounds)
+    rgb_delta = np.clip(target - source, -delta_limit, delta_limit)
+    adjusted = (
+        (corrected[mask] - source) * (1.0 + (gain - 1.0) * correction_strength)
+        + source
+        + rgb_delta * correction_strength
+    )
     corrected[mask] = adjusted
 
     alpha = Image.fromarray((mask.astype(np.uint8) * 255), mode="L")
@@ -138,7 +220,7 @@ def _protect_background_color(image: Image.Image, person: Image.Image, garment: 
     person_resized = person.convert("RGB").resize(result.size, Image.BICUBIC)
     result_arr = np.asarray(result).astype(np.float32)
     person_arr = np.asarray(person_resized).astype(np.float32)
-    garment_pixels = _garment_foreground_pixels(garment)
+    garment_pixels = _garment_foreground_pixels(garment, preserve_neutral=region_mask is not None)
     if garment_pixels.size == 0:
         return result
 
@@ -173,7 +255,12 @@ def _protect_background_color(image: Image.Image, person: Image.Image, garment: 
     return Image.fromarray(np.clip(restored, 0, 255).astype(np.uint8), mode="RGB")
 
 
-def _apply_fashion_polish(image: Image.Image, garment: Image.Image) -> Image.Image:
+def _apply_fashion_polish(
+    image: Image.Image,
+    garment: Image.Image,
+    *,
+    region_mask: Image.Image | None = None,
+) -> Image.Image:
     strength = max(0.0, min(1.0, settings.fashion_polish_strength))
     if strength <= 0:
         return image
@@ -184,7 +271,7 @@ def _apply_fashion_polish(image: Image.Image, garment: Image.Image) -> Image.Ima
         return image
 
     target = np.median(garment_pixels.astype(np.float32), axis=0)
-    garment_mask = _generated_garment_mask(arr, target)
+    garment_mask = _generated_garment_mask(arr, target, region_mask=region_mask)
     if float(garment_mask.mean()) < 0.035:
         return image
 
@@ -287,6 +374,34 @@ def _restore_person_context(image: Image.Image, person: Image.Image, garment: Im
     return Image.fromarray(np.clip(restored, 0, 255).astype(np.uint8), mode="RGB")
 
 
+def _restore_fabric_detail(image: Image.Image, garment: Image.Image, region_mask: Image.Image) -> Image.Image:
+    garment_pixels = _garment_foreground_pixels(garment, preserve_neutral=True)
+    if garment_pixels.size == 0:
+        return image
+
+    garment_gray = np.mean(_sample_pixels(garment_pixels.astype(np.float32)), axis=1)
+    target_detail = float(np.std(garment_gray))
+    if target_detail < 8.0:
+        return image
+
+    region = np.asarray(region_mask.convert("L"), dtype=np.float32) / 255.0
+    source_gray = np.asarray(image.convert("L"), dtype=np.float32)
+    core = region > 0.70
+    if not core.any():
+        return image
+    local_detail = source_gray - _box_blur_gray(source_gray, radius=2)
+    current_detail = float(np.std(local_detail[core]))
+    if current_detail >= min(18.0, target_detail * 0.35):
+        return image
+
+    deficit = max(0.0, min(1.0, (target_detail * 0.35 - current_detail) / max(4.0, target_detail * 0.35)))
+    sharpened = image.convert("RGB").filter(
+        ImageFilter.UnsharpMask(radius=0.85, percent=int(35 + 55 * deficit), threshold=3)
+    )
+    detail_mask = region_mask.filter(ImageFilter.MinFilter(size=3)).filter(ImageFilter.GaussianBlur(radius=2))
+    return Image.composite(sharpened, image.convert("RGB"), detail_mask)
+
+
 def _box_blur_gray(gray: np.ndarray, radius: int) -> np.ndarray:
     image = Image.fromarray(np.clip(gray, 0, 255).astype(np.uint8), mode="L").filter(
         ImageFilter.BoxBlur(radius)
@@ -294,22 +409,55 @@ def _box_blur_gray(gray: np.ndarray, radius: int) -> np.ndarray:
     return np.asarray(image).astype(np.float32)
 
 
-def _garment_foreground_pixels(garment: Image.Image) -> np.ndarray:
+def _sample_pixels(pixels: np.ndarray, maximum: int = 50_000) -> np.ndarray:
+    if len(pixels) <= maximum:
+        return pixels
+    indices = np.linspace(0, len(pixels) - 1, maximum, dtype=np.int64)
+    return pixels[indices]
+
+
+def _garment_foreground_pixels(garment: Image.Image, *, preserve_neutral: bool = False) -> np.ndarray:
     rgba = isolate_garment(garment)
     arr = np.asarray(rgba.convert("RGBA"))
     alpha = arr[:, :, 3] > 16
     rgb = arr[:, :, :3]
-    foreground = alpha & (rgb.mean(axis=2) < 245)
+    if preserve_neutral:
+        foreground = alpha
+        if float(alpha.mean()) > 0.92:
+            corners = np.concatenate(
+                [
+                    rgb[:24, :24].reshape(-1, 3),
+                    rgb[:24, -24:].reshape(-1, 3),
+                    rgb[-24:, :24].reshape(-1, 3),
+                    rgb[-24:, -24:].reshape(-1, 3),
+                ],
+                axis=0,
+            ).astype(np.float32)
+            background = np.median(corners, axis=0)
+            foreground &= np.linalg.norm(rgb.astype(np.float32) - background, axis=2) > 10.0
+    else:
+        foreground = alpha & (rgb.mean(axis=2) < 245)
     pixels = rgb[foreground]
     if pixels.size == 0:
         return np.empty((0, 3), dtype=np.uint8)
     return pixels
 
 
-def _generated_garment_mask(arr: np.ndarray, target: np.ndarray) -> np.ndarray:
+def _generated_garment_mask(
+    arr: np.ndarray,
+    target: np.ndarray,
+    *,
+    region_mask: Image.Image | None = None,
+) -> np.ndarray:
     h, w = arr.shape[:2]
     yy, xx = np.mgrid[0:h, 0:w]
-    body_region = (yy > h * 0.18) & (yy < h * 0.86) & (xx > w * 0.08) & (xx < w * 0.92)
+    if region_mask is None:
+        body_region = (yy > h * 0.18) & (yy < h * 0.86) & (xx > w * 0.08) & (xx < w * 0.92)
+    else:
+        body_region = np.asarray(
+            region_mask.convert("L").resize((w, h), Image.Resampling.LANCZOS),
+            dtype=np.float32,
+        ) > 96.0
 
     chroma = _rgb_chroma(arr)
     target_chroma = _rgb_chroma(target.reshape(1, 1, 3))[0, 0]
@@ -327,13 +475,15 @@ def _generated_garment_mask(arr: np.ndarray, target: np.ndarray) -> np.ndarray:
         & (brightness < 226)
     )
 
+    neutral_match = np.linalg.norm(arr - target.reshape(1, 1, 3), axis=2) < 72.0
+    saturation_match = (saturation > 8) | neutral_match if region_mask is not None else saturation > 12
     return (
         body_region
         & ~skin_like
         & (chroma_distance < 0.26)
         & (brightness > 38)
         & (brightness < 235)
-        & (saturation > 12)
+        & saturation_match
     )
 
 

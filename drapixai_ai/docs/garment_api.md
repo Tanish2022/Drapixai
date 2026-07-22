@@ -6,6 +6,8 @@
 Form fields:
 - `garment_id` (optional, internal asset label)
 - `cloth_image` (required)
+- `garment_type` (optional, `upper`; `lower` is V1 beta only)
+- `category` (recommended for lower-body V1: `Jeans`, `Pants`, `Trousers`, `Shorts`, `Skirt`, `Leggings`, or `Joggers`)
 - `admin_bypass` (optional)
 
 Garment upload standard:
@@ -18,7 +20,10 @@ Garment upload standard:
 Current support matrix:
 - launch-ready: shirts, t-shirts, polos, blouses, clean tops
 - beta: short kurtis, hoodies, sweatshirts
+- lower-body V1 beta: jeans, pants, trousers, shorts, skirts, leggings, joggers
 - unsupported: long kurtas, jackets, blazers, coats, cardigans, layered outerwear
+
+Lower-body V1 is disabled unless `DRAPIXAI_ENABLE_LOWER_BODY=1` is set on the Node API and AI service. Lower-body garments use cache version `lower-v1-1024x1365` and are stored as `pending` by default for admin review.
 
 Headers:
 - `Authorization: Bearer <api_key>`
@@ -40,6 +45,7 @@ Common validation errors:
 - `MODEL_WORN_GARMENT`
 - `GARMENT_TOO_LONG`
 - `GARMENT_CATEGORY_UNSUPPORTED`
+- `LOWER_BODY_NOT_ENABLED`
 - `LOW_RESOLUTION`
 - `IMAGE_BLURRY`
 - `SUBJECT_TOO_SMALL`
@@ -90,7 +96,8 @@ Body:
 ```json
 {
   "items": [
-    { "productId": "sku-123", "productName": "Black Oxford Shirt", "category": "Shirts", "garmentType": "upper" }
+    { "productId": "sku-123", "productName": "Black Oxford Shirt", "category": "Shirts", "garmentType": "upper" },
+    { "productId": "sku-jeans-1", "productName": "Blue Straight Jeans", "category": "Jeans", "garmentType": "lower" }
   ]
 }
 ```
@@ -116,6 +123,8 @@ Body:
 ```
 
 This sets the live storefront pairing for that garment.
+
+Upper-body garments can only be confirmed against upper-body products. Lower-body garments can only be confirmed against lower-body products. Type mismatches return `GARMENT_PRODUCT_TYPE_MISMATCH`.
 
 **DELETE** `/sdk/matches/:garmentId/confirm`
 
@@ -151,6 +160,7 @@ Form fields:
 - `productId` (must point to a confirmed product mapping)
 - `quality=standard` (optional; standard is the only production try-on mode)
 - `garment_type=upper`
+- `garment_type=lower` only when lower-body V1 beta is enabled and the confirmed product/garment mapping is lower-body
 
 Response:
 - body: PNG image bytes
@@ -162,6 +172,8 @@ Response:
 - `x-drapixai-latency-ms`
 - `x-drapixai-latency-target-ms`
 - `x-drapixai-timing-json`
+- `x-drapixai-quality-json`
+- `x-drapixai-quality-profile`
 - `x-drapixai-warnings`
 
 The API stores review metadata for admin quality review:

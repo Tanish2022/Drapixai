@@ -51,9 +51,10 @@ class GarmentCache:
         brand_id: Optional[str],
         garment_id: Optional[str],
         profile_key: Optional[str] = None,
+        version: Optional[str] = None,
     ) -> str:
         parts = []
-        parts.append(settings.garment_cache_version or GarmentCache.PREPROCESS_VERSION)
+        parts.append(version or settings.garment_cache_version or GarmentCache.PREPROCESS_VERSION)
         if brand_id:
             parts.append(brand_id)
         if garment_id:
@@ -129,6 +130,29 @@ class GarmentCache:
         redis = get_redis()
         redis.setex(f"garment:{key}", settings.garment_cache_ttl_seconds, str(file_path))
         return str(file_path)
+
+    def delete(self, key: str) -> bool:
+        removed = False
+        redis = get_redis()
+
+        if self.s3_client is not None:
+            try:
+                self.s3_client.delete_object(
+                    Bucket=settings.s3_bucket,
+                    Key=self._s3_key_for_cache(key),
+                )
+                removed = True
+            except Exception as exc:
+                logger.warning("s3_cache_delete_failed", extra={"error": str(exc), "key": key})
+                raise
+
+        file_path = self._path_for_key(key)
+        if file_path.exists():
+            file_path.unlink()
+            removed = True
+
+        redis.delete(f"garment:{key}")
+        return removed
 
     def health_check(self) -> dict:
         if self.backend == "s3" and self.s3_client is not None:

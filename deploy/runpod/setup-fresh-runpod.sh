@@ -9,6 +9,7 @@ PORT="${PORT:-8080}"
 RUN_START="${DRAPIXAI_SETUP_START_SERVICES:-1}"
 RUN_SMOKE="${DRAPIXAI_SETUP_RUN_SMOKE:-0}"
 SKIP_MODEL_DOWNLOAD="${DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD:-0}"
+SKIP_REPO_SYNC="${DRAPIXAI_SETUP_SKIP_REPO_SYNC:-0}"
 LOG_FILE="/tmp/drapixai-fresh-runpod-setup.log"
 VENV_DIR="${DRAPIXAI_VENV:-$APP_ROOT/.venv}"
 
@@ -40,7 +41,7 @@ print_troubleshooting() {
   printf '%s\n' '- If pip/model download failed, check disk space and internet access.'
   printf '%s\n' '- If preflight says model files are missing, rerun with DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD=0.'
   printf -- '- If port %s is busy, run: fuser -k %s/tcp\n' "$PORT" "$PORT"
-  printf '%s\n' '- If Redis is down, run: redis-server --daemonize yes'
+  printf '%s\n' '- If Redis is down, run: bash deploy/runpod/start-redis.sh'
   printf '\nRecent system context:\n'
   nvidia-smi || true
   df -h /workspace || true
@@ -52,7 +53,16 @@ print_troubleshooting() {
   printf 'bash %s/deploy/runpod/setup-fresh-runpod.sh\n' "$APP_ROOT"
 }
 
-trap 'print_troubleshooting "$LINENO" "$BASH_COMMAND"' ERR
+on_error() {
+  local exit_code="$1"
+  local line_number="$2"
+  local command="$3"
+  trap - ERR
+  print_troubleshooting "$line_number" "$command"
+  exit "$exit_code"
+}
+
+trap 'on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 
 require_root_or_sudo() {
   APT_PREFIX=()
@@ -87,6 +97,15 @@ install_system_packages() {
 
 sync_repo() {
   log "Preparing DrapixAI repo at $APP_ROOT"
+  if [[ "$SKIP_REPO_SYNC" == "1" ]]; then
+    if [[ ! -d "$APP_ROOT/.git" ]]; then
+      echo "DRAPIXAI_SETUP_SKIP_REPO_SYNC=1 requires an existing Git checkout at $APP_ROOT." >&2
+      exit 1
+    fi
+    log "Keeping the existing repo overlay because DRAPIXAI_SETUP_SKIP_REPO_SYNC=1"
+    cd "$APP_ROOT"
+    return
+  fi
   mkdir -p "$(dirname "$APP_ROOT")"
   if [[ -d "$APP_ROOT/.git" ]]; then
     cd "$APP_ROOT"
@@ -179,13 +198,35 @@ ensure_env_file() {
   upsert_env "DRAPIXAI_DEVICE" "cuda"
   upsert_env "DRAPIXAI_CUDA_DEVICE" "0"
   upsert_env "DRAPIXAI_REDIS_URL" "redis://127.0.0.1:6379/0"
+  current_redis_password="$(grep '^DRAPIXAI_REDIS_PASSWORD=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- || true)"
+  if [[ -z "$current_redis_password" || "$current_redis_password" == replace-* ]]; then
+    upsert_env "DRAPIXAI_REDIS_PASSWORD" "$(generate_secret)"
+  fi
+  upsert_env "DRAPIXAI_QUEUE_TTL" "180"
+  upsert_env "DRAPIXAI_RESULT_TTL" "60"
+  upsert_env "DRAPIXAI_FAILURE_TTL" "60"
+  upsert_env "DRAPIXAI_TRANSIENT_SPOOL_DIR" "$APP_ROOT/runtime/tryon-spool"
+  upsert_env "DRAPIXAI_TRANSIENT_SPOOL_TTL" "900"
+  upsert_env "DRAPIXAI_ENV" "production"
   upsert_env "DRAPIXAI_TRYON_ENGINE" "catvton"
+  upsert_env "DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK" "0"
   upsert_env "DRAPIXAI_MODEL_DIR" "$APP_ROOT/models/catvton"
   upsert_env "DRAPIXAI_CATVTON_MODEL_DIR" "$APP_ROOT/models/catvton"
+  upsert_env "DRAPIXAI_CATVTON_REPO_ID" "zhengchong/CatVTON"
+  upsert_env "DRAPIXAI_CATVTON_GIT_BRANCH" "edited"
+  upsert_env "DRAPIXAI_CATVTON_GIT_COMMIT" "7818397f25613beedb3d861a34769f607cfcf3b1"
+  upsert_env "DRAPIXAI_CATVTON_MODEL_REVISION" "2969fcf85fe62f2036605716f0b56f0b81d01d79"
+  upsert_env "DRAPIXAI_CATVTON_BASE_REPO_ID" "runwayml/stable-diffusion-inpainting"
+  upsert_env "DRAPIXAI_CATVTON_BASE_MODEL" "$APP_ROOT/models/stable-diffusion-inpainting"
+  upsert_env "DRAPIXAI_CATVTON_BASE_REVISION" "8a4288a76071f7280aedbdb3253bdb9e9d5d84bb"
+  upsert_env "DRAPIXAI_CATVTON_VAE_REPO_ID" "stabilityai/sd-vae-ft-mse"
+  upsert_env "DRAPIXAI_CATVTON_VAE_MODEL" "$APP_ROOT/models/sd-vae-ft-mse"
+  upsert_env "DRAPIXAI_CATVTON_VAE_REVISION" "31f26fdeee1355a5c34592e401dd41e45d25a493"
   upsert_env "DRAPIXAI_GARMENT_CACHE_DIR" "$APP_ROOT/runtime/garments"
   upsert_env "DRAPIXAI_GARMENT_CACHE_VERSION" "v3-1024x1365"
   upsert_env "DRAPIXAI_GARMENT_TARGET_WIDTH" "1024"
   upsert_env "DRAPIXAI_GARMENT_TARGET_HEIGHT" "1365"
+  upsert_env "DRAPIXAI_GARMENT_CONDITION_MAX_EDGE" "1536"
   upsert_env "DRAPIXAI_RUNTIME_CACHE_ROOT" "$APP_ROOT/runtime/cache"
   upsert_env "DRAPIXAI_INPUT_MAX_SIDE" "640"
   upsert_env "DRAPIXAI_UPPER_BODY_REJECT_EDGE_RATIO" "0"
@@ -204,7 +245,8 @@ ensure_env_file() {
   upsert_env "DRAPIXAI_PERSON_CONTEXT_RESTORE_STRENGTH" "0.92"
   upsert_env "DRAPIXAI_GARMENT_FAST_PLAIN_BACKGROUND_MATTE" "0"
   upsert_env "DRAPIXAI_CANDIDATE_COUNT" "1"
-  upsert_env "DRAPIXAI_MIN_QUALITY_SCORE" "0.90"
+  upsert_env "DRAPIXAI_MIN_QUALITY_SCORE" "0.95"
+  upsert_env "DRAPIXAI_ENABLE_LOWER_BODY" "0"
   upsert_env "DRAPIXAI_ENABLE_REFINEMENT" "0"
   upsert_env "DRAPIXAI_ENABLE_UPSCALE" "0"
   upsert_env "DRAPIXAI_PRELOAD_MODEL" "1"
@@ -321,8 +363,7 @@ start_services() {
   pkill -f "drapixai_ai.worker.gpu_worker" 2>/dev/null || true
   pkill -f "rq worker" 2>/dev/null || true
   if ! redis-cli ping >/dev/null 2>&1; then
-    redis-server --daemonize yes
-    sleep 2
+    bash deploy/runpod/start-redis.sh
   fi
   nohup bash deploy/runpod/start-all.sh > "$APP_ROOT/runtime/logs/start-all.log" 2>&1 &
 
@@ -386,6 +427,9 @@ To rerun setup:
 
 To skip model download next time:
   DRAPIXAI_SETUP_SKIP_MODEL_DOWNLOAD=1 bash $APP_ROOT/deploy/runpod/setup-fresh-runpod.sh
+
+To keep an already-reviewed local source overlay without Git fetch/pull:
+  DRAPIXAI_SETUP_SKIP_REPO_SYNC=1 bash $APP_ROOT/deploy/runpod/setup-fresh-runpod.sh
 
 To setup without starting services:
   DRAPIXAI_SETUP_START_SERVICES=0 bash $APP_ROOT/deploy/runpod/setup-fresh-runpod.sh

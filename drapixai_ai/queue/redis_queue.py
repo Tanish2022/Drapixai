@@ -13,7 +13,11 @@ _queue: Queue | None = None
 def get_redis() -> redis.Redis:
     global _redis_conn
     if _redis_conn is None:
-        _redis_conn = redis.Redis.from_url(settings.redis_url, decode_responses=False)
+        _redis_conn = redis.Redis.from_url(
+            settings.redis_url,
+            password=settings.redis_password or None,
+            decode_responses=False,
+        )
     return _redis_conn
 
 

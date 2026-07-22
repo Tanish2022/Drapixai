@@ -37,13 +37,16 @@ export default function ProductPage() {
 - `productId` (required)
 - `containerId` (optional)
 - `baseUrl` (optional; defaults to the deployed `NEXT_PUBLIC_API_BASE_URL` used by your storefront build, with localhost only for local development)
-- `garmentType` (optional, `upper`)
+- `garmentType` (optional, `upper`; `lower` is V1 beta only)
+- `garmentCategory` (optional for lower-body beta: `jeans`, `pants`, `trousers`, `shorts`, `skirt`, `leggings`, or `joggers`)
+- `enableLowerBody` (optional; required by the browser SDK before it initializes lower-body beta)
 - `quality` (optional, `standard`; this is the only production try-on mode)
 - `buttonText` (optional)
 - `modalTitle` (optional)
 - `modalSubtitle` (optional)
 - `footerText` (optional)
 - `timeoutMs` (optional, default `20000`; storefront should expect normal warm results in 10-12 seconds, with extra room for network variance)
+- `enableDownload` (optional, default `true`; set `false` if a brand wants shoppers to buy/share without saving a local result)
 - `primaryGradient` (optional)
 - `logoUrl` (optional; override the delivered DrapixAI emblem with an approved co-branded mark)
 - `onResult` (optional metadata callback with result id, engine, quality score, candidate count, AI processing time, API latency, timing breakdown, and warnings)
@@ -57,6 +60,8 @@ export default function ProductPage() {
 4. DrapixAI generates a high-quality onboarding cache for each garment at the active cache version, currently `v3-1024x1365`.
 5. Install the widget with the confirmed `productId`.
 6. Read `metadata.latencyMs`, `metadata.qualityScore`, and `metadata.warnings` from `onResult` for storefront monitoring.
+
+Lower-body V1 remains server-gated. Even if a storefront passes `garmentType="lower"` and `enableLowerBody`, the API rejects the request unless `DRAPIXAI_ENABLE_LOWER_BODY=1` is set on both the Node API and AI service. Lower-body garments use the separate `lower-v1-1024x1365` cache version and remain admin-review gated before public rollout.
 
 The storefront SDK should not upload arbitrary garment photos during shopper try-on. It sends the shopper person photo plus the confirmed `productId`; the API resolves that product to the approved garment and uses the cached try-on asset. This keeps quality consistent and avoids spending request time on garment preprocessing.
 
@@ -73,5 +78,8 @@ The binary `/sdk/tryon` response includes the PNG body and these headers, which 
 - `x-drapixai-warnings`
 - `x-drapixai-timing-json`
 - `x-drapixai-engine`
+- `x-drapixai-quality-mode`
+- `x-drapixai-quality-profile`
+- `x-drapixai-quality-json`
 
 Use the quality, latency, and warnings fields for brand dashboards, public-launch monitoring, and manual review routing.

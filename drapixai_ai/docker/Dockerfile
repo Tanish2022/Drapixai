@@ -3,6 +3,7 @@ FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV TRANSFORMERS_CACHE=/workspace/.cache/huggingface
 ENV DRAPIXAI_APP_ROOT=/workspace/drapixai
@@ -38,8 +39,14 @@ COPY deploy /workspace/drapixai/deploy
 
 RUN mkdir -p /workspace/drapixai/models /workspace/drapixai/runtime/logs /workspace/drapixai/runtime/garments /workspace/.cache/huggingface
 
+RUN groupadd --gid 10001 drapixai \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin drapixai \
+    && chown -R 10001:10001 /workspace/drapixai/runtime /workspace/.cache
+
 ENV PYTHONPATH=/workspace/drapixai
 
 EXPOSE 8080
+
+USER 10001:10001
 
 CMD ["bash", "/workspace/drapixai/deploy/runpod/start-all.sh"]

@@ -101,8 +101,7 @@ start_postgres() {
 start_redis() {
   log "Starting Redis"
   if ! redis-cli ping >/dev/null 2>&1; then
-    redis-server --daemonize yes
-    sleep 2
+    bash "$APP_ROOT/deploy/runpod/start-redis.sh"
   fi
   redis-cli ping
 }
@@ -160,9 +159,11 @@ DRAPIXAI_TRUST_PROXY=1
 DRAPIXAI_EXPOSE_READY_DETAILS=1
 DRAPIXAI_MAX_UPLOAD_BYTES=10485760
 DRAPIXAI_REQUIRE_GARMENT_CACHE=1
+DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER=0
 DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON=0
 DRAPIXAI_SDK_GENERATION_SOURCE=original_verified
 DRAPIXAI_GARMENT_APPROVAL_REQUIRED=0
+DRAPIXAI_ALLOW_SMOKE_ACCOUNT_PREPARE=1
 DRAPIXAI_GARMENT_CACHE_VERSION=v3-1024x1365
 DRAPIXAI_GARMENT_TARGET_WIDTH=1024
 DRAPIXAI_GARMENT_TARGET_HEIGHT=1365
@@ -193,7 +194,7 @@ install_api_dependencies() {
   cd "$APP_ROOT"
   npm --prefix apps/api install
   npm --prefix apps/api run prisma:generate
-  npm --prefix apps/api run prisma:push
+  npm --prefix apps/api run prisma:migrate:deploy
   npm --prefix apps/api run build
 }
 

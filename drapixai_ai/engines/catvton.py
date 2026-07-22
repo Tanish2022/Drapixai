@@ -12,7 +12,7 @@ from PIL import Image, ImageChops, ImageDraw
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.engines.base import TryOnEngine
 from drapixai_ai.preprocess.image_normalizer import normalize_tryon_inputs
-from drapixai_ai.preprocess.mask_builder import build_upper_body_mask
+from drapixai_ai.preprocess.mask_builder import build_lower_body_mask_for_category, build_upper_body_mask
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +24,8 @@ class CatVTONEngine(TryOnEngine):
 
     def __init__(self) -> None:
         self.loaded = False
+        self.last_safety_blocked = False
+        self.last_generation_mask: Image.Image | None = None
         self.device = settings.device if torch.cuda.is_available() else "cpu"
         self.width = settings.catvton_width
         self.height = settings.catvton_height
@@ -54,13 +56,14 @@ class CatVTONEngine(TryOnEngine):
         if not Path(repo_path).exists() or not any(Path(repo_path).iterdir()):
             repo_path = snapshot_download(
                 repo_id=settings.catvton_repo_id,
+                revision=settings.catvton_model_revision,
                 local_dir=settings.catvton_model_dir,
                 local_dir_use_symlinks=False,
-                resume_download=True,
             )
 
         self.pipeline = CatVTONPipeline(
             base_ckpt=settings.catvton_base_model,
+            vae_ckpt=settings.catvton_vae_model,
             attn_ckpt=repo_path,
             attn_ckpt_version=settings.catvton_attn_version,
             weight_dtype=init_weight_dtype(settings.catvton_mixed_precision),
@@ -84,18 +87,34 @@ class CatVTONEngine(TryOnEngine):
     @staticmethod
     def _cloth_type(garment_type: str | None) -> str:
         normalized = (garment_type or "upper").strip().lower().replace("_", "-")
+        normalized = normalized.split(":", 1)[0]
         if normalized in {"dress", "dresses", "kurta", "long-kurta", "overall"}:
             return "overall"
-        if normalized in {"pants", "jeans", "trousers", "skirt", "lower"}:
+        if normalized in {"pants", "jeans", "trousers", "shorts", "skirt", "leggings", "joggers", "lower"}:
             return "lower"
         return "upper"
 
+    @staticmethod
+    def _lower_category(garment_type: str | None) -> str | None:
+        normalized = (garment_type or "").strip().lower().replace("-", "_")
+        if ":" in normalized:
+            normalized = normalized.split(":", 1)[1]
+        elif normalized in {"jeans", "pants", "trousers", "shorts", "skirt", "leggings", "joggers"}:
+            return normalized
+        else:
+            return None
+        return normalized or None
+
     def _build_mask(self, person: Image.Image, garment_type: str | None) -> Image.Image:
         if settings.catvton_mask_source.strip().lower() == "placeholder":
+            if self._cloth_type(garment_type) == "lower":
+                return build_lower_body_mask_for_category(person, self._lower_category(garment_type))
             return build_upper_body_mask(person)
         try:
             return self.automasker(person, self._cloth_type(garment_type))["mask"]
         except Exception:
+            if self._cloth_type(garment_type) == "lower":
+                return build_lower_body_mask_for_category(person, self._lower_category(garment_type))
             return build_upper_body_mask(person)
 
     @staticmethod
@@ -243,6 +262,7 @@ class CatVTONEngine(TryOnEngine):
         mask = self._preserve_untucked_hem(mask, garment_type)
         mask = self._preserve_long_sleeves(mask, garment, garment_type)
         mask = self.mask_processor.blur(mask, blur_factor=settings.catvton_mask_blur)
+        self.last_generation_mask = mask.convert("L").copy()
 
         generator = None
         if seed is not None and self.device == "cuda":
@@ -260,4 +280,12 @@ class CatVTONEngine(TryOnEngine):
                 width=self.width,
             )[0]
 
-        return result.convert("RGB")
+        result = result.convert("RGB")
+        self.last_safety_blocked = False
+        if not settings.catvton_skip_safety_check:
+            safety_marker_path = CATVTON_ROOT / "resource" / "img" / "NSFW.jpg"
+            if safety_marker_path.is_file():
+                safety_marker = Image.open(safety_marker_path).convert("RGB").resize(result.size)
+                self.last_safety_blocked = ImageChops.difference(result, safety_marker).getbbox() is None
+
+        return result

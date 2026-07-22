@@ -67,12 +67,26 @@ _apply_gpu_preset()
 @dataclass(frozen=True)
 class Settings:
     redis_url: str = os.getenv("DRAPIXAI_REDIS_URL", "redis://localhost:6379/0")
+    redis_password: str = os.getenv("DRAPIXAI_REDIS_PASSWORD", "")
     queue_name: str = os.getenv("DRAPIXAI_QUEUE_NAME", "drapixai_tryon")
     model_dir: str = os.getenv("DRAPIXAI_MODEL_DIR", "models/catvton")
     tryon_engine: str = os.getenv("DRAPIXAI_TRYON_ENGINE", "catvton")
     catvton_model_dir: str = os.getenv("DRAPIXAI_CATVTON_MODEL_DIR", "models/catvton")
     catvton_repo_id: str = os.getenv("DRAPIXAI_CATVTON_REPO_ID", "zhengchong/CatVTON")
+    catvton_model_revision: str = os.getenv(
+        "DRAPIXAI_CATVTON_MODEL_REVISION",
+        "2969fcf85fe62f2036605716f0b56f0b81d01d79",
+    )
     catvton_base_model: str = os.getenv("DRAPIXAI_CATVTON_BASE_MODEL", "runwayml/stable-diffusion-inpainting")
+    catvton_base_revision: str = os.getenv(
+        "DRAPIXAI_CATVTON_BASE_REVISION",
+        "8a4288a76071f7280aedbdb3253bdb9e9d5d84bb",
+    )
+    catvton_vae_model: str = os.getenv("DRAPIXAI_CATVTON_VAE_MODEL", "stabilityai/sd-vae-ft-mse")
+    catvton_vae_revision: str = os.getenv(
+        "DRAPIXAI_CATVTON_VAE_REVISION",
+        "31f26fdeee1355a5c34592e401dd41e45d25a493",
+    )
     catvton_attn_version: str = os.getenv("DRAPIXAI_CATVTON_ATTN_VERSION", "mix")
     catvton_mixed_precision: str = os.getenv("DRAPIXAI_CATVTON_MIXED_PRECISION", "bf16")
     catvton_width: int = int(os.getenv("DRAPIXAI_CATVTON_WIDTH", "768"))
@@ -103,19 +117,24 @@ class Settings:
     output_width: int = int(os.getenv("DRAPIXAI_OUTPUT_WIDTH", "1024"))
     output_height: int = int(os.getenv("DRAPIXAI_OUTPUT_HEIGHT", "1365"))
     enable_final_output_upscale: bool = os.getenv("DRAPIXAI_ENABLE_FINAL_OUTPUT_UPSCALE", "1") == "1"
-    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.90"))
+    min_quality_score: float = float(os.getenv("DRAPIXAI_MIN_QUALITY_SCORE", "0.95"))
     device: str = os.getenv("DRAPIXAI_DEVICE", "cuda")
     cuda_device_index: int = int(os.getenv("DRAPIXAI_CUDA_DEVICE", "0"))
 
     job_timeout_seconds: int = int(os.getenv("DRAPIXAI_JOB_TIMEOUT", "900"))
-    result_ttl_seconds: int = int(os.getenv("DRAPIXAI_RESULT_TTL", "900"))
+    queue_ttl_seconds: int = int(os.getenv("DRAPIXAI_QUEUE_TTL", "180"))
+    result_ttl_seconds: int = int(os.getenv("DRAPIXAI_RESULT_TTL", "60"))
+    failure_ttl_seconds: int = int(os.getenv("DRAPIXAI_FAILURE_TTL", "60"))
     max_wait_seconds: int = int(os.getenv("DRAPIXAI_MAX_WAIT", "120"))
     poll_interval_seconds: float = float(os.getenv("DRAPIXAI_POLL_INTERVAL", "0.5"))
     target_tryon_ms: int = int(os.getenv("DRAPIXAI_TARGET_TRYON_MS", "12000"))
+    transient_spool_dir: str = os.getenv("DRAPIXAI_TRANSIENT_SPOOL_DIR", "runtime/tryon-spool")
+    transient_spool_ttl_seconds: int = int(os.getenv("DRAPIXAI_TRANSIENT_SPOOL_TTL", "900"))
 
     monthly_basic_limit: int = int(os.getenv("DRAPIXAI_BASIC_LIMIT", "1200"))
 
     request_max_bytes: int = int(os.getenv("DRAPIXAI_REQUEST_MAX_BYTES", "10485760"))
+    request_max_pixels: int = int(os.getenv("DRAPIXAI_REQUEST_MAX_PIXELS", "40000000"))
     output_format: str = os.getenv("DRAPIXAI_OUTPUT_FORMAT", "png")
     inference_steps: int = int(os.getenv("DRAPIXAI_INFERENCE_STEPS", "28"))
     guidance_scale: float = float(os.getenv("DRAPIXAI_GUIDANCE_SCALE", "2.5"))
@@ -133,6 +152,21 @@ class Settings:
     upper_body_min_ratio: float = float(os.getenv("DRAPIXAI_UPPER_BODY_MIN_RATIO", "1.1"))
     upper_body_edge_ratio: float = float(os.getenv("DRAPIXAI_UPPER_BODY_EDGE_RATIO", "0.7"))
     upper_body_reject_edge_ratio: bool = os.getenv("DRAPIXAI_UPPER_BODY_REJECT_EDGE_RATIO", "0") == "1"
+    enable_lower_body: bool = os.getenv("DRAPIXAI_ENABLE_LOWER_BODY", "0") == "1"
+    lower_body_allowed_categories: str = os.getenv(
+        "DRAPIXAI_LOWER_BODY_ALLOWED_CATEGORIES",
+        "jeans,pants,trousers,shorts,skirt,leggings,joggers",
+    )
+    lower_body_admin_review_required: bool = os.getenv("DRAPIXAI_LOWER_BODY_ADMIN_REVIEW_REQUIRED", "1") == "1"
+    lower_body_preserve_shoes: bool = os.getenv("DRAPIXAI_LOWER_BODY_PRESERVE_SHOES", "1") == "1"
+    lower_body_mask_blur: int = int(os.getenv("DRAPIXAI_LOWER_BODY_MASK_BLUR", "9"))
+    lower_body_mask_waist_ratio: float = float(os.getenv("DRAPIXAI_LOWER_BODY_MASK_WAIST_RATIO", "0.46"))
+    lower_body_mask_ankle_ratio: float = float(os.getenv("DRAPIXAI_LOWER_BODY_MASK_ANKLE_RATIO", "0.90"))
+    lower_body_restore_context: bool = os.getenv("DRAPIXAI_LOWER_BODY_RESTORE_CONTEXT", "1") == "1"
+    lower_body_postprocess_feather: int = int(os.getenv("DRAPIXAI_LOWER_BODY_POSTPROCESS_FEATHER", "5"))
+    lower_body_postprocess_mask_inset: int = int(os.getenv("DRAPIXAI_LOWER_BODY_POSTPROCESS_MASK_INSET", "2"))
+    lower_body_color_fix_strength: float = float(os.getenv("DRAPIXAI_LOWER_BODY_COLOR_FIX_STRENGTH", "0.78"))
+    lower_body_cache_version: str = os.getenv("DRAPIXAI_LOWER_BODY_CACHE_VERSION", "lower-v1-1024x1365")
     garment_min_width: int = int(os.getenv("DRAPIXAI_GARMENT_MIN_WIDTH", "512"))
     garment_min_height: int = int(os.getenv("DRAPIXAI_GARMENT_MIN_HEIGHT", "512"))
     garment_alpha_threshold: int = int(os.getenv("DRAPIXAI_GARMENT_ALPHA_THRESHOLD", "16"))
@@ -140,6 +174,7 @@ class Settings:
     garment_crop_padding_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_CROP_PADDING_RATIO", "0.12"))
     garment_target_width: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_WIDTH", "1024"))
     garment_target_height: int = int(os.getenv("DRAPIXAI_GARMENT_TARGET_HEIGHT", "1365"))
+    garment_condition_max_edge: int = int(os.getenv("DRAPIXAI_GARMENT_CONDITION_MAX_EDGE", "1536"))
     garment_min_fg_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MIN_FG_RATIO", "0.08"))
     garment_max_fg_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MAX_FG_RATIO", "0.9"))
     garment_max_aspect_ratio: float = float(os.getenv("DRAPIXAI_GARMENT_MAX_ASPECT_RATIO", "1.75"))
