@@ -31,14 +31,14 @@ const handler = NextAuth({
           },
           body: JSON.stringify({ email: user.email, name: user.name, issueNewKey: true })
         });
-        if (res.ok) {
-          const data = await res.json();
-          (user as any).apiKey = data.apiKey || null;
-        }
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (!data.apiKey) return false;
+        (user as any).apiKey = data.apiKey;
+        return true;
       } catch {
-        // ignore oauth sync failures
+        return false;
       }
-      return true;
     },
     async jwt({ token, user }) {
       if (user && (user as any).apiKey) {

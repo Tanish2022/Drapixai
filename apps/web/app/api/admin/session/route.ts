@@ -3,6 +3,7 @@ import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_MAX_AGE_SECONDS,
   createAdminSessionToken,
+  readAdminSessionToken,
 } from '@/app/lib/admin-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
 import { noStoreJson, rejectCrossOriginRequest } from '@/app/lib/request-guard';
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
   const csrfRejection = rejectCrossOriginRequest(request);
   if (csrfRejection) return csrfRejection;
 
-  const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
+  const body = (await request.json().catch(() => null)) as { email?: string; password?: string; mfaCode?: string } | null;
   const email = body?.email?.trim().toLowerCase();
   const password = body?.password?.trim();
 
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   const loginResponse = await fetch(`${SERVER_API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, issueNewKey: true }),
+    body: JSON.stringify({ email, password, mfaCode: body?.mfaCode, issueNewKey: true }),
     cache: 'no-store',
   });
 
@@ -47,6 +48,14 @@ export async function POST(request: Request) {
   }
 
   const cookieStore = await cookies();
+  const session = await readAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
+  if (session?.apiKey) {
+    await fetch(`${SERVER_API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.apiKey}` },
+      cache: 'no-store',
+    }).catch(() => null);
+  }
   cookieStore.set({
     name: ADMIN_SESSION_COOKIE,
     value: await createAdminSessionToken(apiKey),

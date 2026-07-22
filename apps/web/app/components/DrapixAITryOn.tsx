@@ -4,17 +4,22 @@ import { useEffect } from 'react';
 import { PUBLIC_API_BASE_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 
 type DrapixAITryOnProps = {
-  apiKey: string;
+  apiKey?: string;
+  tokenProvider?: (productId: string) => Promise<string>;
+  appId?: string;
   productId: string;
   containerId?: string;
   baseUrl?: string;
-  garmentType?: 'upper';
+  garmentType?: 'upper' | 'lower';
+  garmentCategory?: 'jeans' | 'pants' | 'trousers' | 'shorts' | 'skirt' | 'leggings' | 'joggers';
+  enableLowerBody?: boolean;
   quality?: 'standard';
   buttonText?: string;
   modalTitle?: string;
   modalSubtitle?: string;
   footerText?: string;
   timeoutMs?: number;
+  enableDownload?: boolean;
   primaryGradient?: string;
   logoUrl?: string;
   onResult?: DrapixAIInitOptions['onResult'];
@@ -24,16 +29,21 @@ type DrapixAITryOnProps = {
 export default function DrapixAITryOn(props: DrapixAITryOnProps) {
   const {
     apiKey,
+    tokenProvider,
+    appId,
     productId,
     containerId = 'drapixai-container',
     baseUrl = PUBLIC_API_BASE_URL,
     garmentType = 'upper',
+    garmentCategory,
+    enableLowerBody,
     quality = 'standard',
     buttonText,
     modalTitle,
     modalSubtitle,
     footerText,
     timeoutMs,
+    enableDownload,
     primaryGradient,
     logoUrl,
     onResult,
@@ -47,16 +57,21 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
       if (window.DrapixAI) {
         window.DrapixAI.init({
           apiKey,
+          tokenProvider,
+          appId,
           productId,
           containerId,
           baseUrl,
           garmentType,
+          garmentCategory,
+          enableLowerBody,
           quality,
           buttonText,
           modalTitle,
           modalSubtitle,
           footerText,
           timeoutMs,
+          enableDownload,
           primaryGradient,
           logoUrl,
           onResult,
@@ -82,16 +97,21 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     };
   }, [
     apiKey,
+    tokenProvider,
+    appId,
     productId,
     containerId,
     baseUrl,
     garmentType,
+    garmentCategory,
+    enableLowerBody,
     quality,
     buttonText,
     modalTitle,
     modalSubtitle,
     footerText,
     timeoutMs,
+    enableDownload,
     primaryGradient,
     logoUrl,
     onResult,

@@ -2,11 +2,15 @@ export {};
 
 declare global {
   interface DrapixAIInitOptions {
-    apiKey: string;
+    apiKey?: string;
+    tokenProvider?: (productId: string) => Promise<string>;
+    appId?: string;
     productId: string;
     containerId?: string;
     baseUrl?: string;
-    garmentType?: 'upper';
+    garmentType?: 'upper' | 'lower';
+    garmentCategory?: 'jeans' | 'pants' | 'trousers' | 'shorts' | 'skirt' | 'leggings' | 'joggers';
+    enableLowerBody?: boolean;
     quality?: 'standard';
     autoAttach?: boolean;
     productSelector?: string;
@@ -17,6 +21,7 @@ declare global {
     modalSubtitle?: string;
     footerText?: string;
     timeoutMs?: number;
+    enableDownload?: boolean;
     primaryGradient?: string;
     logoUrl?: string;
     onResult?: (metadata: {
@@ -27,7 +32,11 @@ declare global {
       processingMs?: number;
       latencyMs?: number;
       latencyTargetMs?: number;
+      qualityMode?: string;
+      qualityProfile?: string;
+      garmentSource?: string;
       timings?: Record<string, unknown>;
+      qualityMetrics?: Record<string, unknown>;
       warnings?: string[];
     }) => void;
     onError?: (error: { message: string; productId?: string }) => void;
@@ -44,7 +53,11 @@ declare global {
         processingMs?: number;
         latencyMs?: number;
         latencyTargetMs?: number;
+        qualityMode?: string;
+        qualityProfile?: string;
+        garmentSource?: string;
         timings?: Record<string, unknown>;
+        qualityMetrics?: Record<string, unknown>;
         warnings?: string[];
       };
     };

@@ -1,0 +1,21 @@
+{
+  "name": "DrapixAI",
+  "short_name": "DrapixAI",
+  "description": "Product-faithful virtual try-on infrastructure for fashion commerce.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbfcf9",
+  "theme_color": "#183f32",
+  "icons": [
+    {
+      "src": "/favicon-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

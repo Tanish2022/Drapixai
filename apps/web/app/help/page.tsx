@@ -15,6 +15,8 @@ import {
   Upload,
   Wand2,
 } from 'lucide-react';
+import MarketingFooter from '@/app/components/MarketingFooter';
+import MarketingNav from '@/app/components/MarketingNav';
 import { getSdkScriptUrl, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
 export const metadata: Metadata = {
@@ -36,7 +38,7 @@ const sidebarSections = [
 ];
 
 const quickChecks = [
-  'Confirm you are using the correct API key for the same DrapixAI account.',
+  'Confirm your backend token route uses the correct DrapixAI server key and returns a fresh five-minute shopper token.',
   'Check that the garment asset is isolated, upper-body only, and not a model-worn product photo.',
   'Check that catalog discovery has already run before expecting suggested matches.',
   'Confirm the final product pairing was manually reviewed before testing the storefront flow.',
@@ -54,8 +56,8 @@ const accountHelp = [
     body: 'Use the admin access page with the configured admin email and password. If the page loads but data is empty, verify the API is reachable and the admin session cookie is being set correctly.',
   },
   {
-    title: 'API key looks valid but requests fail',
-    body: 'Your API key can still fail if the domain is not authorized, the subscription state is expired, or the account quota has been consumed.',
+    title: 'Shopper token looks valid but requests fail',
+    body: 'A shopper token can still fail if it expired, targets another product, came from another verified domain, the subscription is inactive, or the account quota has been consumed.',
   },
 ];
 
@@ -104,7 +106,7 @@ const tryOnHelp = [
   },
   {
     title: 'Try-on fails immediately',
-    body: 'Immediate failure usually means one of these: invalid API key, unauthorized domain, missing garment validation, unconfirmed mapping, unsupported image, or AI service not reachable.',
+    body: 'Immediate failure usually means one of these: missing or expired shopper token, unauthorized domain, wrong product scope, unconfirmed mapping, unsupported image, or AI service not reachable.',
   },
   {
     title: 'Try-on starts but times out',
@@ -125,7 +127,12 @@ const quickStartEmbed = `<script src="${getSdkScriptUrl()}"></script>
 <div id="drapixai-container"></div>
 <script>
   DrapixAI.init({
-    apiKey: 'your-api-key',
+    tokenProvider: async function (productId) {
+      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const payload = await response.json();
+      if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
+      return payload.token;
+    },
     productId: 'sku-12345',
     containerId: 'drapixai-container',
     baseUrl: '${PUBLIC_API_BASE_URL}',
@@ -141,7 +148,12 @@ const autoAttachSnippet = `<script src="${getSdkScriptUrl()}"></script>
 
 <script>
   DrapixAI.init({
-    apiKey: 'YOUR_API_KEY',
+    tokenProvider: async function (productId) {
+      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const payload = await response.json();
+      if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
+      return payload.token;
+    },
     autoAttach: true,
     productSelector: '[data-drapix-product-id]',
     productIdAttribute: 'data-drapix-product-id',
@@ -151,22 +163,41 @@ const autoAttachSnippet = `<script src="${getSdkScriptUrl()}"></script>
   });
 </script>`;
 
-const curlTryOn = `curl -X POST '${PUBLIC_API_BASE_URL}/sdk/tryon' \\
-  -H 'Authorization: Bearer YOUR_API_KEY' \\
-  -F 'garment_id=sku-12345' \\
+const curlTryOn = `# Run this token exchange on your backend, never in shopper JavaScript.
+TOKEN=$(curl -sS -X POST '${PUBLIC_API_BASE_URL}/sdk/storefront-token' \\
+  -H "Authorization: Bearer $DRAPIXAI_SERVER_KEY" \\
+  -H 'Content-Type: application/json' \\
+  --data '{"channel":"web","productIds":["sku-12345"]}' | jq -r '.token')
+
+curl -X POST '${PUBLIC_API_BASE_URL}/sdk/tryon' \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H 'Origin: https://store.example.com' \\
+  -F 'productId=sku-12345' \\
   -F 'person_image=@./person.jpg' \\
   -F 'garment_type=upper' \\
   -F 'quality=standard' \\
   --output tryon-result.png`;
 
-const pythonExample = `import requests
+const pythonExample = `import os
+import requests
+
+api_base = "${PUBLIC_API_BASE_URL}"
+store_origin = "https://store.example.com"
+token_response = requests.post(
+    f"{api_base}/sdk/storefront-token",
+    headers={"Authorization": f"Bearer {os.environ['DRAPIXAI_SERVER_KEY']}"},
+    json={"channel": "web", "productIds": ["sku-12345"]},
+    timeout=10,
+)
+token_response.raise_for_status()
+shopper_token = token_response.json()["token"]
 
 with open("person.jpg", "rb") as person_image:
     response = requests.post(
-        "${PUBLIC_API_BASE_URL}/sdk/tryon",
-        headers={"Authorization": "Bearer YOUR_API_KEY"},
+        f"{api_base}/sdk/tryon",
+        headers={"Authorization": f"Bearer {shopper_token}", "Origin": store_origin},
         data={
-            "garment_id": "sku-12345",
+            "productId": "sku-12345",
             "garment_type": "upper",
             "quality": "standard",
         },
@@ -180,21 +211,17 @@ with open("tryon-result.png", "wb") as output:
 
 export default function HelpPage() {
   return (
-    <main className="min-h-screen bg-[#050816] text-white">
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[700px] bg-gradient-glow opacity-40" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTQ4IDBIMFY0OCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')] opacity-30" />
-      </div>
-
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-10 lg:py-12">
-        <div className="grid grid-cols-1 items-start lg:grid-cols-[260px_minmax(0,1fr)] gap-6">
-          <aside className="self-start rounded-3xl border border-white/[0.08] bg-[#0b1120]/85 backdrop-blur-xl p-5 lg:flex lg:max-h-[calc(100vh-5.5rem)] lg:flex-col">
-            <div className="mb-6 rounded-2xl border border-white/[0.08] bg-black/20 px-4 py-3">
+    <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">
+      <MarketingNav active="help" />
+      <div className="mx-auto max-w-[1440px] px-5 py-12 sm:px-8 lg:px-12 lg:py-16">
+        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="self-start border-t border-black/10 pt-5 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+            <div className="mb-7 border-b border-black/10 pb-5">
               <div className="flex min-w-0 items-start gap-3">
-                <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#667169]" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-white">Browse help topics</p>
-                  <p className="mt-1 text-xs leading-5 text-gray-400">
+                  <p className="text-sm font-bold">Browse help topics</p>
+                  <p className="mt-1 text-xs leading-5 text-[#748078]">
                     Use the section list below for setup help, troubleshooting, and support questions.
                   </p>
                 </div>
@@ -202,18 +229,18 @@ export default function HelpPage() {
             </div>
 
             <div className="mb-6">
-              <p className="text-xl font-semibold text-white">DrapixAI Help</p>
-              <p className="text-sm text-gray-400 mt-2">
+              <p className="text-xl font-semibold">DrapixAI Help</p>
+              <p className="mt-2 text-sm text-[#68736b]">
                 One place for onboarding, SDK setup, troubleshooting, rollout guidance, and support-first answers.
               </p>
             </div>
 
-            <nav className="space-y-2 lg:min-h-0 lg:max-h-[calc(100vh-18rem)] lg:flex-1 lg:overflow-y-auto lg:pr-2 [scrollbar-color:rgba(103,232,249,0.35)_transparent] [scrollbar-width:thin]">
+            <nav className="space-y-1">
               {sidebarSections.map((section) => (
                 <a
                   key={section.id}
                   href={`#${section.id}`}
-                  className="block rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.06] hover:text-white transition-colors"
+                  className="block border-l-2 border-transparent px-3 py-2 text-sm text-[#5d6961] hover:border-[#31725b] hover:bg-[#edf2ed] hover:text-[#172019]"
                 >
                   {section.label}
                 </a>
@@ -221,47 +248,47 @@ export default function HelpPage() {
             </nav>
           </aside>
 
-          <div className="self-start space-y-6">
-            <section id="overview" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
-              <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Help Center</p>
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">One place for onboarding, installation, troubleshooting, and rollout answers.</h1>
-              <p className="text-lg text-gray-300 leading-8 max-w-4xl">
+          <div className="min-w-0 self-start">
+            <section id="overview" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
+              <p className="mb-4 text-xs font-bold uppercase text-[#31725b]">Help Center</p>
+              <h1 className="mb-5 max-w-4xl break-words font-serif text-4xl leading-[1.05] text-[#101712] sm:text-5xl md:text-6xl">Setup, troubleshooting, and rollout answers.</h1>
+              <p className="max-w-4xl text-lg leading-8 text-[#5d6961]">
                 DrapixAI guidance is organized around the confirmed mapping flow: garment upload and validation, catalog discovery, suggested matches, manual confirmation, then SDK install on confirmed pairings only.
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
+              <div className="mt-10 grid grid-cols-1 border-y border-black/10 md:grid-cols-2 md:divide-x md:divide-black/10">
+                <div className="py-6 md:pr-7">
                   <div className="flex items-center gap-3 mb-3">
                     <AlertTriangle className="w-5 h-5 text-amber-300" />
-                    <p className="font-semibold text-amber-200">Warning</p>
+                    <p className="font-semibold text-[#7c5620]">Common failure</p>
                   </div>
-                  <p className="text-gray-200 leading-7">
+                  <p className="leading-7 text-[#5d6961]">
                     Most failed try-ons are still caused by weak garment inputs, missing product context, or storefront logic being turned on before the preview path is trustworthy.
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
+                <div className="border-t border-black/10 py-6 md:border-t-0 md:pl-7">
                   <div className="flex items-center gap-3 mb-3">
-                    <Info className="w-5 h-5 text-blue-300" />
-                    <p className="font-semibold text-blue-200">Info</p>
+                    <Info className="h-5 w-5 text-[#31725b]" />
+                    <p className="font-semibold text-[#183f32]">Production note</p>
                   </div>
-                  <p className="text-gray-200 leading-7">
+                  <p className="leading-7 text-[#5d6961]">
                     For serious rollout testing, finish one full staging pass with the Runpod A100 stack before exposing DrapixAI publicly on a production storefront.
                   </p>
                 </div>
               </div>
             </section>
 
-            <section id="getting-started" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="getting-started" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Sparkles className="w-6 h-6 text-cyan-400" />
+                <Sparkles className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Getting Started</h2>
               </div>
 
-              <div className="space-y-4 text-gray-300">
+              <div className="space-y-4 text-[#5d6961]">
                 <p>Use this order for the cleanest setup:</p>
                 {[
-                  'Create an account and copy your API key from the dashboard.',
+                  'Create an account and generate a server key that stays only in your backend secret manager.',
                   'Open Settings and save your store domain, but do not rush live verification yet.',
                   'Upload a few garment-only upper-body assets and let DrapixAI validate them first.',
                   'Run product discovery with a feed, import, or product list to create product context.',
@@ -270,19 +297,19 @@ export default function HelpPage() {
                   'Install the browser SDK or call the REST API only after those pairings feel trusted.',
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
+                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-[#31725b]" />
                     <p className="leading-7">{item}</p>
                   </div>
                 ))}
               </div>
 
               <div className="mt-8">
-                <p className="text-sm font-semibold text-white mb-3">Web SDK quick start</p>
-                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200">
+                <p className="mb-3 text-sm font-semibold">Web SDK quick start</p>
+                <pre className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {quickStartEmbed}
                 </pre>
                 <div className="mt-4">
-                  <Link href="#integration-help" className="inline-flex items-center gap-2 text-sm text-cyan-300 hover:text-cyan-200">
+                  <Link href="#integration-help" className="inline-flex items-center gap-2 text-sm font-bold text-[#183f32] hover:text-[#31725b]">
                     Jump to full integration guidance
                     <ArrowRight className="w-4 h-4" />
                   </Link>
@@ -290,51 +317,51 @@ export default function HelpPage() {
               </div>
             </section>
 
-            <section id="before-support" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="before-support" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <CircleHelp className="w-6 h-6 text-cyan-400" />
+                <CircleHelp className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Before You Contact Support</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 border-y border-black/10 md:grid-cols-2">
                 {quickChecks.map((item) => (
-                  <div key={item} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
-                    <p className="text-gray-300 leading-7">{item}</p>
+                  <div key={item} className="border-b border-black/10 p-5 odd:md:border-r">
+                    <p className="leading-7 text-[#5d6961]">{item}</p>
                   </div>
                 ))}
               </div>
             </section>
 
-            <section id="account-access" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="account-access" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Lock className="w-6 h-6 text-cyan-400" />
+                <Lock className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Account &amp; Access</h2>
               </div>
               <div className="space-y-4">
                 {accountHelp.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                  <div key={item.title} className="border-b border-black/10 py-5 first:border-t">
                     <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
-                    <p className="text-gray-300 leading-7">{item.body}</p>
+                    <p className="leading-7 text-[#5d6961]">{item.body}</p>
                   </div>
                 ))}
               </div>
             </section>
 
-            <section id="garments-images" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="garments-images" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Upload className="w-6 h-6 text-cyan-400" />
+                <Upload className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Garments &amp; Images</h2>
               </div>
               <div className="space-y-4">
                 {garmentHelp.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                  <div key={item.title} className="border-b border-black/10 py-5 first:border-t">
                     <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
-                    <p className="text-gray-300 leading-7">{item.body}</p>
+                    <p className="leading-7 text-[#5d6961]">{item.body}</p>
                   </div>
                 ))}
               </div>
-              <div className="mt-8 rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+              <div className="mt-8 border-l-4 border-[#31725b] bg-[#eaf0e9] p-5">
                 <h3 className="text-lg font-semibold mb-3">Brand onboarding language to use</h3>
-                <div className="space-y-2 text-gray-300">
+                <div className="space-y-2 text-[#5d6961]">
                   <p>1. Upload garments first and let DrapixAI validate the image quality.</p>
                   <p>2. Discover products next so the system has catalog context.</p>
                   <p>3. Review suggested matches instead of forcing the brand to manage IDs manually.</p>
@@ -343,60 +370,60 @@ export default function HelpPage() {
               </div>
             </section>
 
-            <section id="matches-confirmation" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="matches-confirmation" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Code2 className="w-6 h-6 text-cyan-400" />
+                <Code2 className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Matches &amp; Confirmation</h2>
               </div>
               <div className="space-y-4">
                 {mappingHelp.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                  <div key={item.title} className="border-b border-black/10 py-5 first:border-t">
                     <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
-                    <p className="text-gray-300 leading-7">{item.body}</p>
+                    <p className="leading-7 text-[#5d6961]">{item.body}</p>
                   </div>
                 ))}
               </div>
             </section>
 
-            <section id="tryon-results" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="tryon-results" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Wand2 className="w-6 h-6 text-cyan-400" />
+                <Wand2 className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Try-On Results</h2>
               </div>
               <div className="space-y-4">
                 {tryOnHelp.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                  <div key={item.title} className="border-b border-black/10 py-5 first:border-t">
                     <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
-                    <p className="text-gray-300 leading-7">{item.body}</p>
+                    <p className="leading-7 text-[#5d6961]">{item.body}</p>
                   </div>
                 ))}
               </div>
 
               <div className="mt-8">
-                <p className="text-sm font-semibold text-white mb-3">Direct API try-on example</p>
-                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200 whitespace-pre-wrap">
+                <p className="mb-3 text-sm font-semibold">Direct API try-on example</p>
+                <pre className="overflow-x-auto whitespace-pre-wrap border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {curlTryOn}
                 </pre>
               </div>
             </section>
 
-            <section id="integration-help" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="integration-help" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Code2 className="w-6 h-6 text-cyan-400" />
+                <Code2 className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Integration Help</h2>
               </div>
               <div className="space-y-4 mb-8">
                 {integrationTips.map((item) => (
                   <div key={item} className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
-                    <p className="text-gray-300 leading-7">{item}</p>
+                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-[#31725b]" />
+                    <p className="leading-7 text-[#5d6961]">{item}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 mb-8">
+              <div className="mb-8 border-l-4 border-[#31725b] bg-[#eaf0e9] p-5">
                 <h3 className="text-lg font-semibold mb-3">Store connection order</h3>
-                <div className="space-y-2 text-gray-300">
+                <div className="space-y-2 text-[#5d6961]">
                   <p>1. Save the store domain and generate the verification meta tag in Settings.</p>
                   <p>2. Upload garments and run product discovery before you worry about live storefront behavior.</p>
                   <p>3. Review the suggested matches and confirm the right pairings.</p>
@@ -405,47 +432,47 @@ export default function HelpPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 mb-8">
+              <div className="mb-8 border-t border-black/10 pt-6">
                 <h3 className="text-lg font-semibold mb-3">Browser SDK single-product install</h3>
-                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200">
+                <pre className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {quickStartEmbed}
                 </pre>
               </div>
 
-              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5 mb-8">
+              <div className="mb-8 border-t border-black/10 pt-6">
                 <h3 className="text-lg font-semibold mb-3">Browser SDK auto-attach install</h3>
-                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200">
+                <pre className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {autoAttachSnippet}
                 </pre>
               </div>
 
-              <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+              <div className="border-t border-black/10 pt-6">
                 <h3 className="text-lg font-semibold mb-3">Python example</h3>
-                <pre className="overflow-x-auto rounded-2xl bg-black/30 border border-white/[0.08] p-5 text-sm text-gray-200 whitespace-pre-wrap">
+                <pre className="overflow-x-auto whitespace-pre-wrap border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {pythonExample}
                 </pre>
               </div>
             </section>
 
-            <section id="limits-billing" className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 backdrop-blur-xl p-8 md:p-10">
+            <section id="limits-billing" className="scroll-mt-6 border-t border-black/10 py-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <Settings2 className="w-6 h-6 text-cyan-400" />
+                <Settings2 className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">Limits &amp; Billing</h2>
               </div>
-              <div className="space-y-4 text-gray-300">
-                <p>Trial, Starter, and Growth are the current public plans. Requests can fail even with a valid API key if the account has already consumed its quota.</p>
+              <div className="space-y-4 text-[#5d6961]">
+                <p>Trial, Starter, and Growth are the current public plans. Requests can fail even with a valid shopper token if the account has already consumed its quota.</p>
                 <p>Pro should currently be explained as coming soon and tied to future full-body try-ons, not as a plan brands can activate today.</p>
                 <p>If a customer believes the limit is wrong, first check the dashboard usage counts and the admin analytics panel before assuming a billing issue.</p>
                 <p>Upgrade links should point customers to the pricing page until the live billing flow is finalized, and enterprise requests should go through the sales contact path.</p>
               </div>
             </section>
 
-            <section id="contact-support" className="rounded-3xl border border-cyan-500/20 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 p-8 md:p-10">
+            <section id="contact-support" className="scroll-mt-6 border-t border-black/10 bg-[#eaf0e9] px-5 py-10 md:px-10 md:py-14">
               <div className="flex items-center gap-3 mb-5">
-                <LifeBuoy className="w-6 h-6 text-cyan-300" />
+                <LifeBuoy className="h-6 w-6 text-[#31725b]" />
                 <h2 className="text-3xl font-semibold">When To Contact Support</h2>
               </div>
-              <div className="space-y-4 text-gray-200">
+              <div className="space-y-4 text-[#536057]">
                 <p>Contact support only after you have already checked garment validation, catalog discovery, suggested matches, confirmation status, domain validation, AI readiness, and plan/quota status.</p>
                 <p>When opening a support request, include:</p>
                 <div className="space-y-2">
@@ -459,7 +486,7 @@ export default function HelpPage() {
                     'whether the issue happened on demo, staging, or production',
                   ].map((item) => (
                     <div key={item} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
+                      <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-[#31725b]" />
                       <p>{item}</p>
                     </div>
                   ))}
@@ -467,11 +494,11 @@ export default function HelpPage() {
               </div>
 
               <div className="flex flex-wrap gap-3 mt-8">
-                <Link href="/contact" className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-cyan-400/30 hover:bg-white/[0.05] transition-colors">
+                <Link href="/contact" className="inline-flex h-12 items-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]">
                   Contact Support
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <Link href="/demo" className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-white/[0.12] hover:bg-white/[0.05] transition-colors">
+                <Link href="/demo" className="inline-flex h-12 items-center gap-2 border border-black/15 bg-white px-5 text-sm font-bold hover:bg-[#f1f4f0]">
                   Open Live Demo
                 </Link>
               </div>
@@ -479,6 +506,7 @@ export default function HelpPage() {
           </div>
         </div>
       </div>
+      <MarketingFooter />
     </main>
   );
 }

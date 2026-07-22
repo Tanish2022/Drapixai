@@ -1,20 +1,83 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Check, Shield, BarChart3, Code2, Eye, ArrowRight,
-  Globe, Gauge, CreditCard, X, Play, Layers3, Sparkles, ChevronDown, LogOut, Settings2, UserCircle2
+  ArrowRight,
+  BadgeCheck,
+  BarChart3,
+  Check,
+  ChevronDown,
+  Code2,
+  CreditCard,
+  Fingerprint,
+  Gauge,
+  Globe2,
+  LogOut,
+  Menu,
+  ScanLine,
+  Settings2,
+  ShieldCheck,
+  UserCircle2,
+  X,
 } from 'lucide-react';
-import { signOut } from 'next-auth/react';
+
+const inspectionRows = [
+  ['Color match', 'Excellent'],
+  ['Print and logo', 'Excellent'],
+  ['Sleeve match', 'Excellent'],
+  ['Hem match', 'Excellent'],
+  ['Collar structure', 'Excellent'],
+  ['Texture match', 'Excellent'],
+];
+
+const supportedDetails = [
+  'Structured collars',
+  'Folded cuffs',
+  'Checks and prints',
+  'Logos and embroidery',
+  'Short kurtis',
+  'Complex sleeves',
+  'Dark and white garments',
+  'Low-contrast fabrics',
+];
+
+const skuQualityChecks = [
+  ['01', 'Face + pose retained'],
+  ['02', 'Collar retained'],
+  ['03', 'Green tone matched'],
+  ['04', 'Cuff shape retained'],
+  ['05', 'Fabric detail restored'],
+  ['06', 'Hem above belt line'],
+];
+
+const femaleQualityChecks = [
+  ['01', 'Face + pose retained'],
+  ['02', 'Collar retained'],
+  ['03', 'Teal tone matched'],
+  ['04', 'Sleeve length retained'],
+  ['05', 'Fabric detail restored'],
+  ['06', 'Curved hem retained'],
+];
+
+const femaleInspectionRows = [
+  ['Color match', 'Excellent'],
+  ['Buttons and placket', 'Excellent'],
+  ['Sleeve match', 'Excellent'],
+  ['Hem match', 'Excellent'],
+  ['Collar structure', 'Excellent'],
+  ['Texture match', 'Excellent'],
+];
 
 export default function Home() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [hasDashboardAccess, setHasDashboardAccess] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [profileName, setProfileName] = useState('Profile');
   const [profileSubtitle, setProfileSubtitle] = useState('Manage your account, plan, and dashboard access.');
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
@@ -27,45 +90,31 @@ export default function Home() {
       try {
         const response = await fetch('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' });
         const payload = (await response.json().catch(() => null)) as { companyName?: string | null; email?: string | null } | null;
-        const preferredName = payload?.companyName?.trim()
+        setProfileName(
+          payload?.companyName?.trim()
           || sessionUserName
           || payload?.email?.split('@')[0]
           || sessionUserEmail.split('@')[0]
-          || 'Profile';
-        const subtitle = payload?.email?.trim() || sessionUserEmail || 'Signed in to DrapixAI';
-        setProfileName(preferredName);
-        setProfileSubtitle(subtitle);
+          || 'Profile'
+        );
+        setProfileSubtitle(payload?.email?.trim() || sessionUserEmail || 'Signed in to DrapixAI');
       } catch {
-        const fallbackName = sessionUserName || sessionUserEmail.split('@')[0] || 'Profile';
-        const fallbackSubtitle = sessionUserEmail || 'Signed in to DrapixAI';
-        setProfileName(fallbackName);
-        setProfileSubtitle(fallbackSubtitle);
+        setProfileName(sessionUserName || sessionUserEmail.split('@')[0] || 'Profile');
+        setProfileSubtitle(sessionUserEmail || 'Signed in to DrapixAI');
       }
     };
 
-    if (sessionStatus === 'loading') {
-      return;
-    }
+    if (sessionStatus === 'loading') return;
 
     let active = true;
     fetch('/api/dashboard/session', { cache: 'no-store' })
-      .then(async (response) => {
-        if (active) {
-          setHasDashboardAccess(response.ok);
-          if (response.ok) {
-            void loadProfileSummary();
-          } else {
-            setProfileName('Profile');
-            setProfileSubtitle('Manage your account, plan, and dashboard access.');
-          }
-        }
+      .then((response) => {
+        if (!active) return;
+        setHasDashboardAccess(response.ok);
+        if (response.ok) void loadProfileSummary();
       })
       .catch(() => {
-        if (active) {
-          setHasDashboardAccess(false);
-          setProfileName('Profile');
-          setProfileSubtitle('Manage your account, plan, and dashboard access.');
-        }
+        if (active) setHasDashboardAccess(false);
       });
 
     return () => {
@@ -75,15 +124,10 @@ export default function Home() {
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
-      if (!profileMenuRef.current?.contains(event.target as Node)) {
-        setProfileOpen(false);
-      }
+      if (!profileMenuRef.current?.contains(event.target as Node)) setProfileOpen(false);
     };
-
     document.addEventListener('mousedown', handlePointerDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
+    return () => document.removeEventListener('mousedown', handlePointerDown);
   }, []);
 
   const handleLogout = () => {
@@ -92,397 +136,464 @@ export default function Home() {
       .finally(() => {
         setHasDashboardAccess(false);
         setProfileOpen(false);
-        signOut({ redirect: false }).catch(() => undefined).finally(() => {
-          router.push('/');
-        });
+        signOut({ redirect: false }).catch(() => undefined).finally(() => router.push('/'));
       });
   };
 
   const showDashboardCta = hasDashboardAccess || sessionStatus === 'authenticated';
 
   return (
-    <div className="min-h-screen bg-[#050816] text-white">
-
-      {/* Background Effects - Applied Globally */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        {/* Main gradient glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[800px] bg-gradient-glow opacity-50" />
-        {/* Subtle grid pattern */}
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] opacity-20" />
-        {/* Bottom glow */}
-        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[100px]" />
-      </div>
-
-      {/* NAVBAR */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#050816]/80 backdrop-blur-xl border-b border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-6 py-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <img
-                src="/drapixai_emblem_64.webp"
-                alt="DrapixAI"
-                width={40}
-                height={40}
-                className="rounded-xl"
-              />
-              <span className="text-xl font-bold">DrapixAI</span>
+    <div className="min-h-screen bg-[#f7f8f5] text-[#172019]">
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-[#fbfcf9]/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
+          <Link href="/" className="flex items-center gap-3" aria-label="DrapixAI home">
+            <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
+            <div>
+              <span className="block text-lg font-bold leading-none text-[#101712]">DrapixAI</span>
+              <span className="mt-1 hidden text-[11px] font-medium uppercase text-[#667068] sm:block">Virtual try-on infrastructure</span>
             </div>
-            <div className="flex items-center gap-3 md:gap-6">
-              <Link href="/pricing" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Pricing</Link>
-              <Link href="/help" className="text-sm text-gray-400 hover:text-white transition-colors hidden md:block">Help</Link>
-              {hasDashboardAccess ? (
-                <div className="relative" ref={profileMenuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setProfileOpen((current) => !current)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/[0.1] bg-[#0b1120]/80 px-4 py-2 text-sm font-medium text-white hover:bg-white/[0.05] transition-colors"
-                  >
-                    <UserCircle2 className="w-4 h-4 text-cyan-300" />
-                    Profile
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
-                  </button>
+          </Link>
 
-                  {profileOpen ? (
-                    <div className="absolute right-0 mt-3 w-64 rounded-2xl border border-white/[0.08] bg-[#0b1120]/95 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                      <div className="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-3 mb-3">
-                        <p className="text-sm font-medium text-white">{profileName}</p>
-                        <p className="text-xs text-gray-400 mt-1 break-all">{profileSubtitle}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Link href="/dashboard" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-gray-200 hover:bg-white/[0.05]" onClick={() => setProfileOpen(false)}>
-                          <BarChart3 className="w-4 h-4 text-cyan-300" />
-                          Dashboard
-                        </Link>
-                        <Link href="/subscription" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-gray-200 hover:bg-white/[0.05]" onClick={() => setProfileOpen(false)}>
-                          <CreditCard className="w-4 h-4 text-cyan-300" />
-                          Manage Subscription
-                        </Link>
-                        <Link href="/settings" className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-gray-200 hover:bg-white/[0.05]" onClick={() => setProfileOpen(false)}>
-                          <Settings2 className="w-4 h-4 text-cyan-300" />
-                          Settings
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={handleLogout}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-rose-100 hover:bg-rose-400/10"
-                        >
-                          <LogOut className="w-4 h-4 text-rose-300" />
-                          Log Out
-                        </button>
-                      </div>
+          <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary navigation">
+            <Link href="/demo" className="text-sm font-medium text-[#4f5a52] hover:text-[#172019]">Demo</Link>
+            <Link href="/pricing" className="text-sm font-medium text-[#4f5a52] hover:text-[#172019]">Pricing</Link>
+            <Link href="/docs" className="text-sm font-medium text-[#4f5a52] hover:text-[#172019]">Developers</Link>
+            <Link href="/help" className="text-sm font-medium text-[#4f5a52] hover:text-[#172019]">Help</Link>
+          </nav>
+
+          <div className="hidden items-center gap-3 lg:flex">
+            {hasDashboardAccess ? (
+              <div className="relative" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((current) => !current)}
+                  className="inline-flex h-11 items-center gap-2 border border-black/15 bg-white px-4 text-sm font-semibold text-[#172019] hover:border-black/30"
+                  aria-expanded={profileOpen}
+                >
+                  <UserCircle2 className="h-4 w-4 text-[#21634e]" />
+                  {profileName}
+                  <ChevronDown className={`h-4 w-4 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {profileOpen ? (
+                  <div className="absolute right-0 mt-2 w-72 border border-black/10 bg-white p-3 shadow-[0_24px_70px_rgba(25,35,28,0.16)]">
+                    <div className="border-b border-black/10 px-3 pb-3">
+                      <p className="font-semibold text-[#172019]">{profileName}</p>
+                      <p className="mt-1 break-all text-xs text-[#6a756c]">{profileSubtitle}</p>
                     </div>
-                  ) : null}
+                    <div className="pt-2">
+                      {[
+                        { href: '/dashboard', label: 'Dashboard', Icon: BarChart3 },
+                        { href: '/subscription', label: 'Manage subscription', Icon: CreditCard },
+                        { href: '/settings', label: 'Settings', Icon: Settings2 },
+                      ].map(({ href, label, Icon }) => (
+                        <Link key={href} href={href} className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-[#f1f4ef]" onClick={() => setProfileOpen(false)}>
+                          <Icon className="h-4 w-4 text-[#21634e]" />
+                          {label}
+                        </Link>
+                      ))}
+                      <button type="button" onClick={handleLogout} className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-[#9e2e2e] hover:bg-[#fff1f0]">
+                        <LogOut className="h-4 w-4" /> Log out
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <Link href="/auth/login" className="px-3 py-2 text-sm font-semibold text-[#344038]">Sign in</Link>
+                <Link href="/auth/register" className="inline-flex h-11 items-center bg-[#183f32] px-5 text-sm font-semibold text-white hover:bg-[#245a48]">Start free trial</Link>
+              </>
+            )}
+          </div>
+
+          <button type="button" onClick={() => setMobileOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center border border-black/15 lg:hidden" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}>
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
+
+        {mobileOpen ? (
+          <nav className="border-t border-black/10 bg-[#fbfcf9] px-5 py-5 lg:hidden" aria-label="Mobile navigation">
+            <div className="mx-auto grid max-w-[1440px] gap-1">
+              {[
+                ['/demo', 'Demo'], ['/pricing', 'Pricing'], ['/docs', 'Developers'], ['/help', 'Help'], ['/status', 'Status'],
+              ].map(([href, label]) => (
+                <Link key={href} href={href} className="border-b border-black/5 px-2 py-3 text-base font-medium" onClick={() => setMobileOpen(false)}>{label}</Link>
+              ))}
+              <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="mt-3 inline-flex h-12 items-center justify-center bg-[#183f32] px-5 font-semibold text-white" onClick={() => setMobileOpen(false)}>
+                {showDashboardCta ? 'Open dashboard' : 'Start free trial'}
+              </Link>
+            </div>
+          </nav>
+        ) : null}
+      </header>
+
+      <main>
+        <section className="relative mt-20 overflow-hidden border-b border-black/10 bg-[#f2f4f1]">
+          <div className="relative mx-auto grid max-w-[1440px] items-center gap-12 px-5 pb-32 pt-16 sm:px-8 md:min-h-[620px] md:grid-cols-[1.2fr_0.8fr] md:pb-28 lg:px-12">
+            <div className="max-w-[760px]">
+              <p className="mb-5 flex items-center gap-3 text-xs font-bold uppercase text-[#2b654f]">
+                <span className="h-px w-10 bg-[#2b654f]" />
+                Garment-faithful virtual try-on for fashion storefronts
+              </p>
+              <h1 className="max-w-[620px] font-serif text-5xl font-normal leading-[0.98] text-[#101712] sm:text-6xl lg:text-[86px]">
+                DrapixAI virtual try-on
+              </h1>
+              <p className="mt-7 max-w-[570px] text-lg leading-8 text-[#3f4a42] sm:text-xl">
+                Let shoppers see your real products on themselves while preserving garment color, structure, and identity. Start with one product and publish only after it passes review.
+              </p>
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="inline-flex h-14 items-center justify-center gap-2 bg-[#183f32] px-7 py-4 font-semibold text-white hover:bg-[#245a48]">
+                  {showDashboardCta ? 'Continue setup' : 'Start with one product'}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link href="/demo" className="inline-flex h-14 items-center justify-center border border-black/20 bg-white/75 px-7 py-4 font-semibold text-[#172019] hover:bg-white">
+                  See a live demo
+                </Link>
+              </div>
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-[#4d5a50]">
+                {['One-product trial', 'Native storefront UI', 'Quality-gated results'].map((item) => (
+                  <span key={item} className="flex items-center gap-2"><Check className="h-4 w-4 text-[#26725a]" />{item}</span>
+                ))}
+              </div>
+
+            </div>
+            <div className="border-l border-black/15 py-4 pl-7 sm:pl-10">
+              <p className="font-serif text-3xl leading-tight text-[#183f32] sm:text-4xl">&ldquo;Real clothes should still look real.&rdquo;</p>
+              <p className="mt-5 text-xs font-bold uppercase text-[#2b654f]">The DrapixAI product principle</p>
+              <p className="mt-7 max-w-md leading-7 text-[#59645c]">Every approved result must preserve the product a brand actually sells, not merely generate a convincing replacement.</p>
+            </div>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 border-t border-black/10 bg-[rgba(247,248,245,0.96)] backdrop-blur-md">
+            <div className="mx-auto grid max-w-[1440px] grid-cols-3 divide-x divide-black/10 px-5 sm:px-8 lg:px-12">
+              {[
+                ['0.95', 'Reference quality score'],
+                ['Standard', 'One production mode'],
+                ['10-12s', 'Warm latency target'],
+              ].map(([value, label]) => (
+                <div key={label} className="py-4 text-center sm:py-5">
+                  <p className="text-lg font-bold text-[#172019] sm:text-2xl">{value}</p>
+                  <p className="mt-1 text-[10px] uppercase text-[#68736b] sm:text-xs">{label}</p>
                 </div>
-              ) : (
-                <>
-                  <Link href="/auth/login" className="text-sm text-gray-300 hover:text-white transition-colors">Sign In</Link>
-                  <Link href="/auth/register" className="text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity">Start Free Trial</Link>
-                </>
-              )}
+              ))}
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-4 text-sm text-gray-400 md:hidden">
-            <Link href="/demo" className="hover:text-white transition-colors">Demo</Link>
-            <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link href="/help" className="hover:text-white transition-colors">Help</Link>
-            {hasDashboardAccess ? <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link> : null}
-          </div>
-        </div>
-      </nav>
+        </section>
 
-      {/* HERO SECTION */}
-      <section className="relative min-h-screen flex items-center justify-center pt-28 md:pt-20 overflow-hidden z-10">
-        {/* Hero-specific glow */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-cyan-500/10 rounded-full blur-[120px]" />
-
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0b1120]/80 border border-white/[0.08] mb-8">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-sm text-gray-300">Standard upper-body AI try-on infrastructure</span>
-          </div>
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-tight tracking-tight">
-            Launch Upper-Body AI Try-On<br />
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">With Brand-Controlled Quality</span>
-          </h1>
-          <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-            DrapixAI helps fashion brands add Standard-quality upper-body try-on for shirts, t-shirts, polos, blouses, tops, hoodies, and short kurtis using confirmed product mappings and cached garment assets.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <Link href={showDashboardCta ? '/dashboard' : '/auth/login'} className="px-8 py-4 text-lg font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_20px_rgba(6,182,212,0.2)]">{showDashboardCta ? 'Dashboard' : 'Sign In'}</Link>
-            <Link href="/demo" className="px-8 py-4 text-lg font-medium rounded-xl border border-white/[0.1] hover:bg-white/[0.05] transition-colors flex items-center gap-2"><Play className="w-5 h-5" />See Live Demo</Link>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Upper-body launch scope</span>
-            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Cached garment onboarding</span>
-            <span className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />10-12s warm latency target</span>
-          </div>
-        </div>
-      </section>
-
-      {/* POSITIONING */}
-      <section className="py-20 px-6 border-y border-white/[0.06] relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <p className="text-center text-gray-500 mb-8">Built for fashion teams evaluating AI try-on seriously before rollout.</p>
-          <div className="flex items-center justify-center gap-3 flex-wrap mb-14">
-            {['Fashion brands', 'Storefront teams', 'Growth operators', 'Developers'].map((label) => (
-              <span key={label} className="rounded-full border border-white/[0.08] bg-[#0b1120]/60 px-4 py-2 text-sm text-gray-300">
-                {label}
-              </span>
-            ))}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-6 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm">
-              <Layers3 className="w-8 h-8 text-cyan-400 mb-4" />
-              <p className="text-xl font-semibold text-white mb-2">Faster evaluation cycles</p>
-              <p className="text-gray-400">Validate image quality, garment prep, and rollout readiness before committing your whole storefront.</p>
+        <section className="border-b border-black/10 bg-white">
+          <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[0.75fr_1.25fr]">
+            <div className="border-b border-black/10 px-5 py-16 sm:px-8 lg:border-b-0 lg:border-r lg:px-12 lg:py-24">
+              <p className="text-xs font-bold uppercase text-[#2b654f]">Why brands use it</p>
+              <h2 className="mt-5 max-w-md font-serif text-4xl font-normal leading-tight sm:text-5xl">Protect the product, not just the picture.</h2>
+              <p className="mt-6 max-w-lg text-lg leading-8 text-[#59645c]">A try-on is useful only when the shopper still sees the garment the brand is selling.</p>
             </div>
-            <div className="p-6 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm">
-              <Sparkles className="w-8 h-8 text-blue-400 mb-4" />
-              <p className="text-xl font-semibold text-white mb-2">Cleaner customer experience</p>
-              <p className="text-gray-400">Guide buyers from garment selection to try-on without forcing a heavy platform rebuild.</p>
-            </div>
-            <div className="p-6 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm">
-              <Shield className="w-8 h-8 text-green-400 mb-4" />
-              <p className="text-xl font-semibold text-white mb-2">Launch with more control</p>
-              <p className="text-gray-400">Use domain validation, garment caching, analytics, and admin review before opening traffic fully.</p>
+            <div className="grid sm:grid-cols-3">
+              {[
+                ['01', 'Prepare', 'A clean, reusable garment cache is created during onboarding.'],
+                ['02', 'Inspect', 'Color, sleeve, hem, collar, texture, pose, and identity are scored.'],
+                ['03', 'Publish', 'Only confirmed products and acceptable results reach the storefront.'],
+              ].map(([number, title, body]) => (
+                <article key={number} className="border-b border-black/10 px-5 py-10 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 sm:px-7 lg:py-24">
+                  <p className="font-mono text-sm text-[#26725a]">{number}</p>
+                  <h3 className="mt-10 text-2xl font-bold">{title}</h3>
+                  <p className="mt-4 leading-7 text-[#647068]">{body}</p>
+                </article>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* HOW IT WORKS */}
-      <section className="py-24 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-16">How It Works</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-            {[{ step: '01', title: 'Upload Garment Assets', desc: 'Upload garment-only upper-body assets. DrapixAI validates, cleans, and caches high-quality try-on inputs during onboarding.' }, { step: '02', title: 'Confirm Product Mapping', desc: 'Match each storefront product to an approved cached garment so shoppers always use a controlled brand asset.' }, { step: '03', title: 'Embed the SDK', desc: 'Add the script to your storefront. The SDK sends the shopper photo and product id, then returns image bytes with quality, latency, and warning metadata.' }].map((item, i) => (<div key={i} className="relative p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm hover:border-white/[0.1] transition-colors"><span className="text-6xl font-bold text-white/[0.04] absolute top-4 right-6">{item.step}</span><h3 className="text-xl font-semibold mb-3">{item.title}</h3><p className="text-gray-400">{item.desc}</p></div>))}
-          </div>
+        <section className="border-b border-black/10 bg-[#eef2ec] py-20 lg:py-28">
+          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-12">
+            <div className="w-full max-w-[583px] justify-self-center">
+              <div className="relative overflow-hidden bg-[#dde3de]">
+                <Image src="/hero-female-tryon-v2.png?v=sh2071-20260717" alt="Standard DrapixAI output for structured teal blouse SKU SH-2071" width={583} height={777} unoptimized className="h-auto w-full object-cover" />
+                <div className="absolute left-4 top-4 border border-black/15 bg-white/90 px-3 py-2 text-[11px] font-bold uppercase text-[#183f32] backdrop-blur-sm">SKU SH-2071</div>
 
+                {[
+                  ['01', 'left-[68%] top-[15%]'],
+                  ['02', 'left-[49%] top-[27%]'],
+                  ['03', 'left-[59%] top-[40%]'],
+                  ['04', 'left-[30%] top-[48%]'],
+                  ['05', 'left-[52%] top-[47%]'],
+                  ['06', 'left-[49%] top-[65%]'],
+                ].map(([number, position]) => (
+                  <div key={number} className={`absolute ${position} flex h-8 w-8 items-center justify-center rounded-full border border-white bg-[#183f32] text-[10px] font-bold text-white shadow-md`}>
+                    {number}
+                  </div>
+                ))}
 
-          <div className="rounded-2xl bg-[#0a0a0a]/80 border border-white/[0.08] backdrop-blur-sm overflow-hidden">
-            <div className="flex gap-2 px-4 py-3 border-b border-white/[0.06]">
-              <span className="w-3 h-3 rounded-full bg-red-500/20" />
-              <span className="w-3 h-3 rounded-full bg-yellow-500/20" />
-              <span className="w-3 h-3 rounded-full bg-green-500/20" />
+                <div className="absolute left-4 top-[21%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">01</span>Face + pose retained</div>
+                <div className="absolute left-4 top-[34%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">02</span>Collar retained</div>
+                <div className="absolute left-4 top-[47%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">04</span>Sleeve length retained</div>
+                <div className="absolute right-4 top-[34%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">03</span>Teal tone matched</div>
+                <div className="absolute right-4 top-[47%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">05</span>Fabric detail restored</div>
+                <div className="absolute right-4 top-[61%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">06</span>Curved hem retained</div>
+
+                <div className="absolute bottom-4 right-4 inline-flex items-center gap-2 bg-[#183f32] px-4 py-2 text-xs font-bold text-white">
+                  <BadgeCheck className="h-4 w-4" /> DrapixAI Ready
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 border border-black/10 bg-white xl:hidden">
+                {femaleQualityChecks.map(([number, label]) => (
+                  <div key={number} className="flex min-h-14 items-center gap-2 border-b border-r border-black/10 px-3 py-2 text-[11px] font-semibold text-[#344038]">
+                    <span className="font-mono font-bold text-[#31725b]">{number}</span><span>{label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="p-6 font-mono text-sm overflow-x-auto">
-              <pre className="text-gray-300">
-                {`<script src="https://cdn.drapixai.com/sdk.js"></script>
+
+            <div>
+              <p className="text-xs font-bold uppercase text-[#2b654f]">DrapixAI Ready</p>
+              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Garment fidelity, shown point by point.</h2>
+              <p className="mt-6 text-lg leading-8 text-[#59645c]">The approved result retains the model while carrying the blouse&rsquo;s real color, collar, sleeve length, fabric character, and curved hem into the try-on.</p>
+
+              <div className="mt-9 border-y border-black/15">
+                <div className="flex items-center justify-between border-b border-black/10 py-5">
+                  <div>
+                    <p className="font-bold">Product accuracy report</p>
+                    <p className="mt-1 text-sm text-[#68736b]">Structured teal blouse / SKU SH-2071</p>
+                  </div>
+                  <span className="flex items-center gap-2 bg-[#d9ecdf] px-3 py-2 text-sm font-bold text-[#1c6047]"><BadgeCheck className="h-4 w-4" />Excellent</span>
+                </div>
+                <div className="grid sm:grid-cols-2">
+                  {femaleInspectionRows.map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between border-b border-black/10 py-4 sm:odd:pr-6 sm:even:border-l sm:even:pl-6">
+                      <span className="text-sm text-[#59645c]">{label}</span>
+                      <span className="text-sm font-bold text-[#1f684e]">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-7 grid grid-cols-3 divide-x divide-black/10 border border-black/10 bg-white">
+                {[
+                  ['0.95', 'Quality'], ['<12s', 'Target'], ['None', 'Warnings'],
+                ].map(([value, label]) => (
+                  <div key={label} className="px-3 py-4 text-center">
+                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#68736b]">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-black/10 bg-[#f7f8f5] py-20 lg:py-28">
+          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-12">
+            <div className="w-full max-w-[583px] justify-self-center">
+              <div className="relative overflow-hidden bg-[#dde3de]">
+              <Image src="/hero-standard-tryon.png?v=sh1042-20260717" alt="Standard DrapixAI output used for garment inspection" width={583} height={777} unoptimized className="h-auto w-full object-cover" />
+              <div className="absolute left-4 top-4 border border-black/15 bg-white/90 px-3 py-2 text-[11px] font-bold uppercase text-[#183f32] backdrop-blur-sm">SKU SH-1042</div>
+
+              {[
+                ['01', 'left-[68%] top-[12%]'],
+                ['02', 'left-[48%] top-[23%]'],
+                ['03', 'left-[59%] top-[35%]'],
+                ['04', 'left-[29%] top-[48%]'],
+                ['05', 'left-[53%] top-[43%]'],
+                ['06', 'left-[48%] top-[68%]'],
+              ].map(([number, position]) => (
+                <div key={number} className={`absolute ${position} flex h-8 w-8 items-center justify-center rounded-full border border-white bg-[#183f32] text-[10px] font-bold text-white shadow-md`}>
+                  {number}
+                </div>
+              ))}
+
+              <div className="absolute left-4 top-[20%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">01</span>Face + pose retained</div>
+              <div className="absolute left-4 top-[32%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">02</span>Collar retained</div>
+              <div className="absolute left-4 top-[45%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">04</span>Cuff shape retained</div>
+              <div className="absolute right-4 top-[31%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">03</span>Green tone matched</div>
+              <div className="absolute right-4 top-[44%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">05</span>Fabric detail restored</div>
+              <div className="absolute right-4 top-[58%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">06</span>Hem above belt line</div>
+
+              <div className="absolute bottom-4 right-4 inline-flex items-center gap-2 bg-[#183f32] px-4 py-2 text-xs font-bold text-white">
+                <BadgeCheck className="h-4 w-4" /> DrapixAI Ready
+              </div>
+              </div>
+
+              <div className="grid grid-cols-2 border border-black/10 bg-white xl:hidden">
+                {skuQualityChecks.map(([number, label]) => (
+                  <div key={number} className="flex min-h-14 items-center gap-2 border-b border-r border-black/10 px-3 py-2 text-[11px] font-semibold text-[#344038]">
+                    <span className="font-mono font-bold text-[#31725b]">{number}</span><span>{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold uppercase text-[#2b654f]">DrapixAI Ready</p>
+              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Every product earns its place on the storefront.</h2>
+              <p className="mt-6 text-lg leading-8 text-[#59645c]">Products that need review stay internal. Results with unacceptable garment, identity, pose, or background changes are not shown to shoppers.</p>
+
+              <div className="mt-9 border-y border-black/15">
+                <div className="flex items-center justify-between border-b border-black/10 py-5">
+                  <div>
+                    <p className="font-bold">Product accuracy report</p>
+                    <p className="mt-1 text-sm text-[#68736b]">Structured green shirt / SKU SH-1042</p>
+                  </div>
+                  <span className="flex items-center gap-2 bg-[#d9ecdf] px-3 py-2 text-sm font-bold text-[#1c6047]"><BadgeCheck className="h-4 w-4" />Excellent</span>
+                </div>
+                <div className="grid sm:grid-cols-2">
+                  {inspectionRows.map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between border-b border-black/10 py-4 sm:odd:pr-6 sm:even:border-l sm:even:pl-6">
+                      <span className="text-sm text-[#59645c]">{label}</span>
+                      <span className="text-sm font-bold text-[#1f684e]">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-7 grid grid-cols-3 divide-x divide-black/10 border border-black/10 bg-white">
+                {[
+                  ['0.95', 'Quality'], ['<12s', 'Target'], ['None', 'Warnings'],
+                ].map(([value, label]) => (
+                  <div key={label} className="px-3 py-4 text-center">
+                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#68736b]">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-black/10 bg-[#172019] py-20 text-white lg:py-28">
+          <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
+            <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr]">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase text-[#8cd3b3]">Commerce infrastructure</p>
+                <h2 className="mt-5 max-w-lg font-serif text-4xl font-normal leading-tight sm:text-5xl">The model is only one part of the product.</h2>
+                <p className="mt-6 max-w-lg text-lg leading-8 text-[#bdc7bf]">DrapixAI controls garment preparation, result quality, shopper privacy, storefront behavior, and review evidence in one operating path.</p>
+                <Link href="/docs" className="mt-8 inline-flex items-center gap-2 border-b border-[#8cd3b3] pb-1 font-semibold text-[#a7dfc4]">Read the integration guide <ArrowRight className="h-4 w-4" /></Link>
+              </div>
+              <div className="grid border-t border-white/15 sm:grid-cols-2">
+                {[
+                  { Icon: ScanLine, title: 'Product accuracy', body: 'Color, print, sleeve, hem, collar, and texture checks for approved products.' },
+                  { Icon: ShieldCheck, title: 'Bad-result rejection', body: 'Unpublishable results are blocked before they can weaken shopper trust.' },
+                  { Icon: Gauge, title: 'Quality-preserving speed', body: 'A100-backed Standard generation targets warm results in 10-12 seconds without a lower-quality fast mode.' },
+                  { Icon: Fingerprint, title: 'Direct and SDK parity', body: 'The same garment, settings, resolution, postprocessing, and quality decision across service paths.' },
+                  { Icon: Globe2, title: 'Brand-native SDK', body: 'Theme adaptation, shopper privacy, downloads, and purchase actions stay on the storefront.' },
+                  { Icon: BarChart3, title: 'Reviewable operations', body: 'Quality, warnings, latency, approvals, usage, and cache readiness remain visible.' },
+                ].map(({ Icon, title, body }, index) => (
+                  <article key={title} className={`border-b border-white/15 py-8 sm:px-7 ${index % 2 === 1 ? 'sm:border-l' : ''}`}>
+                    <Icon className="h-5 w-5 text-[#8cd3b3]" />
+                    <h3 className="mt-5 text-xl font-bold">{title}</h3>
+                    <p className="mt-3 leading-7 text-[#aeb9b1]">{body}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-black/10 bg-white py-20 lg:py-28">
+          <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
+            <div className="max-w-3xl">
+              <p className="text-xs font-bold uppercase text-[#2b654f]">Launch scope</p>
+              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Built for the garment details generic try-on loses.</h2>
+              <p className="mt-6 text-lg leading-8 text-[#59645c]">Our launch scope prioritizes difficult upper-body products instead of making an unverified all-garment promise.</p>
+            </div>
+            <div className="mt-12 grid border-l border-t border-black/10 sm:grid-cols-2 lg:grid-cols-4">
+              {supportedDetails.map((detail, index) => (
+                <div key={detail} className="flex min-h-28 items-end justify-between border-b border-r border-black/10 p-5">
+                  <span className="max-w-[180px] text-lg font-bold">{detail}</span>
+                  <span className="font-mono text-xs text-[#7a857c]">{String(index + 1).padStart(2, '0')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-b border-black/10 bg-[#f7f8f5] py-20 lg:py-28">
+          <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
+            <div className="grid gap-12 lg:grid-cols-[0.7fr_1.3fr] lg:items-start">
+              <div>
+                <p className="text-xs font-bold uppercase text-[#2b654f]">Integration</p>
+                <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">From product image to live try-on.</h2>
+                <p className="mt-6 text-lg leading-8 text-[#59645c]">The dashboard handles preparation. Your storefront only needs the confirmed product ID and DrapixAI widget.</p>
+              </div>
+              <div className="min-w-0">
+                <div className="border-t border-black/15">
+                  {[
+                    ['01', 'Connect your store', 'Install the Shopify app for automatic product and variant sync, or connect a catalog feed for another platform.'],
+                    ['02', 'Approve the garment', 'DrapixAI prepares eligible product images and holds them for review. Confirm the garment and product match.'],
+                    ['03', 'Install and test', 'Add the Shopify theme block or web SDK, complete a shopper preview, and publish only after it passes.'],
+                  ].map(([number, title, body]) => (
+                    <div key={number} className="grid gap-3 border-b border-black/15 py-7 sm:grid-cols-[70px_1fr_1.2fr] sm:gap-6">
+                      <span className="font-mono text-sm text-[#26725a]">{number}</span>
+                      <h3 className="text-lg font-bold">{title}</h3>
+                      <p className="leading-7 text-[#647068]">{body}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-8 overflow-x-auto bg-[#111713] p-6 text-sm text-[#d8e2da]">
+                  <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
+                    <span className="flex items-center gap-2 font-semibold text-white"><Code2 className="h-4 w-4 text-[#8cd3b3]" />Storefront SDK</span>
+                    <span className="text-xs text-[#8ea095]">Standard mode</span>
+                  </div>
+                  <pre>{`<script src="https://cdn.drapixai.com/sdk.js"></script>
 
 <div id="drapixai-container"></div>
 
 <script>
   DrapixAI.init({
-    apiKey: 'your-api-key',
+    tokenProvider: async function (productId) {
+      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const payload = await response.json();
+      if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
+      return payload.token;
+    },
     productId: 'confirmed-product-id',
     quality: 'standard',
     garmentType: 'upper'
   });
-</script>`}
-              </pre>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ENTERPRISE FEATURES */}
-      <section className="py-24 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16"><h2 className="text-4xl font-bold mb-4">Built for Controlled Commerce Rollout</h2><p className="text-xl text-gray-400">The current launch stack is focused on reliable Standard upper-body try-on, cache readiness, and reviewable quality signals.</p></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[{ icon: Globe, title: 'Storefront SDK', desc: 'Works with confirmed product ids and cached garment assets on modern commerce storefronts.' }, { icon: Gauge, title: '10-12s Latency Target', desc: 'A100-backed Standard generation is tuned for warm shopper requests without trading away realism.' }, { icon: Shield, title: 'Launch Controls', desc: 'Domain validation, API keys, garment approval, cache readiness, and admin review before scale.' }, { icon: BarChart3, title: 'Quality Signals', desc: 'Track quality score, latency, warnings, approvals, and rejected examples for review.' }, { icon: Code2, title: 'Developer First', desc: 'Clean APIs, JavaScript SDK, and documented onboarding requirements.' }, { icon: Eye, title: 'Operational Monitoring', desc: 'Usage dashboards, quota tracking, readiness checks, and cache regeneration workflows.' }].map((f, i) => (<div key={i} className="p-6 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm hover:border-cyan-500/20 hover:-translate-y-1 transition-all duration-300"><div className="w-12 h-12 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center justify-center mb-4"><f.icon className="w-6 h-6 text-white" /></div><h3 className="text-lg font-semibold mb-2">{f.title}</h3><p className="text-gray-400 text-sm">{f.desc}</p></div>))}
-          </div>
-        </div>
-      </section>
-
-      {/* ROLLOUT OUTCOMES */}
-      <section className="py-24 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-4xl font-bold mb-4">What a strong rollout should improve</h2>
-          <p className="text-xl text-gray-400 mb-12">The first goal is not hype. It is better buyer confidence, cleaner evaluation, and a more usable product page experience.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm"><BarChart3 className="w-8 h-8 text-cyan-400 mx-auto mb-4" /><p className="text-2xl font-bold text-white mb-2">More product-page engagement</p><p className="text-gray-400">Give visitors a stronger reason to interact before they leave the page.</p></div>
-            <div className="p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm"><CreditCard className="w-8 h-8 text-blue-400 mx-auto mb-4" /><p className="text-2xl font-bold text-white mb-2">Better purchase confidence</p><p className="text-gray-400">Help buyers picture fit and styling earlier in the decision process.</p></div>
-            <div className="p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm"><ArrowRight className="w-8 h-8 text-green-400 mx-auto mb-4" /><p className="text-2xl font-bold text-white mb-2">Lower rollout friction</p><p className="text-gray-400">Launch in stages, measure usage, and improve quality before pushing traffic harder.</p></div>
-          </div>
-          <p className="text-gray-400">Use the free trial and live demo to decide whether DrapixAI is strong enough for your catalog and brand quality bar.</p>
-        </div>
-      </section>
-
-      {/* OBJECTION HANDLING */}
-      <section className="py-24 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-bold text-center mb-16">Why Teams Choose Us</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="p-8 rounded-2xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 backdrop-blur-sm"><h3 className="text-2xl font-bold mb-6 text-cyan-400">DrapixAI</h3><ul className="space-y-4">{['Upper-body scope with clear launch rules', 'Confirmed product-to-garment mapping', 'Cached garment assets for repeatable quality', 'Quality, latency, and warning metadata', 'Admin review before wider rollout', 'Developer-friendly SDK and APIs'].map((item, i) => (<li key={i} className="flex items-center gap-3"><Check className="w-5 h-5 text-cyan-400 flex-shrink-0" /><span>{item}</span></li>))}</ul></div>
-            <div className="p-8 rounded-2xl bg-[#0b1120]/50 border border-white/[0.06] backdrop-blur-sm"><h3 className="text-2xl font-bold mb-6 text-gray-400">Uncontrolled Try-On Rollouts</h3><ul className="space-y-4">{['Unclear supported garment scope', 'Raw product images sent at generation time', 'No cache readiness gate', 'No quality or warning headers', 'No approval workflow', 'Harder to debug brand-specific failures'].map((item, i) => (<li key={i} className="flex items-center gap-3"><X className="w-5 h-5 text-gray-600 flex-shrink-0" /><span className="text-gray-400">{item}</span></li>))}</ul></div>
-          </div>
-        </div>
-      </section>
-
-      {/* PRICING SECTION */}
-      <section className="py-24 px-6 relative z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-xl text-gray-400">Every public plan starts with the same free trial: up to 300 try-ons over 12 days.</p>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_1fr_320px] gap-6">
-            {[
-              {
-                name: 'Starter',
-                price: '$49',
-                tryons: '1,000 upper-body try-ons/month',
-                description: 'For smaller brands validating demand on live product pages with upper-body try-ons only.',
-                features: ['Standard support', '1 production domain', 'SDK + REST API access'],
-                cta: '/auth/register?plan=starter',
-              },
-              {
-                name: 'Growth',
-                price: '$149',
-                tryons: '5,000 upper-body try-ons/month',
-                description: 'For growing stores that need better unit economics and real usage headroom for upper-body try-ons only.',
-                features: ['Priority email support', 'Advanced analytics', 'Best value per try-on'],
-                cta: '/auth/register?plan=growth',
-                featured: true,
-              },
-              {
-                name: 'Pro',
-                price: 'Coming soon',
-                tryons: 'Full-body try-ons',
-                description: 'Reserved for the future full-body DrapixAI rollout once the broader try-on experience is ready.',
-                features: ['Full-body try-ons', 'Higher-volume rollout path', 'Commercial details announced at launch'],
-                cta: null,
-                comingSoon: true,
-              },
-            ].map((plan) => (
-              <div key={plan.name} className={`p-8 rounded-2xl backdrop-blur-sm transition-all duration-300 ${plan.featured ? 'bg-gradient-to-b from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 md:-translate-y-4' : 'bg-[#0b1120]/50 border border-white/[0.06] hover:border-white/[0.1]'}`}>
-                {plan.featured ? (
-                  <div className="inline-flex px-4 py-1 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 text-xs font-medium text-white mb-5">
-                    Recommended
-                  </div>
-                ) : null}
-                <h3 className="text-xl font-semibold mb-2">{plan.name}</h3>
-                <p className="text-gray-400 text-sm mb-6">{plan.description}</p>
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-white">{plan.price}</span>
-                  {!plan.comingSoon ? <span className="text-gray-500"> / month</span> : null}
-                  <p className="text-cyan-300 text-sm mt-2">{plan.tryons}</p>
+</script>`}</pre>
                 </div>
-                <ul className="space-y-4 mb-8">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-3 text-sm text-gray-300">
-                      <Check className="w-4 h-4 text-cyan-400" /> {feature}
-                    </li>
-                  ))}
-                </ul>
-                {plan.comingSoon ? (
-                  <div className="block w-full py-3 px-4 text-center rounded-xl font-semibold border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
-                    Coming Soon
-                  </div>
-                ) : (
-                  <Link href={plan.cta} className={`block w-full py-3 px-4 text-center rounded-xl font-semibold transition-colors ${plan.featured ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-white hover:opacity-90' : 'border border-white/[0.1] text-white hover:bg-white/[0.05]'}`}>
-                    Start Trial
-                  </Link>
-                )}
               </div>
-            ))}
-
-            <div className="p-8 rounded-2xl bg-[#0b1120]/60 border border-amber-400/20 backdrop-blur-sm">
-              <h3 className="text-xl font-semibold mb-2">Enterprise</h3>
-              <p className="text-gray-400 text-sm mb-6">Custom volume, onboarding, and commercial support for larger teams.</p>
-              <div className="mb-6">
-                <span className="text-3xl font-bold text-white">Custom</span>
-              </div>
-              <ul className="space-y-4 mb-8">
-                {['Custom usage allocation', 'Priority commercial onboarding', 'Private support workflow'].map((feature) => (
-                  <li key={feature} className="flex items-center gap-3 text-sm text-gray-300">
-                    <Check className="w-4 h-4 text-amber-300" /> {feature}
-                  </li>
-                ))}
-              </ul>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry" className="block w-full py-3 px-4 text-center rounded-xl border border-amber-300/30 text-white font-semibold hover:bg-white/[0.05] transition-colors">
-                Contact Sales
-              </a>
             </div>
           </div>
+        </section>
 
-          {/* Trust Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-8 mt-12 pt-12 border-t border-white/[0.06]">
-            <span className="flex items-center gap-2 text-sm text-gray-500">
-              <Check className="w-4 h-4 text-green-500" /> No credit card required
-            </span>
-            <span className="flex items-center gap-2 text-sm text-gray-500">
-              <Check className="w-4 h-4 text-green-500" /> Cancel anytime
-            </span>
-            <span className="flex items-center gap-2 text-sm text-gray-500">
-              <Check className="w-4 h-4 text-green-500" /> 300 try-on trial
-            </span>
-            <span className="flex items-center gap-2 text-sm text-gray-500">
-              <Check className="w-4 h-4 text-green-500" /> Upgrade when your volume is proven
-            </span>
-          </div>
-          <div className="text-center mt-8">
-            <Link href="/pricing" className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200 transition-colors">
-              View full pricing breakdown
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* FINAL CTA */}
-      <section className="py-24 px-6 relative z-10 overflow-hidden">
-        {/* CTA-specific glow */}
-        <div className="absolute inset-0 bg-gradient-to-t from-cyan-500/5 via-transparent to-transparent" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[100px]" />
-
-        <div className="max-w-3xl mx-auto text-center relative z-10">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">Ready to Validate Upper-Body Try-On?</h2>
-          <p className="text-xl text-gray-400 mb-8">Start with a 300 try-on trial, validate Standard quality on your own upper-body products, then roll out only when the workflow meets your brand bar.</p>
-
-          <Link href={hasDashboardAccess ? '/dashboard' : '/auth/register'} className="inline-block px-10 py-4 text-xl font-semibold rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90 transition-opacity shadow-[0_0_15px_rgba(6,182,212,0.15)]">
-          {hasDashboardAccess ? 'Open Dashboard' : 'Start Free Trial'}
-          </Link>
-        </div>
-      </section>
-
-      {/* FOOTER */}
-      <footer className="py-12 px-6 border-t border-white/[0.06] relative z-10">
-        <div className="max-w-7xl mx-auto">
-
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
-
-            <div className="flex items-center gap-2">
-            <img
-              src="/drapixai_emblem_64.webp"
-              alt="DrapixAI"
-              width={40}
-              height={40}
-              className="rounded-xl"
-            />
-              <span className="text-xl font-bold">DrapixAI</span>
+        <section className="bg-[#b8d8c7] py-20 lg:py-24">
+          <div className="mx-auto flex max-w-[1440px] flex-col justify-between gap-10 px-5 sm:px-8 lg:flex-row lg:items-end lg:px-12">
+            <div className="max-w-3xl">
+              <p className="text-xs font-bold uppercase text-[#1f5e46]">Controlled rollout</p>
+              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight text-[#102018] sm:text-6xl">Prove one product before you scale the catalog.</h2>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#385345]">Use the 300 try-on trial to evaluate Standard upper-body quality on your own products. Publish only when the workflow meets your brand bar.</p>
             </div>
-
-            <p className="text-gray-500 text-sm">Standard upper-body AI try-on infrastructure for fashion commerce</p>
+            <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+              <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="inline-flex h-14 min-w-56 items-center justify-center gap-2 bg-[#172019] px-7 font-semibold text-white hover:bg-[#26352a]">
+                {showDashboardCta ? 'Open dashboard' : 'Start free trial'} <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link href="/pricing" className="inline-flex h-14 min-w-56 items-center justify-center border border-[#172019]/30 px-7 font-semibold text-[#172019] hover:bg-white/30">View pricing</Link>
+            </div>
           </div>
+        </section>
+      </main>
 
-          <div className="flex flex-wrap items-center justify-center gap-8 pt-8 border-t border-white/[0.06]">
-            <Link href="/help" className="text-sm text-gray-500 hover:text-white transition-colors">Help</Link>
-            <Link href="/pricing" className="text-sm text-gray-500 hover:text-white transition-colors">Pricing</Link>
-            {hasDashboardAccess ? (
-              <Link href="/dashboard" className="text-sm text-gray-500 hover:text-white transition-colors">Dashboard</Link>
-            ) : null}
-            <Link href="/privacy" className="text-sm text-gray-500 hover:text-white transition-colors">Privacy</Link>
-            <Link href="/terms" className="text-sm text-gray-500 hover:text-white transition-colors">Terms</Link>
-            <Link href="/refund-policy" className="text-sm text-gray-500 hover:text-white transition-colors">Refunds</Link>
-            <Link href="/cookies" className="text-sm text-gray-500 hover:text-white transition-colors">Cookies</Link>
-            <Link href="/contact" className="text-sm text-gray-500 hover:text-white transition-colors">Contact</Link>
+      <footer className="bg-[#101712] py-12 text-white">
+        <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
+          <div className="flex flex-col justify-between gap-8 border-b border-white/15 pb-10 md:flex-row md:items-end">
+            <div>
+              <div className="flex items-center gap-3">
+                <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
+                <span className="text-xl font-bold">DrapixAI</span>
+              </div>
+              <p className="mt-4 max-w-md text-sm leading-6 text-[#9fac9f]">Standard upper-body AI try-on infrastructure for fashion commerce.</p>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#bdc7bf]">
+              {[
+                ['/help', 'Help'], ['/docs', 'Developers'], ['/status', 'Status'], ['/changelog', 'Changelog'], ['/pricing', 'Pricing'], ['/contact', 'Contact'],
+              ].map(([href, label]) => <Link key={href} href={href} className="hover:text-white">{label}</Link>)}
+            </div>
           </div>
-
-          <div className="text-center mt-8">
-            <p className="text-gray-600 text-sm">Copyright 2026 DrapixAI. All rights reserved.</p>
+          <div className="flex flex-col justify-between gap-5 pt-8 text-xs text-[#7f8d82] sm:flex-row">
+            <p>Copyright 2026 DrapixAI. All rights reserved.</p>
+            <div className="flex flex-wrap gap-5">
+              <Link href="/privacy" className="hover:text-white">Privacy</Link>
+              <Link href="/terms" className="hover:text-white">Terms</Link>
+              <Link href="/refund-policy" className="hover:text-white">Refunds</Link>
+              <Link href="/cookies" className="hover:text-white">Cookies</Link>
+            </div>
           </div>
         </div>
       </footer>

@@ -40,7 +40,7 @@ export const rejectCrossOriginMutation = (request: Request) => {
 
 export const noStoreJson = (body: unknown, init: ResponseInit = {}) => {
   const headers = new Headers(init.headers);
-  headers.set('Cache-Control', 'no-store, no-cache, max-age=0, must-revalidate');
+  headers.set('Cache-Control', 'no-store, private, no-cache, max-age=0, must-revalidate');
   headers.set('Pragma', 'no-cache');
   return NextResponse.json(body, { ...init, headers });
 };

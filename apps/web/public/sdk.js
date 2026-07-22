@@ -168,6 +168,7 @@
       latencyMs: parseNumber(response.headers.get('x-drapixai-latency-ms')),
       latencyTargetMs: parseNumber(response.headers.get('x-drapixai-latency-target-ms')),
       qualityMode: response.headers.get('x-drapixai-quality-mode') || undefined,
+      qualityProfile: response.headers.get('x-drapixai-quality-profile') || undefined,
       garmentSource: response.headers.get('x-drapixai-garment-source') || undefined,
       garmentCacheStatus: response.headers.get('x-drapixai-garment-cache-status') || undefined,
       garmentCacheVersion: response.headers.get('x-drapixai-garment-cache-version') || undefined,
@@ -270,6 +271,8 @@
       options = options || {};
       var config = {
         apiKey: options.apiKey,
+        tokenProvider: typeof options.tokenProvider === 'function' ? options.tokenProvider : null,
+        appId: options.appId ? String(options.appId) : '',
         productId: options.productId || 'default',
         containerId: options.containerId || 'drapixai-container',
         autoAttach: Boolean(options.autoAttach),
@@ -278,12 +281,15 @@
         buttonTargetSelector: options.buttonTargetSelector || '[data-drapix-button-slot]',
         baseUrl: sanitizeServiceUrl(options.baseUrl || window.DRAPIXAI_API_BASE_URL || window.location.origin, window.location.origin),
         garmentType: (options.garmentType || 'upper').toLowerCase(),
+        garmentCategory: options.garmentCategory ? String(options.garmentCategory).toLowerCase() : '',
+        enableLowerBody: Boolean(options.enableLowerBody),
         quality: 'standard',
         buttonText: options.buttonText || 'Try On',
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
         footerText: options.footerText || 'Privacy: your photo is used only for this try-on preview, quality review, fraud prevention, and support. It is not shown publicly.',
         timeoutMs: Number(options.timeoutMs || 20000),
+        enableDownload: options.enableDownload !== false,
         adaptBrandTheme: options.adaptBrandTheme !== false,
         primaryGradient: options.primaryGradient || null,
         buyButtonText: options.buyButtonText || 'Buy this item',
@@ -298,8 +304,28 @@
         return new Error(message);
       }
 
-      if (config.garmentType !== 'upper') {
-        throw reportStartupError('UPPER_BODY_ONLY');
+      async function resolveCredential(productId) {
+        if (config.tokenProvider) {
+          var issuedToken = await config.tokenProvider(String(productId || config.productId));
+          if (!issuedToken || typeof issuedToken !== 'string') throw reportStartupError('TOKEN_UNAVAILABLE', productId);
+          return issuedToken.trim();
+        }
+        if (!config.apiKey || typeof config.apiKey !== 'string') throw reportStartupError('TOKEN_UNAVAILABLE', productId);
+        return config.apiKey.trim();
+      }
+
+      function buildAuthorizationHeaders(credential, includeJson) {
+        var headers = { 'Authorization': 'Bearer ' + credential };
+        if (includeJson) headers['Content-Type'] = 'application/json';
+        if (config.appId) headers['x-drapixai-app-id'] = config.appId;
+        return headers;
+      }
+
+      if (config.garmentType !== 'upper' && config.garmentType !== 'lower') {
+        throw reportStartupError('UNSUPPORTED_GARMENT_TYPE');
+      }
+      if (config.garmentType === 'lower' && !config.enableLowerBody) {
+        throw reportStartupError('LOWER_BODY_NOT_ENABLED');
       }
       if (options.quality && String(options.quality).toLowerCase() !== 'standard') {
         throw reportStartupError('INVALID_QUALITY');
@@ -312,16 +338,13 @@
 
       ensureWidgetStyles();
 
-      var domain = window.location.hostname;
       var validateRes;
       try {
+        var validationCredential = await resolveCredential(config.productId);
         validateRes = await fetch(config.baseUrl + '/sdk/validate', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + config.apiKey
-          },
-          body: JSON.stringify({ domain: domain })
+          headers: buildAuthorizationHeaders(validationCredential, true),
+          body: JSON.stringify({ productId: config.productId })
         });
       } catch (_) {
         throw reportStartupError('VALIDATION_NETWORK_FAILED');
@@ -424,11 +447,11 @@
           '        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;">',
           '          <div>',
           '            <div style="font-size:18px;font-weight:700;">Your try-on preview is ready</div>',
-          '            <div id="drapix-result-meta" style="font-size:12px;color:', escapeHtml(theme.mutedText), ';margin-top:4px;">Download and Share exports include a small DrapixAI watermark in the bottom-right corner.</div>',
+          '            <div id="drapix-result-meta" style="font-size:12px;color:', escapeHtml(theme.mutedText), ';margin-top:4px;">', config.enableDownload ? 'Download and Share exports include a small DrapixAI watermark in the bottom-right corner.' : 'Share exports include a small DrapixAI watermark in the bottom-right corner.', '</div>',
           '          </div>',
           '          <div style="display:flex;gap:10px;flex-wrap:wrap;">',
           '            <button id="drapix-buy" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">', escapeHtml(config.buyButtonText), '</button>',
-          '            <button id="drapix-download" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:700;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Download</button>',
+          '            <button id="drapix-download" style="', config.enableDownload ? 'display:inline-flex;' : 'display:none;', 'align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:700;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Download</button>',
           '            <button id="drapix-share" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:600;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Share</button>',
           '          </div>',
           '        </div>',
@@ -640,7 +663,9 @@
           resetState();
         });
         buyBtn.addEventListener('click', handleBuy);
-        downloadBtn.addEventListener('click', handleDownload);
+        if (downloadBtn && config.enableDownload) {
+          downloadBtn.addEventListener('click', handleDownload);
+        }
         shareBtn.addEventListener('click', handleShare);
 
         runBtn.addEventListener('click', async function () {
@@ -683,15 +708,19 @@
             form.append('productId', productId || config.productId);
             form.append('quality', config.quality);
             form.append('garment_type', config.garmentType);
+            if (config.garmentCategory) {
+              form.append('garment_category', config.garmentCategory);
+            }
 
             var startedAt = Date.now();
+            var tryOnCredential = await resolveCredential(productId || config.productId);
             activeController = typeof AbortController !== 'undefined' ? new AbortController() : null;
             var timeoutId = activeController ? setTimeout(function () {
               activeController.abort();
             }, config.timeoutMs) : null;
             var res = await fetch(config.baseUrl + '/sdk/tryon', {
               method: 'POST',
-              headers: { 'Authorization': 'Bearer ' + config.apiKey },
+              headers: buildAuthorizationHeaders(tryOnCredential, false),
               body: form,
               signal: activeController ? activeController.signal : undefined
             });
@@ -725,7 +754,7 @@
             if (resultMeta) {
               var latencyText = metadata.latencyMs ? ' - ' + (metadata.latencyMs / 1000).toFixed(1) + 's' : '';
               var scoreText = typeof metadata.qualityScore === 'number' ? ' - score ' + metadata.qualityScore.toFixed(2) : '';
-              resultMeta.textContent = (metadata.confidenceBadge || 'Review') + scoreText + latencyText + '. Download and Share exports include a small DrapixAI watermark.';
+              resultMeta.textContent = (metadata.confidenceBadge || 'Review') + scoreText + latencyText + (config.enableDownload ? '. Download and Share exports include a small DrapixAI watermark.' : '. Share exports include a small DrapixAI watermark.');
             }
             resultShell.style.display = 'block';
             progressBar.style.width = '100%';

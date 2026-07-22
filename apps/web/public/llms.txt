@@ -1,0 +1,34 @@
+# DrapixAI
+
+> Product-faithful virtual try-on for fashion brands. DrapixAI prepares and certifies garments before storefront activation, generates Standard upper-body try-ons, and rejects results that fall below publishability thresholds.
+
+## Public documentation
+
+- Developer quickstart: /docs
+- Live demo: /demo
+- SDK installation: /sdk-install
+- Help and troubleshooting: /help
+- Service status: /status
+- Changelog: /changelog
+- Privacy: /privacy
+- Terms: /terms
+
+## Supported launch scope
+
+Launch-ready focus: shirts, t-shirts, polos, blouses, and clean tops.
+Carefully reviewed beta scope: short kurtis, hoodies, and sweatshirts.
+The public shopper pipeline uses Standard quality only.
+
+## Browser SDK
+
+Load `/sdk.js` from the DrapixAI web origin. Initialize the SDK with a domain-bound API key and a confirmed product ID. Live products require a prepared garment cache and confirmed product mapping.
+
+Important SDK result metadata includes quality score, confidence badge, latency, warnings, candidate count, garment source, and cache status.
+
+## Quality policy
+
+Confidence badges are Excellent, Review, and Not publishable. Blocking identity, pose, body, garment-color, structure, coverage, artifact, or realism risks cause automatic rejection. Rejected images are not shown to shoppers.
+
+## Privacy
+
+Shopper photos require consent. Retention and deletion behavior is documented on the privacy page. Production integrations should use only HTTPS, verified storefront domains, and protected server-side management routes.

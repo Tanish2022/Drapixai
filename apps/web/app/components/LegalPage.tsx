@@ -1,4 +1,5 @@
-import Link from 'next/link';
+import MarketingFooter from '@/app/components/MarketingFooter';
+import MarketingNav from '@/app/components/MarketingNav';
 
 type LegalSection = {
   heading: string;
@@ -18,44 +19,51 @@ export default function LegalPage({
   title,
   summary,
   sections,
-  updatedLabel = 'Last updated: March 28, 2026',
+  updatedLabel = 'Last updated: July 16, 2026',
 }: LegalPageProps) {
   return (
-    <main className="min-h-screen bg-[#050816] text-white">
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[700px] bg-gradient-glow opacity-40" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] opacity-20" />
-      </div>
-
-      <div className="relative z-10 max-w-4xl mx-auto px-6 py-20">
-        <div className="mb-10">
-          <Link href="/" className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
-            Back to DrapixAI
-          </Link>
-        </div>
-
-        <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/70 backdrop-blur-xl p-8 md:p-12 shadow-[0_0_60px_rgba(8,145,178,0.08)]">
-          <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">{eyebrow}</p>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">{title}</h1>
-          <p className="text-base md:text-lg text-gray-300 leading-8 max-w-3xl">{summary}</p>
-          <p className="mt-6 text-sm text-gray-500">{updatedLabel}</p>
-
-          <div className="mt-12 space-y-10">
-            {sections.map((section) => (
-              <section key={section.heading} className="border-t border-white/[0.06] pt-8">
-                <h2 className="text-2xl font-semibold mb-4">{section.heading}</h2>
-                <div className="space-y-4">
-                  {section.body.map((paragraph) => (
-                    <p key={paragraph} className="text-gray-300 leading-8">
-                      {paragraph}
-                    </p>
-                  ))}
-                </div>
-              </section>
-            ))}
+    <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">
+      <MarketingNav />
+      <section className="border-b border-black/10">
+        <div className="mx-auto grid max-w-[1440px] gap-10 px-5 py-16 sm:px-8 md:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-12">
+          <div>
+            <p className="text-xs font-bold uppercase text-[#31725b]">{eyebrow}</p>
+            <h1 className="mt-5 font-serif text-5xl leading-[1.02] text-[#101712] sm:text-6xl">{title}</h1>
+          </div>
+          <div className="border-l border-black/10 lg:pl-10">
+            <p className="max-w-3xl text-lg leading-8 text-[#5d6961]">{summary}</p>
+            <p className="mt-7 text-xs font-semibold uppercase text-[#8a958d]">{updatedLabel}</p>
           </div>
         </div>
+      </section>
+
+      <div className="mx-auto grid max-w-[1440px] gap-10 px-5 py-16 sm:px-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:px-12">
+        <aside className="self-start border-t border-black/10 pt-5 lg:sticky lg:top-6">
+          <p className="text-xs font-bold uppercase text-[#748078]">On this page</p>
+          <nav className="mt-4 space-y-1" aria-label={`${title} sections`}>
+            {sections.map((section, index) => (
+              <a key={section.heading} href={`#legal-section-${index + 1}`} className="block border-l-2 border-transparent px-3 py-2 text-sm text-[#5d6961] hover:border-[#31725b] hover:bg-[#edf2ed] hover:text-[#172019]">{section.heading}</a>
+            ))}
+          </nav>
+        </aside>
+
+        <article className="min-w-0">
+          {sections.map((section, index) => (
+            <section id={`legal-section-${index + 1}`} key={section.heading} className="scroll-mt-6 border-t border-black/10 py-10 first:pt-0 first:border-t-0 md:py-14">
+              <div className="grid gap-5 md:grid-cols-[4rem_1fr]">
+                <span className="text-sm font-bold text-[#9aa39c]">0{index + 1}</span>
+                <div>
+                  <h2 className="text-2xl font-semibold">{section.heading}</h2>
+                  <div className="mt-5 space-y-5">
+                    {section.body.map((paragraph) => <p key={paragraph} className="max-w-3xl leading-8 text-[#5d6961]">{paragraph}</p>)}
+                  </div>
+                </div>
+              </div>
+            </section>
+          ))}
+        </article>
       </div>
+      <MarketingFooter />
     </main>
   );
 }

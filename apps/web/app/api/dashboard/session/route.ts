@@ -65,7 +65,7 @@ export async function GET(request: Request) {
     return noStoreJson({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  return noStoreJson({ ok: true, apiKey: session.apiKey });
+  return noStoreJson({ ok: true });
 }
 
 export async function POST(request: Request) {
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       return noStoreJson({ error: 'INVALID_API_KEY' }, { status: 401 });
     }
     await persistDashboardCookie(directApiKey);
-    return noStoreJson({ ok: true, apiKey: directApiKey });
+    return noStoreJson({ ok: true });
   }
 
   if (!body?.mode || !['login', 'register'].includes(body.mode)) {
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
   }
 
   await persistDashboardCookie(apiKey);
-  return noStoreJson({ ok: true, apiKey });
+  return noStoreJson({ ok: true });
 }
 
 export async function DELETE(request: Request) {
@@ -130,6 +130,14 @@ export async function DELETE(request: Request) {
   if (csrfRejection) return csrfRejection;
 
   const cookieStore = await cookies();
+  const session = await readDashboardSessionToken(cookieStore.get(DASHBOARD_SESSION_COOKIE)?.value);
+  if (session?.apiKey) {
+    await fetch(`${SERVER_API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.apiKey}` },
+      cache: 'no-store',
+    }).catch(() => null);
+  }
   cookieStore.set({
     name: DASHBOARD_SESSION_COOKIE,
     value: '',

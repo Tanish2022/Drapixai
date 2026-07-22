@@ -9,6 +9,7 @@ type DashboardProxyContext = {
 };
 
 const allowedSdkRoots = new Set(['garments', 'catalog', 'matches', 'result']);
+const allowedShopifyActions = new Set(['link', 'status', 'sync', 'disconnect', 'preparation', 'prepare']);
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
 
 const isSafePath = (segments: string[]) =>
@@ -20,6 +21,7 @@ const isAllowedDashboardPath = (segments: string[]) => {
   if (root === 'analytics') return true;
   if (root === 'account') return true;
   if (root === 'sdk' && second && allowedSdkRoots.has(second)) return true;
+  if (root === 'shopify' && second && allowedShopifyActions.has(second)) return true;
   return false;
 };
 

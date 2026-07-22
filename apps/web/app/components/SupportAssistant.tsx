@@ -322,7 +322,10 @@ export default function SupportAssistant() {
     setIsOpen(true);
   };
 
-  const hideAssistant = pathname === '/auth/login' || pathname === '/auth/register';
+  const hideAssistant = pathname.startsWith('/auth/')
+    || pathname.startsWith('/admin')
+    || pathname.startsWith('/shopify/')
+    || ['/dashboard', '/sdk-install', '/settings', '/subscription'].includes(pathname);
   if (hideAssistant) {
     return null;
   }
@@ -332,25 +335,25 @@ export default function SupportAssistant() {
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
-        className="fixed bottom-4 right-4 z-[70] inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/30 bg-[#0b1120]/92 text-white shadow-[0_16px_48px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-colors hover:bg-[#121a2b] sm:bottom-6 sm:right-6"
+        className={isOpen ? 'hidden' : 'fixed bottom-4 right-4 z-[70] inline-flex h-12 w-12 items-center justify-center rounded-full border border-black/15 bg-[#fbfcf9] text-[#1f6048] shadow-[0_12px_36px_rgba(24,40,31,0.18)] transition-colors hover:bg-[#e7eee8] sm:bottom-6 sm:right-6'}
         aria-label={isOpen ? 'Close support assistant' : 'Open support assistant'}
         title={isOpen ? 'Close support assistant' : 'Open support assistant'}
       >
-        <MessageSquare className="h-6 w-6 text-cyan-300" />
+        <MessageSquare className="h-5 w-5" />
       </button>
 
       {isOpen ? (
-        <div className="fixed inset-x-4 bottom-20 z-[70] flex max-h-[calc(100vh-6rem)] flex-col overflow-hidden rounded-[28px] border border-white/[0.08] bg-[#07101f]/95 shadow-[0_24px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:w-[420px]">
-          <div className="border-b border-white/[0.08] bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(59,130,246,0.12))] px-5 py-4">
+        <div className="fixed inset-x-3 bottom-3 top-3 z-[70] flex flex-col overflow-hidden rounded-lg border border-black/15 bg-[#fbfcf9] text-[#172019] shadow-[0_24px_70px_rgba(24,40,31,0.22)] sm:inset-x-auto sm:bottom-24 sm:right-6 sm:top-auto sm:max-h-[calc(100vh-7rem)] sm:w-[420px]">
+          <div className="border-b border-black/10 bg-[#b8d8c7] px-5 py-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-cyan-300/80">Support</p>
-                <h2 className="mt-1 text-lg font-semibold text-white">DrapixAI assistant</h2>
+                <p className="text-xs font-bold uppercase text-[#276149]">Support</p>
+                <h2 className="mt-1 text-lg font-semibold text-[#172019]">DrapixAI assistant</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="rounded-xl border border-white/[0.08] bg-black/20 p-2 text-gray-300 transition-colors hover:bg-white/[0.06] hover:text-white"
+                className="inline-flex h-10 w-10 items-center justify-center border border-black/15 bg-white/50 text-[#475349] transition-colors hover:bg-white"
                 aria-label="Close support assistant"
               >
                 <X className="h-4 w-4" />
@@ -362,24 +365,24 @@ export default function SupportAssistant() {
             {messages.map((message) =>
               message.role === 'user' ? (
                 <div key={message.id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl bg-cyan-500/15 px-4 py-3 text-sm leading-6 text-cyan-50">
+                  <div className="max-w-[85%] rounded-md bg-[#d9ecdf] px-4 py-3 text-sm leading-6 text-[#173d2f]">
                     {message.body}
                   </div>
                 </div>
               ) : (
-                <div key={message.id} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-4">
-                  <div className="flex items-center gap-2 text-cyan-300">
+                <div key={message.id} className="rounded-md border border-black/10 bg-white px-4 py-4">
+                  <div className="flex items-center gap-2 text-[#21634e]">
                     <Sparkles className="h-4 w-4" />
                     <span className="text-sm font-medium">{message.title}</span>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-gray-200">{message.summary}</p>
+                  <p className="mt-3 text-sm leading-6 text-[#4e5a51]">{message.summary}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {message.links.map((link) =>
                       link.href.startsWith('mailto:') ? (
                         <a
                           key={`${message.id}-${link.href}`}
                           href={link.href}
-                          className="inline-flex items-center gap-2 rounded-xl border border-white/[0.10] px-3 py-2 text-xs text-gray-100 transition-colors hover:bg-white/[0.06]"
+                          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-black/15 px-3 py-2 text-xs text-[#344038] transition-colors hover:bg-[#eef2ec]"
                         >
                           <Mail className="h-3.5 w-3.5" />
                           {link.label}
@@ -388,7 +391,7 @@ export default function SupportAssistant() {
                         <Link
                           key={`${message.id}-${link.href}`}
                           href={link.href}
-                          className="inline-flex items-center gap-2 rounded-xl border border-white/[0.10] px-3 py-2 text-xs text-gray-100 transition-colors hover:bg-white/[0.06]"
+                          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-black/15 px-3 py-2 text-xs text-[#344038] transition-colors hover:bg-[#eef2ec]"
                         >
                           {link.label}
                           <ArrowRight className="h-3.5 w-3.5" />
@@ -401,7 +404,7 @@ export default function SupportAssistant() {
             )}
           </div>
 
-          <div className="border-t border-white/[0.08] px-4 py-4">
+          <div className="border-t border-black/10 px-4 py-4">
             {!hasUserMessages ? (
               <div className="mb-3 flex flex-wrap gap-2">
                 {quickPrompts.map((prompt) => (
@@ -409,7 +412,7 @@ export default function SupportAssistant() {
                     key={prompt}
                     type="button"
                     onClick={() => sendMessage(prompt)}
-                    className="rounded-full border border-white/[0.10] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/[0.06]"
+                    className="min-h-10 rounded-md border border-black/15 bg-white px-3 py-2 text-xs text-[#475349] transition-colors hover:bg-[#eef2ec]"
                   >
                     {prompt}
                   </button>
@@ -418,7 +421,7 @@ export default function SupportAssistant() {
             ) : null}
 
             <div className="flex items-end gap-3">
-              <div className="flex-1 rounded-2xl border border-white/[0.08] bg-black/25 px-4 py-3">
+              <div className="flex-1 rounded-md border border-black/15 bg-white px-4 py-3">
                 <label htmlFor="support-assistant-input" className="sr-only">
                   Ask support assistant
                 </label>
@@ -435,25 +438,25 @@ export default function SupportAssistant() {
                   }}
                   placeholder="Ask about onboarding, garments, store verification, docs, or billing..."
                   
-                  className="w-full resize-none bg-transparent text-sm leading-6 text-white outline-none placeholder:text-gray-500"
+                  className="w-full resize-none bg-transparent text-sm leading-6 text-[#172019] outline-none placeholder:text-[#7c887f]"
                 />
               </div>
               <button
                 type="button"
                 onClick={() => sendMessage(input)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 text-white transition-opacity hover:opacity-90"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-[#183f32] text-white transition-colors hover:bg-[#245a48]"
                 aria-label="Send support question"
               >
                 <Send className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-400">
+            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[#6a756c]">
               <span className="inline-flex min-w-0 items-center gap-2">
                 <MessageSquare className="h-3.5 w-3.5" />
                 <span className="truncate">Guided answers from your current Help content</span>
               </span>
-              <a href="mailto:support@drapixai.com" className="shrink-0 text-cyan-300 hover:text-cyan-200">
+              <a href="mailto:support@drapixai.com" className="shrink-0 font-medium text-[#21634e] hover:text-[#153f31]">
                 support@drapixai.com
               </a>
             </div>

@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import BackButton from './components/BackButton';
 import Providers from './providers';
 import SupportAssistant from './components/SupportAssistant';
 
@@ -14,10 +13,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_BASE_URL || 'http://localhost:3000'),
   title: {
-    default: 'DrapixAI - AI Virtual Try-On Infrastructure',
+    default: 'DrapixAI - Product-Faithful Virtual Try-On',
     template: '%s | DrapixAI',
   },
-  description: 'Increase eCommerce conversions with AI-powered virtual try-on technology. Enterprise-ready, developer-first, revenue-driven infrastructure for fashion brands.',
+  description: 'Product-faithful virtual try-on for fashion brands, with garment certification, quality-gated results, and native storefront experiences.',
   keywords: [
     'AI virtual try-on',
     'eCommerce',
@@ -35,8 +34,8 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://drapixai.com',
     siteName: 'DrapixAI',
-    title: 'DrapixAI - AI Virtual Try-On Infrastructure',
-    description: 'Increase eCommerce conversions with AI-powered virtual try-on technology.',
+    title: 'DrapixAI - Product-Faithful Virtual Try-On',
+    description: 'Certify every product, preserve the real garment, and keep weak try-on results away from shoppers.',
     images: [
       {
         url: '/og-image.png',
@@ -48,8 +47,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'DrapixAI - AI Virtual Try-On Infrastructure',
-    description: 'Increase eCommerce conversions with AI-powered virtual try-on technology.',
+    title: 'DrapixAI - Product-Faithful Virtual Try-On',
+    description: 'Certify every product, preserve the real garment, and keep weak try-on results away from shoppers.',
     images: ['/og-image.png'],
   },
   robots: {
@@ -77,10 +76,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable}`}>
-      <body className="bg-background text-white antialiased">
+    <html lang="en" className={`${inter.variable}`} data-scroll-behavior="smooth">
+      <body className="bg-background text-foreground antialiased">
         <Providers>
-          <BackButton />
           <SupportAssistant />
           {children}
         </Providers>

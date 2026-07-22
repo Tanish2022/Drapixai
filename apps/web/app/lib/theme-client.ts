@@ -8,10 +8,10 @@ export const THEME_STORAGE_KEY = 'drapixai-theme';
 
 export const readThemePreference = (): DrapixThemePreference => {
   if (typeof document !== 'undefined') {
-    return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
   }
 
-  return 'dark';
+  return 'light';
 };
 
 export const applyThemePreference = (theme: DrapixThemePreference) => {
@@ -24,12 +24,12 @@ export const applyThemePreference = (theme: DrapixThemePreference) => {
 };
 
 export const useThemePreference = () => {
-  const [themePreference, setThemePreference] = useState<DrapixThemePreference>('dark');
+  const [themePreference, setThemePreference] = useState<DrapixThemePreference>('light');
 
   useEffect(() => {
     const syncTheme = () => {
       const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-      const nextTheme = stored === 'light' ? 'light' : readThemePreference();
+      const nextTheme = stored === 'dark' || stored === 'light' ? stored : readThemePreference();
       setThemePreference(nextTheme);
       document.documentElement.dataset.theme = nextTheme;
     };

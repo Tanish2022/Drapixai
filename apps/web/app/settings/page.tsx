@@ -8,7 +8,6 @@ import {
   Copy,
   CreditCard,
   KeyRound,
-  LogOut,
   Mail,
   MoonStar,
   Phone,
@@ -19,6 +18,7 @@ import {
   UserCircle2,
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import WorkspaceHeader from '@/app/components/WorkspaceHeader';
 
 type UsageData = {
   email?: string | null;
@@ -66,6 +66,8 @@ const applyTheme = (theme: 'dark' | 'light') => {
 export default function SettingsPage() {
   const router = useRouter();
   const [apiKey, setApiKey] = useState('');
+  const [storefrontApiKey, setStorefrontApiKey] = useState('');
+  const [storefrontKeyExists, setStorefrontKeyExists] = useState(false);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -73,7 +75,7 @@ export default function SettingsPage() {
 
   const [companyName, setCompanyName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
-  const [themePreference, setThemePreference] = useState<'dark' | 'light'>('dark');
+  const [themePreference, setThemePreference] = useState<'dark' | 'light'>('light');
   const [storeDomain, setStoreDomain] = useState('');
   const [storeSyncSource, setStoreSyncSource] = useState<'manual' | 'feed_url' | 'shopify' | 'woocommerce'>('manual');
   const [storeFeedUrl, setStoreFeedUrl] = useState('');
@@ -109,9 +111,10 @@ export default function SettingsPage() {
         if (!active) return;
         setApiKey(nextApiKey);
 
-        const [summaryResponse, profileResponse] = await Promise.all([
+        const [summaryResponse, profileResponse, keyStatusResponse] = await Promise.all([
           fetch(dashboardApiPath('analytics/summary')),
           fetch(dashboardApiPath('account/profile')),
+          fetch(dashboardApiPath('analytics/api-key/status'), { cache: 'no-store' }),
         ]);
 
         if (!summaryResponse.ok || !profileResponse.ok) {
@@ -120,18 +123,20 @@ export default function SettingsPage() {
 
         const summaryPayload = (await summaryResponse.json().catch(() => null)) as UsageData | null;
         const profilePayload = (await profileResponse.json().catch(() => null)) as AccountProfile | null;
+        const keyStatusPayload = (await keyStatusResponse.json().catch(() => null)) as { exists?: boolean } | null;
         if (!active) return;
 
         setUsage(summaryPayload);
         setProfile(profilePayload);
+        setStorefrontKeyExists(Boolean(keyStatusPayload?.exists));
         setCompanyName(profilePayload?.companyName || summaryPayload?.companyName || '');
         setMobileNumber(profilePayload?.mobileNumber || '');
-        setThemePreference(profilePayload?.themePreference || 'dark');
+        setThemePreference(profilePayload?.themePreference || 'light');
         setStoreDomain(profilePayload?.domain || summaryPayload?.domain || '');
         setStoreSyncSource((profilePayload?.catalogSyncSource as 'manual' | 'feed_url' | 'shopify' | 'woocommerce') || 'manual');
         setStoreFeedUrl(profilePayload?.catalogFeedUrl || '');
         setVerificationMetaTag(profilePayload?.storeVerificationMetaTag || '');
-        applyTheme((profilePayload?.themePreference || 'dark') as 'dark' | 'light');
+        applyTheme((profilePayload?.themePreference || 'light') as 'dark' | 'light');
       } catch {
         if (active) {
           router.replace('/auth/login?next=/settings');
@@ -158,23 +163,23 @@ export default function SettingsPage() {
   const cardClass = useMemo(
     () =>
       themePreference === 'light'
-        ? 'rounded-[28px] border border-sky-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(244,249,255,0.96)_100%)] p-6 shadow-[0_28px_90px_rgba(71,85,105,0.12)] backdrop-blur'
-        : 'rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6',
+        ? 'border border-black/10 bg-white p-6'
+        : 'border border-white/10 bg-[#151c17] p-6',
     [themePreference]
   );
 
   const panelClass = useMemo(
     () =>
       themePreference === 'light'
-        ? 'rounded-2xl border border-sky-100 bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]'
-        : 'rounded-2xl border border-white/[0.08] bg-black/20 p-4',
+        ? 'border border-black/10 bg-[#f4f6f2] p-4'
+        : 'border border-white/10 bg-[#101712] p-4',
     [themePreference]
   );
 
-  const mutedTextClass = themePreference === 'light' ? 'text-slate-600' : 'text-gray-400';
-  const sectionTitleClass = themePreference === 'light' ? 'text-slate-950' : 'text-white';
-  const strongTextClass = themePreference === 'light' ? 'text-slate-900' : 'text-gray-100';
-  const pageClass = themePreference === 'light' ? 'min-h-screen bg-[#edf4ff] text-slate-950' : 'min-h-screen bg-[#050816] text-white';
+  const mutedTextClass = themePreference === 'light' ? 'text-[#68736b]' : 'text-[#aab6ac]';
+  const sectionTitleClass = themePreference === 'light' ? 'text-[#172019]' : 'text-white';
+  const strongTextClass = themePreference === 'light' ? 'text-[#172019]' : 'text-[#edf2ed]';
+  const pageClass = themePreference === 'light' ? 'min-h-screen bg-[#f4f6f2] text-[#172019]' : 'min-h-screen bg-[#0f1511] text-[#edf2ed]';
 
   const handleLogout = () => {
     fetch('/api/dashboard/session', { method: 'DELETE' })
@@ -268,13 +273,9 @@ export default function SettingsPage() {
       return;
     }
 
-    setApiKey(nextApiKey);
-    await fetch('/api/dashboard/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: nextApiKey })
-    }).catch(() => undefined);
-    setToast('API key rotated successfully.');
+    setStorefrontApiKey(nextApiKey);
+    setStorefrontKeyExists(true);
+    setToast(storefrontKeyExists ? 'Storefront key rotated. Update your installed widget.' : 'Storefront key created. Copy it now.');
   };
 
   const handleSaveStoreConnection = async () => {
@@ -476,11 +477,11 @@ export default function SettingsPage() {
 
   if (isBootstrapping || !profile || !usage) {
     return (
-      <main className="min-h-screen bg-[#050816] text-white flex items-center justify-center px-6">
-        <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/80 p-8 max-w-lg text-center">
-          <p className="text-sm uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Settings</p>
-          <h1 className="text-3xl font-bold mb-4">Loading your account center</h1>
-          <p className="text-gray-400">We&apos;re checking your current session and account data.</p>
+      <main className="flex min-h-screen items-center justify-center bg-[#f4f6f2] px-6 text-[#172019]">
+        <div className="max-w-lg border-t border-black/10 py-8 text-center">
+          <p className="mb-4 text-xs font-bold uppercase text-[#31725b]">Settings</p>
+          <h1 className="mb-4 font-serif text-3xl">Loading your account center</h1>
+          <p className="text-[#68736b]">We&apos;re checking your current session and account data.</p>
         </div>
       </main>
     );
@@ -490,32 +491,27 @@ export default function SettingsPage() {
 
   return (
     <main className={pageClass}>
-      {themePreference === 'light' ? (
-        <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_85%_18%,rgba(59,130,246,0.14),transparent_24%),linear-gradient(180deg,#f6fbff_0%,#edf4ff_100%)]" />
-          <div className="absolute inset-0 opacity-[0.35] bg-[linear-gradient(rgba(255,255,255,0.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.6)_1px,transparent_1px)] bg-[size:42px_42px]" />
-        </div>
-      ) : null}
-      <div className="relative z-10 max-w-6xl mx-auto px-6 py-16">
+      <WorkspaceHeader active="settings" onLogout={handleLogout} />
+      <div className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-12">
         {toast ? (
-          <div className={`${themePreference === 'light' ? 'border-cyan-300/50 bg-cyan-100 text-cyan-900' : 'border-cyan-400/20 bg-cyan-400/10 text-cyan-100'} mb-6 rounded-2xl border px-4 py-3 text-sm`}>
+          <div className={`${themePreference === 'light' ? 'border-[#9bb6a8] bg-[#eaf0e9] text-[#183f32]' : 'border-[#40624f] bg-[#1b2a20] text-[#cbe0d1]'} mb-6 border px-4 py-3 text-sm`}>
             {toast}
           </div>
         ) : null}
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-cyan-400/80 mb-3">Account Settings</p>
-            <h1 className={`text-4xl font-bold ${sectionTitleClass}`}>Keep your DrapixAI setup simple and launch-ready</h1>
+            <p className={`mb-3 text-xs font-bold uppercase ${themePreference === 'light' ? 'text-[#31725b]' : 'text-[#7fb29a]'}`}>Account settings</p>
+            <h1 className={`font-serif text-4xl leading-tight ${sectionTitleClass}`}>Keep the workspace simple and launch-ready.</h1>
             <p className={`mt-3 max-w-3xl text-sm ${mutedTextClass}`}>
               Use this page for account details and store basics. Product uploads and internal previews still belong in the dashboard, where non-technical teams can validate value before technical rollout.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/dashboard" className="inline-flex items-center justify-center rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+            <Link href="/dashboard" className="inline-flex items-center justify-center rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]">
               Open Dashboard
             </Link>
-            <Link href="/" className="inline-flex items-center justify-center rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+            <Link href="/" className="inline-flex items-center justify-center rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]">
               Back to Home
             </Link>
           </div>
@@ -524,7 +520,7 @@ export default function SettingsPage() {
         <div className={`${cardClass} mb-8`}>
           <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
             <div>
-              <p className="text-sm uppercase tracking-[0.25em] text-cyan-400/80 mb-3">Fastest Setup Path</p>
+              <p className="mb-3 text-xs font-bold uppercase text-[#31725b]">Fastest setup path</p>
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Keep the first pass lightweight</h2>
               <p className={`mt-3 text-sm ${mutedTextClass}`}>
                 Non-technical founders do not need to finish verification, feeds, and SDK setup on day one. The easiest sequence is: save your store URL here, go back to the dashboard to add a few products and garment files, then return to verification only when the preview looks right.
@@ -532,21 +528,21 @@ export default function SettingsPage() {
             </div>
             <div className={`${panelClass} space-y-3`}>
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 mt-0.5 text-cyan-400" />
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-[#31725b]" />
                 <div>
                   <p className={`font-medium ${strongTextClass}`}>Step 1</p>
                   <p className={`text-sm ${mutedTextClass}`}>Save your store URL and preferred product import method.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 mt-0.5 text-cyan-400" />
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-[#31725b]" />
                 <div>
                   <p className={`font-medium ${strongTextClass}`}>Step 2</p>
                   <p className={`text-sm ${mutedTextClass}`}>Use the dashboard to upload a few product IDs and garment-only images.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 mt-0.5 text-cyan-400" />
+                <CheckCircle2 className="w-5 h-5 mt-0.5 text-[#31725b]" />
                 <div>
                   <p className={`font-medium ${strongTextClass}`}>Step 3</p>
                   <p className={`text-sm ${mutedTextClass}`}>Come back here for verification and live install only after you trust the preview quality.</p>
@@ -559,7 +555,7 @@ export default function SettingsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 mb-8">
           <div className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <UserCircle2 className="w-6 h-6 text-cyan-400" />
+              <UserCircle2 className="w-6 h-6 text-[#31725b]" />
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Identity and Contact</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -584,7 +580,7 @@ export default function SettingsPage() {
                   type="text"
                   value={companyName}
                   onChange={(event) => setCompanyName(event.target.value)}
-                  className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                  className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="Your brand name"
                 />
               </div>
@@ -596,7 +592,7 @@ export default function SettingsPage() {
                     type="tel"
                     value={mobileNumber}
                     onChange={(event) => setMobileNumber(event.target.value)}
-                    className={`w-full rounded-xl border pl-11 pr-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                    className={`w-full rounded-md border pl-11 pr-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                     placeholder="+91 98765 43210"
                   />
                 </div>
@@ -606,7 +602,7 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={handleSaveProfile}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+              className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
             >
               <CheckCircle2 className="w-4 h-4" />
               Save Profile Details
@@ -615,7 +611,7 @@ export default function SettingsPage() {
 
           <div className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <Settings2 className="w-6 h-6 text-cyan-400" />
+              <Settings2 className="w-6 h-6 text-[#31725b]" />
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Appearance</h2>
             </div>
             <p className={`text-sm mb-5 ${mutedTextClass}`}>
@@ -628,15 +624,15 @@ export default function SettingsPage() {
                   setThemePreference('dark');
                   applyTheme('dark');
                 }}
-                className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                className={`rounded-md border px-4 py-4 text-left transition-colors ${
                   themePreference === 'dark'
-                    ? 'border-cyan-400/40 bg-cyan-400/10'
+                    ? 'border-[#77a08b] bg-[#e8f0eb]'
                     : 'border-white/[0.08] bg-black/20'
                 }`}
               >
-                <MoonStar className="w-5 h-5 text-cyan-400 mb-3" />
+                <MoonStar className="w-5 h-5 text-[#31725b] mb-3" />
                 <p className={`font-semibold ${sectionTitleClass}`}>Dark Mode</p>
-                <p className={`text-sm mt-1 ${mutedTextClass}`}>Best fit for the current DrapixAI visual system.</p>
+                <p className={`text-sm mt-1 ${mutedTextClass}`}>A restrained option for lower-light workspaces.</p>
               </button>
               <button
                 type="button"
@@ -644,21 +640,21 @@ export default function SettingsPage() {
                   setThemePreference('light');
                   applyTheme('light');
                 }}
-                className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                className={`rounded-md border px-4 py-4 text-left transition-colors ${
                   themePreference === 'light'
-                    ? 'border-cyan-400/40 bg-cyan-400/10'
+                    ? 'border-[#77a08b] bg-[#e8f0eb]'
                     : 'border-white/[0.08] bg-black/20'
                 }`}
               >
                 <SunMedium className="w-5 h-5 text-amber-400 mb-3" />
                 <p className={`font-semibold ${sectionTitleClass}`}>Light Mode</p>
-                <p className={`text-sm mt-1 ${mutedTextClass}`}>Useful for brighter workspaces and account editing.</p>
+                <p className={`text-sm mt-1 ${mutedTextClass}`}>Recommended for product review and account work.</p>
               </button>
             </div>
             <button
               type="button"
               onClick={handleSaveProfile}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+              className="mt-6 inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
             >
               Save Theme Preference
             </button>
@@ -676,28 +672,28 @@ export default function SettingsPage() {
                 type="password"
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
-                className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 placeholder="Current password"
               />
               <input
                 type="password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
-                className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 placeholder="New password"
               />
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 placeholder="Confirm new password"
               />
             </div>
             <button
               type="button"
               onClick={handlePasswordChange}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+              className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
             >
               Update Password
             </button>
@@ -705,7 +701,7 @@ export default function SettingsPage() {
 
           <div className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <Mail className="w-6 h-6 text-cyan-400" />
+              <Mail className="w-6 h-6 text-[#31725b]" />
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Change Email</h2>
             </div>
             <p className={`text-sm mb-5 ${mutedTextClass}`}>
@@ -715,14 +711,14 @@ export default function SettingsPage() {
               type="email"
               value={newEmail}
               onChange={(event) => setNewEmail(event.target.value)}
-              className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+              className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
               placeholder="New email address"
             />
             <div className="flex flex-wrap gap-3 mt-4">
               <button
                 type="button"
                 onClick={handleRequestEmailChange}
-                className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
               >
                 Send OTPs
               </button>
@@ -739,7 +735,7 @@ export default function SettingsPage() {
                   maxLength={6}
                   value={currentEmailOtp}
                   onChange={(event) => setCurrentEmailOtp(event.target.value)}
-                  className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                  className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="OTP sent to current email"
                 />
                 <input
@@ -748,13 +744,13 @@ export default function SettingsPage() {
                   maxLength={6}
                   value={newEmailOtp}
                   onChange={(event) => setNewEmailOtp(event.target.value)}
-                  className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                  className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="OTP sent to new email"
                 />
                 <button
                   type="button"
                   onClick={handleVerifyEmailChange}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
                 >
                   Verify and Change Email
                 </button>
@@ -785,7 +781,7 @@ export default function SettingsPage() {
                   type="text"
                   value={storeDomain}
                   onChange={(event) => setStoreDomain(event.target.value)}
-                  className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                  className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="store.yourbrand.com"
                 />
               </div>
@@ -794,11 +790,11 @@ export default function SettingsPage() {
                 <select
                   value={storeSyncSource}
                   onChange={(event) => setStoreSyncSource(event.target.value as 'manual' | 'feed_url' | 'shopify' | 'woocommerce')}
-                  className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                  className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 >
                   <option value="manual">I will add a few products in the dashboard</option>
                   <option value="feed_url">I already have a product feed URL</option>
-                  <option value="shopify">I want Shopify later</option>
+                  <option value="shopify">Connect through the Shopify app</option>
                   <option value="woocommerce">I want WooCommerce later</option>
                 </select>
               </div>
@@ -809,16 +805,18 @@ export default function SettingsPage() {
                     type="url"
                     value={storeFeedUrl}
                     onChange={(event) => setStoreFeedUrl(event.target.value)}
-                    className={`w-full rounded-xl border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
+                    className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                     placeholder="https://yourbrand.com/products-feed.csv"
                   />
                 </div>
               ) : (
                 <p className={`text-sm ${mutedTextClass}`}>
-                  For most teams, the easiest start is manual dashboard import. Feed URL import also works now. Native Shopify and WooCommerce apps are future-friendly options, but they are not required for your first preview.
+                  {storeSyncSource === 'shopify'
+                    ? 'Use the Shopify-native install from the SDK setup page. Products and variants sync automatically; eligible base-product images are prepared and held for review before publishing.'
+                    : 'Manual dashboard import and feed URL import remain available. WooCommerce native installation is not part of the current launch scope.'}
                 </p>
               )}
-              <div className={`${themePreference === 'light' ? 'border-sky-100 bg-sky-50/70' : 'border-cyan-400/20 bg-cyan-400/10'} rounded-2xl border p-4`}>
+              <div className={`${themePreference === 'light' ? 'border-sky-100 bg-sky-50/70' : 'border-[#77a08b] bg-[#e8f0eb]'} rounded-md border p-4`}>
                 <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>Recommended order</p>
                 <ol className={`space-y-2 text-sm list-decimal pl-5 ${mutedTextClass}`}>
                   <li>Save the storefront domain and choose the easiest product import path.</li>
@@ -830,14 +828,14 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={handleSaveStoreConnection}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
+                  className="inline-flex items-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
                 >
                   Save Basics
                 </button>
                 <button
                   type="button"
                   onClick={handleVerifyStore}
-                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                  className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
                 >
                   Verify Store
                 </button>
@@ -845,7 +843,7 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={handleResyncCatalog}
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                    className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
                   >
                     Refresh Product List
                   </button>
@@ -862,7 +860,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(verificationMetaTag).then(() => setToast('Verification meta tag copied.'))}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                  className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
                   disabled={!verificationMetaTag}
                 >
                   <Copy className="w-4 h-4" />
@@ -883,14 +881,18 @@ export default function SettingsPage() {
               </p>
             </div>
             <div className={`${panelClass} mt-4`}>
-              <p className={`text-sm mb-2 ${mutedTextClass}`}>Technical install key</p>
-              <p className={`font-mono text-sm break-all ${strongTextClass}`}>{apiKey}</p>
+              <p className={`text-sm mb-2 ${mutedTextClass}`}>Domain-bound storefront key</p>
+              <p className={`font-mono text-sm break-all ${strongTextClass}`}>
+                {storefrontApiKey || (storefrontKeyExists ? 'Active storefront key hidden' : 'No storefront key created')}
+              </p>
+              <p className={`text-xs mt-2 ${mutedTextClass}`}>Dashboard sign-ins do not rotate this key. New key secrets are shown only once.</p>
             </div>
             <div className="flex flex-wrap gap-3 mt-4">
               <button
                 type="button"
-                onClick={() => navigator.clipboard.writeText(apiKey).then(() => setToast('API key copied.'))}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                onClick={() => navigator.clipboard.writeText(storefrontApiKey).then(() => setToast('Storefront key copied.'))}
+                disabled={!storefrontApiKey}
+                className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
               >
                 <Copy className="w-4 h-4" />
                 Copy Key
@@ -898,16 +900,16 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={handleRotateApiKey}
-                className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
               >
                 <KeyRound className="w-4 h-4" />
-                Rotate Key
+                {storefrontKeyExists ? 'Rotate Key' : 'Create Key'}
               </button>
-              <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+              <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]">
                 <Store className="w-4 h-4" />
                 Back to Dashboard
               </Link>
-              <Link href="/help" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+              <Link href="/help" className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]">
                 Full Help
               </Link>
             </div>
@@ -915,7 +917,7 @@ export default function SettingsPage() {
 
           <div className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <CreditCard className="w-6 h-6 text-blue-400" />
+              <CreditCard className="w-6 h-6 text-[#31725b]" />
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Commercial Access</h2>
             </div>
             {isQuotaExhausted ? (
@@ -940,29 +942,21 @@ export default function SettingsPage() {
               <p className={`text-sm ${mutedTextClass}`}>If you need guided rollout help, billing clarification, or custom volume, use pricing or contact sales before switching public traffic on.</p>
             </div>
             <div className="flex flex-wrap gap-3 mt-4">
-              <Link href="/subscription" className="inline-flex items-center gap-2 rounded-xl border border-white/[0.12] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+              <Link href="/subscription" className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]">
                 Open Subscription
               </Link>
-              <Link href="/pricing" className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+              <Link href="/pricing" className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                 {isQuotaExhausted ? 'Upgrade Now' : 'Upgrade Plan'}
               </Link>
               {isQuotaExhausted ? (
                 <a
                   href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade"
-                  className="inline-flex items-center gap-2 rounded-xl border border-rose-400/30 px-4 py-2 text-sm text-rose-100 hover:bg-rose-400/10 transition-colors"
+                  className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm text-rose-100 hover:bg-rose-400/10 transition-colors"
                 >
                   <Mail className="w-4 h-4" />
                   Contact Sales
                 </a>
               ) : null}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex items-center gap-2 rounded-xl border border-rose-400/30 px-4 py-2 text-sm text-rose-100 hover:bg-rose-400/10 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Log Out
-              </button>
             </div>
           </div>
         </div>

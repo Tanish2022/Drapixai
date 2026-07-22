@@ -1,253 +1,135 @@
-'use client';
-
 import Link from 'next/link';
-import { ArrowRight, Check, Mail, Sparkles, Zap } from 'lucide-react';
+import { ArrowRight, Check, Mail } from 'lucide-react';
+import MarketingFooter from '../components/MarketingFooter';
+import MarketingNav from '../components/MarketingNav';
 
 const TRIAL_TRYONS = 300;
 
-const plans = [
+const paidPlans = [
   {
     name: 'Starter',
-    price: 49,
-    tryons: '1,000 upper-body',
-    perTryOn: '$0.049',
-    badge: 'Entry Plan',
-    accent: 'from-slate-200/20 to-white/5',
-    border: 'border-white/[0.08]',
-    cta: '/auth/register?plan=starter',
-    description: 'For small brands validating demand and testing upper-body AI try-on on live product pages.',
-    features: [
-      '1,000 try-ons per month',
-      'Upper-body garments only',
-      '1 production domain',
-      'Standard support',
-      'Dashboard analytics',
-      'SDK + REST API access',
-    ],
+    price: '$49',
+    volume: '1,000 upper-body try-ons / month',
+    unitPrice: '$0.049 per try-on',
+    description: 'For small brands validating demand on a focused group of live product pages.',
+    features: ['1 production domain', 'Standard quality mode', 'Dashboard analytics', 'SDK + REST API access', 'Email support'],
+    href: '/auth/register?plan=starter',
   },
   {
     name: 'Growth',
-    price: 149,
-    tryons: '5,000 upper-body',
-    perTryOn: '$0.0298',
-    badge: 'Best Value',
-    accent: 'from-cyan-400/20 to-blue-500/10',
-    border: 'border-cyan-400/30',
-    cta: '/auth/register?plan=growth',
-    description: 'For growing stores that need stronger unit economics and regular upper-body try-on usage.',
-    highlights: '39% lower cost per try-on than Starter',
-    features: [
-      '5,000 try-ons per month',
-      'Upper-body garments only',
-      '1 production domain',
-      'Priority email support',
-      'Advanced analytics',
-      'Better margin for high-traffic products',
-    ],
-  },
-  {
-    name: 'Pro',
-    price: null,
-    tryons: 'Full-body try-ons',
-    perTryOn: 'Coming soon',
-    badge: 'Coming Soon',
-    accent: 'from-blue-500/20 to-cyan-400/10',
-    border: 'border-blue-400/30',
-    cta: null,
-    description: 'For future full-body rollout once DrapixAI is ready to support a broader try-on experience beyond upper-body launch scope.',
-    highlights: 'Planned next: full-body try-ons for larger rollout teams',
-    comingSoon: true,
-    features: [
-      'Full-body try-ons',
-      'Higher-volume rollout path',
-      'Priority support queue',
-      'Admin analytics + ops visibility',
-      'Launches after current upper-body public rollout',
-      'Commercial details will follow when the feature is ready',
-    ],
+    price: '$149',
+    volume: '5,000 upper-body try-ons / month',
+    unitPrice: '$0.0298 per try-on',
+    description: 'For growing stores that have proven shopper usage and need stronger unit economics.',
+    features: ['1 production domain', 'Standard quality mode', 'Advanced analytics', 'SDK + REST API access', 'Priority email support'],
+    href: '/auth/register?plan=growth',
+    recommended: true,
   },
 ];
 
 export default function PricingPage() {
   return (
-    <main className="min-h-screen bg-[#050816] text-white">
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[720px] bg-gradient-glow opacity-40" />
-        <div className="absolute bottom-0 right-0 w-[520px] h-[520px] rounded-full bg-cyan-500/10 blur-[120px]" />
-      </div>
+    <div className="min-h-screen bg-[#f7f8f5] text-[#172019]">
+      <MarketingNav active="pricing" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-20">
-        <div className="max-w-4xl mb-14">
-          <p className="text-sm font-medium uppercase tracking-[0.25em] text-cyan-400/80 mb-4">Pricing</p>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">Start with a low-risk trial. Scale only after the workflow proves itself.</h1>
-          <p className="text-lg text-gray-300 leading-8 max-w-3xl">
-            Every public plan starts with the same evaluation path: activate your account, use up to {TRIAL_TRYONS} trial try-ons, validate output quality on your own products, then move into paid volume only when your team is comfortable with the rollout.
-          </p>
-        </div>
-
-        <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-6 mb-10">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <Sparkles className="w-5 h-5 text-emerald-300" />
-                <p className="font-semibold text-emerald-200">Free Trial Included On Every Plan</p>
-              </div>
-              <p className="text-gray-100 leading-7">
-                Use the same trial regardless of plan choice, evaluate output quality with your own catalog, and upgrade only once the workflow is proven for your team. Billing questions, trial extensions, and launch support can all be handled through the account center or support.
-              </p>
+      <main>
+        <section className="border-b border-black/10 bg-white">
+          <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="px-5 py-16 sm:px-8 lg:border-r lg:border-black/10 lg:px-12 lg:py-24">
+              <p className="text-xs font-bold uppercase text-[#2b654f]">Pricing</p>
+              <h1 className="mt-5 max-w-4xl font-serif text-5xl font-normal leading-[1.02] sm:text-6xl lg:text-7xl">Prove the workflow before you pay for scale.</h1>
+              <p className="mt-7 max-w-2xl text-lg leading-8 text-[#59645c]">Every public plan starts with the same evaluation path. Test DrapixAI on your own upper-body products, review the evidence, and upgrade only when your team is comfortable publishing it.</p>
             </div>
-            <Link
-              href="/auth/register"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-300/30 px-5 py-3 font-semibold hover:bg-white/[0.05] transition-colors"
-            >
-              Start {TRIAL_TRYONS} Try-On Trial
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="flex flex-col justify-between border-t border-black/10 bg-[#b8d8c7] px-5 py-10 sm:px-8 lg:border-t-0 lg:px-12 lg:py-16">
+              <p className="text-sm font-bold uppercase text-[#1e5b44]">Included with every plan</p>
+              <div className="mt-12">
+                <p className="font-serif text-7xl leading-none text-[#102018]">{TRIAL_TRYONS}</p>
+                <p className="mt-3 text-xl font-bold">trial try-ons</p>
+                <p className="mt-4 max-w-md leading-7 text-[#385345]">No credit card required. Use the trial for product preparation, internal previews, and quality review before storefront rollout.</p>
+              </div>
+              <Link href="/auth/register" className="mt-10 inline-flex h-14 w-fit items-center gap-2 bg-[#172019] px-6 py-4 font-semibold text-white hover:bg-[#26352a]">Start the trial <ArrowRight className="h-4 w-4" /></Link>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_1fr_1fr_320px] gap-6 items-stretch">
-          {plans.map((plan, index) => (
-            <section
-              key={plan.name}
-              className={`relative overflow-hidden rounded-3xl bg-[#0b1120]/75 backdrop-blur-xl p-8 ${plan.border} ${index === 1 ? 'xl:-translate-y-3 shadow-[0_24px_80px_rgba(34,211,238,0.12)]' : ''}`}
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${plan.accent} opacity-70`} />
-              <div className="relative z-10 h-full flex flex-col">
-                <div className="flex items-center justify-between gap-3 mb-6">
-                  <div>
-                    <p className="text-2xl font-bold">{plan.name}</p>
-                    <p className="text-sm text-gray-400 mt-1">{plan.badge}</p>
-                  </div>
-                  {index === 1 ? (
-                    <span className="rounded-full border border-cyan-300/30 bg-cyan-400/15 px-3 py-1 text-xs font-semibold text-cyan-100">
-                      Recommended
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mb-6">
-                  {plan.comingSoon ? (
-                    <div className="flex items-end gap-2">
-                      <span className="text-4xl font-bold text-cyan-100">Coming soon</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-end gap-2">
-                      <span className="text-5xl font-bold">${plan.price}</span>
-                      <span className="text-lg text-gray-400 mb-1">/mo</span>
-                    </div>
-                  )}
-                  <p className="mt-2 text-cyan-200 font-medium">{plan.comingSoon ? plan.tryons : `${plan.tryons} try-ons per month`}</p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    {plan.comingSoon ? plan.perTryOn : `Effective price: ${plan.perTryOn} per try-on`}
-                  </p>
-                </div>
-
-                <p className="text-gray-300 leading-7 mb-4">{plan.description}</p>
-
-                {plan.highlights ? (
-                  <div className="rounded-2xl border border-cyan-300/20 bg-black/20 p-4 mb-6">
-                    <p className="text-sm font-medium text-cyan-100">{plan.highlights}</p>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4 mb-6">
-                    <p className="text-sm text-gray-300">Includes the same {TRIAL_TRYONS} try-on free trial before you commit.</p>
-                  </div>
-                )}
-
-                <div className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((feature) => (
-                    <div key={feature} className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
-                      <p className="text-gray-200 leading-7">{feature}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {plan.comingSoon ? (
-                  <div className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-5 py-3 font-semibold text-cyan-100">
-                    Coming Soon
-                  </div>
-                ) : (
-                  <Link
-                    href={plan.cta}
-                    className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold transition-colors ${
-                      index === 1
-                        ? 'bg-gradient-to-r from-cyan-400 to-blue-500 hover:opacity-90'
-                        : 'border border-white/[0.12] hover:bg-white/[0.05]'
-                    }`}
-                  >
-                    Start Trial
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                )}
+        <section className="border-b border-black/10 py-16 lg:py-24">
+          <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
+            <div className="flex flex-col justify-between gap-5 border-b border-black/15 pb-8 md:flex-row md:items-end">
+              <div>
+                <p className="text-xs font-bold uppercase text-[#2b654f]">Public plans</p>
+                <h2 className="mt-4 font-serif text-4xl font-normal sm:text-5xl">Upper-body launch pricing</h2>
               </div>
-            </section>
-          ))}
-
-          <aside className="rounded-3xl border border-amber-400/25 bg-[#0b1120]/80 backdrop-blur-xl p-8 flex flex-col">
-            <div className="flex items-center gap-3 mb-4">
-              <Zap className="w-5 h-5 text-amber-300" />
-              <p className="text-sm font-medium uppercase tracking-[0.2em] text-amber-200">Enterprise</p>
+              <p className="max-w-lg text-sm leading-6 text-[#667168]">Both plans use the same Standard generation quality. You choose by monthly volume, not by accepting a weaker output mode.</p>
             </div>
 
-            <h2 className="text-3xl font-bold mb-4">Custom volume, custom support.</h2>
-            <p className="text-gray-300 leading-7 mb-6">
-              For large brands, multi-store teams, negotiated usage, onboarding support, or custom deployment structure.
-            </p>
-
-            <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4 mb-6">
-              <p className="text-sm text-gray-200">Best fit if you expect unusually high try-on volume, custom contract terms, or direct commercial onboarding.</p>
-            </div>
-
-            <div className="space-y-3 mb-8 flex-1">
-              {[
-                'Custom volume allocation',
-                'Commercial onboarding path',
-                'Priority solution design',
-                'Optional private support workflow',
-              ].map((feature) => (
-                <div key={feature} className="flex items-start gap-3">
-                  <Check className="w-5 h-5 text-green-400 mt-1 flex-shrink-0" />
-                  <p className="text-gray-200 leading-7">{feature}</p>
-                </div>
+            <div className="mt-8 grid gap-5 lg:grid-cols-2">
+              {paidPlans.map((plan) => (
+                <article key={plan.name} className={`border bg-white ${plan.recommended ? 'border-[#2b745a]' : 'border-black/12'}`}>
+                  <div className="flex items-center justify-between border-b border-black/10 px-6 py-5 sm:px-8">
+                    <div>
+                      <h3 className="text-2xl font-bold">{plan.name}</h3>
+                      <p className="mt-1 text-sm text-[#68736b]">{plan.description}</p>
+                    </div>
+                    {plan.recommended ? <span className="bg-[#d9ecdf] px-3 py-2 text-xs font-bold uppercase text-[#1c6047]">Best value</span> : null}
+                  </div>
+                  <div className="grid sm:grid-cols-[0.9fr_1.1fr]">
+                    <div className="border-b border-black/10 p-6 sm:border-b-0 sm:border-r sm:p-8">
+                      <p className="font-serif text-6xl leading-none">{plan.price}</p>
+                      <p className="mt-2 text-sm text-[#68736b]">per month</p>
+                      <p className="mt-8 font-bold text-[#1f684e]">{plan.volume}</p>
+                      <p className="mt-1 text-sm text-[#68736b]">{plan.unitPrice}</p>
+                    </div>
+                    <div className="flex flex-col p-6 sm:p-8">
+                      <ul className="flex-1 space-y-4">
+                        {plan.features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-3 text-sm leading-6 text-[#4e5a51]"><Check className="mt-1 h-4 w-4 flex-none text-[#26725a]" />{feature}</li>
+                        ))}
+                      </ul>
+                      <Link href={plan.href} className={`mt-8 inline-flex h-12 items-center justify-center gap-2 px-5 font-semibold ${plan.recommended ? 'bg-[#183f32] text-white hover:bg-[#245a48]' : 'border border-black/20 hover:bg-[#f1f4ef]'}`}>Start trial <ArrowRight className="h-4 w-4" /></Link>
+                    </div>
+                  </div>
+                </article>
               ))}
             </div>
-
-            <a
-              href="mailto:sales@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-amber-300/30 px-5 py-3 font-semibold hover:bg-white/[0.05] transition-colors"
-            >
-              <Mail className="w-4 h-4" />
-              Contact Sales
-            </a>
-            <p className="text-xs text-gray-500 mt-3 break-all">sales@drapixai.com</p>
-          </aside>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-12">
-          <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
-            <h3 className="text-xl font-semibold mb-3">Trial before billing</h3>
-            <p className="text-gray-300 leading-7">
-              Validate quality and workflow with the same {TRIAL_TRYONS} try-on trial before your team commits to monthly usage.
-            </p>
           </div>
+        </section>
 
-          <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
-            <h3 className="text-xl font-semibold mb-3">Commercial terms stay simple</h3>
-            <p className="text-gray-300 leading-7">
-              Public plans are monthly, upper-body focused, and designed for controlled rollout. Cancellation, refunds, and trial rules are documented clearly so brands know what to expect before launch.
-            </p>
+        <section className="border-b border-black/10 bg-white">
+          <div className="mx-auto grid max-w-[1440px] lg:grid-cols-2">
+            <div className="border-b border-black/10 px-5 py-14 sm:px-8 lg:border-b-0 lg:border-r lg:px-12 lg:py-20">
+              <p className="text-xs font-bold uppercase text-[#2b654f]">Coming later</p>
+              <h2 className="mt-5 font-serif text-4xl font-normal">Pro / full-body</h2>
+              <p className="mt-5 max-w-xl text-lg leading-8 text-[#59645c]">Full-body try-on remains outside the current public launch promise. Pricing will be published only after quality, latency, and garment coverage meet the same release bar.</p>
+              <span className="mt-8 inline-flex border border-black/15 px-4 py-3 text-sm font-bold uppercase text-[#5f6b62]">Coming soon</span>
+            </div>
+            <div className="bg-[#172019] px-5 py-14 text-white sm:px-8 lg:px-12 lg:py-20">
+              <p className="text-xs font-bold uppercase text-[#8cd3b3]">Enterprise</p>
+              <h2 className="mt-5 font-serif text-4xl font-normal">Custom volume and onboarding.</h2>
+              <p className="mt-5 max-w-xl text-lg leading-8 text-[#bdc7bf]">For larger brands, multi-store teams, negotiated usage, private rollout planning, or direct commercial support.</p>
+              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                {['Custom usage allocation', 'Commercial onboarding', 'Priority solution design', 'Private support workflow'].map((feature) => (
+                  <span key={feature} className="flex items-center gap-2 border-t border-white/15 py-3 text-sm text-[#d4ddd6]"><Check className="h-4 w-4 text-[#8cd3b3]" />{feature}</span>
+                ))}
+              </div>
+              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry" className="mt-8 inline-flex h-12 items-center gap-2 border border-white/30 px-5 font-semibold hover:bg-white/10"><Mail className="h-4 w-4" />Contact sales</a>
+            </div>
           </div>
+        </section>
 
-          <div className="rounded-3xl border border-white/[0.08] bg-[#0b1120]/75 p-6">
-            <h3 className="text-xl font-semibold mb-3">Upgrade when rollout is real</h3>
-            <p className="text-gray-300 leading-7">
-              Start smaller, prove demand, then move into higher monthly volume once DrapixAI becomes part of your live conversion workflow.
-            </p>
+        <section className="bg-[#eef2ec] py-16 lg:py-20">
+          <div className="mx-auto grid max-w-[1440px] gap-px border border-black/10 bg-black/10 sm:grid-cols-3">
+            {[
+              ['Trial before billing', `Validate quality with ${TRIAL_TRYONS} try-ons before monthly usage begins.`],
+              ['One quality mode', 'Starter and Growth both use Standard. Volume does not change garment realism.'],
+              ['Controlled upgrade', 'Move into paid usage only after product preparation and internal review are complete.'],
+            ].map(([title, body]) => (
+              <div key={title} className="bg-[#eef2ec] p-6 sm:p-8"><h3 className="text-lg font-bold">{title}</h3><p className="mt-3 leading-7 text-[#647068]">{body}</p></div>
+            ))}
           </div>
-        </div>
-      </div>
-    </main>
+        </section>
+      </main>
+
+      <MarketingFooter />
+    </div>
   );
 }

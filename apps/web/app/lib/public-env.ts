@@ -6,6 +6,7 @@ export const PUBLIC_API_BASE_URL = trimTrailingSlash(
 
 export const GOOGLE_AUTH_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === '1';
 export const DEMO_VIDEO_URL = (process.env.NEXT_PUBLIC_DEMO_VIDEO_URL || '').trim();
+export const SHOPIFY_APP_INSTALL_URL = (process.env.NEXT_PUBLIC_SHOPIFY_APP_INSTALL_URL || '').trim();
 
 export function getPublicWebBaseUrl() {
   const configuredBaseUrl = process.env.NEXT_PUBLIC_WEB_BASE_URL;

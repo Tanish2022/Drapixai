@@ -7,6 +7,7 @@ import { signOut } from 'next-auth/react';
 import { ArrowRight, CheckCircle2, Copy, ExternalLink, KeyRound, Sparkles, Store, UploadCloud, Wand2 } from 'lucide-react';
 import { PUBLIC_API_BASE_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 import { useThemePreference } from '@/app/lib/theme-client';
+import WorkspaceHeader from '@/app/components/WorkspaceHeader';
 
 interface UsageData {
   email?: string | null;
@@ -142,59 +143,76 @@ const garmentCategoryOptions = [
   { value: 'Short Kurti', label: 'Short Kurti (beta)' },
   { value: 'Hoodie', label: 'Hoodie (beta)' },
   { value: 'Sweatshirt', label: 'Sweatshirt (beta)' },
+  { value: 'Jeans', label: 'Jeans (lower-body V1)' },
+  { value: 'Pants', label: 'Pants (lower-body V1)' },
+  { value: 'Trousers', label: 'Trousers (lower-body V1)' },
+  { value: 'Shorts', label: 'Shorts (lower-body V1)' },
+  { value: 'Skirt', label: 'Skirt (lower-body V1)' },
+  { value: 'Leggings', label: 'Leggings (lower-body V1)' },
+  { value: 'Joggers', label: 'Joggers (lower-body V1)' },
 ];
 
 export default function Dashboard() {
   const themePreference = useThemePreference();
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [apiKey, setApiKey] = useState('');
+  const [storefrontApiKey, setStorefrontApiKey] = useState('');
+  const [storefrontKeyExists, setStorefrontKeyExists] = useState(false);
   const [garments, setGarments] = useState<GarmentItem[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<CatalogProductItem[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [garmentUploadId, setGarmentUploadId] = useState('');
   const [garmentUploadCategory, setGarmentUploadCategory] = useState('');
+  const [garmentUploadType, setGarmentUploadType] = useState<'upper' | 'lower'>('upper');
   const [garmentFile, setGarmentFile] = useState<File | null>(null);
   const [garmentStatus, setGarmentStatus] = useState('');
   const [catalogCsvFile, setCatalogCsvFile] = useState<File | null>(null);
   const [catalogSyncStatus, setCatalogSyncStatus] = useState('');
   const [bulkGarmentFiles, setBulkGarmentFiles] = useState<File[]>([]);
+  const [bulkGarmentType, setBulkGarmentType] = useState<'upper' | 'lower'>('upper');
   const [bulkGarmentStatus, setBulkGarmentStatus] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<Record<string, string>>({});
   const [matchStatusMessage, setMatchStatusMessage] = useState('');
   const [activeMatchGarmentId, setActiveMatchGarmentId] = useState('');
   const [toast, setToast] = useState('');
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [previewError, setPreviewError] = useState('');
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const router = useRouter();
+  const previewProductId = useMemo(
+    () => garments.find((garment) => garment.status === 'ready' && garment.cacheKey && garment.confirmedProductId)?.confirmedProductId || '',
+    [garments]
+  );
 
-  const pageClass = themePreference === 'light' ? 'min-h-screen bg-[#edf4ff] text-slate-950' : 'min-h-screen bg-black text-white';
+  const pageClass = themePreference === 'light' ? 'min-h-screen bg-[#f4f6f2] text-[#172019]' : 'min-h-screen bg-[#0f1511] text-[#edf2ed]';
   const cardClass = useMemo(
     () =>
       themePreference === 'light'
-        ? 'p-6 rounded-[28px] border border-sky-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(244,249,255,0.96)_100%)] shadow-[0_24px_80px_rgba(71,85,105,0.12)]'
-        : 'p-6 border border-white/10 rounded-xl bg-white/[0.02]',
+        ? 'border border-black/10 bg-white p-6'
+        : 'border border-white/10 bg-[#151c17] p-6',
     [themePreference]
   );
   const panelClass = useMemo(
     () =>
       themePreference === 'light'
-        ? 'rounded-2xl border border-sky-100 bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]'
-        : 'rounded-xl border border-white/10 bg-white/5 p-4',
+        ? 'border border-black/10 bg-[#f4f6f2] p-4'
+        : 'border border-white/10 bg-[#101712] p-4',
     [themePreference]
   );
   const subtleCardClass =
     themePreference === 'light'
-      ? 'p-6 rounded-[28px] border border-sky-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(244,249,255,0.96)_100%)] shadow-[0_24px_80px_rgba(71,85,105,0.12)]'
-      : 'p-6 border border-white/10 rounded-xl';
+      ? 'border border-black/10 bg-white p-6'
+      : 'border border-white/10 bg-[#151c17] p-6';
   const inputClass =
     themePreference === 'light'
-      ? 'flex-1 p-3 bg-white border border-sky-100 rounded-lg font-mono text-sm text-slate-900'
-      : 'flex-1 p-3 bg-white/5 border border-white/10 rounded-lg font-mono text-sm';
-  const mutedTextClass = themePreference === 'light' ? 'text-slate-600' : 'text-gray-400';
-  const strongTextClass = themePreference === 'light' ? 'text-slate-950' : 'text-white';
+      ? 'flex-1 border border-black/15 bg-white p-3 font-mono text-sm text-[#172019]'
+      : 'flex-1 border border-white/10 bg-[#101712] p-3 font-mono text-sm';
+  const mutedTextClass = themePreference === 'light' ? 'text-[#68736b]' : 'text-[#aab6ac]';
+  const strongTextClass = themePreference === 'light' ? 'text-[#172019]' : 'text-white';
   const actionClass =
     themePreference === 'light'
-      ? 'rounded-lg border border-sky-100 bg-white px-4 py-2 text-slate-900 transition-colors hover:bg-sky-50'
-      : 'rounded-lg border border-white/10 bg-white/10 px-4 py-2 transition-colors hover:bg-white/20';
+      ? 'border border-black/15 bg-white px-4 py-2 text-[#172019] transition-colors hover:bg-[#eef2ed]'
+      : 'border border-white/10 bg-[#1b251e] px-4 py-2 transition-colors hover:bg-[#253229]';
 
   const refreshGarments = async () => {
     const data = await fetch(dashboardApiPath('sdk/garments'))
@@ -219,6 +237,13 @@ export default function Dashboard() {
     setUsage(data);
   };
 
+  const refreshStorefrontKeyStatus = async () => {
+    const response = await fetch(dashboardApiPath('analytics/api-key/status'), { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = (await response.json().catch(() => null)) as { exists?: boolean } | null;
+    setStorefrontKeyExists(Boolean(data?.exists));
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -236,10 +261,9 @@ export default function Dashboard() {
     });
 
         if (sessionResponse.ok) {
-          const data = (await sessionResponse.json().catch(() => null)) as { apiKey?: string } | null;
-          const nextApiKey = data?.apiKey?.trim();
-          if (active && nextApiKey) {
-            setApiKey(nextApiKey);
+          const data = (await sessionResponse.json().catch(() => null)) as { ok?: boolean } | null;
+          if (active && data?.ok) {
+            setApiKey('dashboard-session');
             setIsBootstrapping(false);
             return;
           }
@@ -263,7 +287,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!apiKey) return;
 
-    Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]).catch(async (error: Error) => {
+    Promise.all([refreshUsage(), refreshGarments(), refreshCatalog(), refreshStorefrontKeyStatus()]).catch(async (error: Error) => {
       if (error.message === 'UNAUTHORIZED') {
         setApiKey('');
         await fetch('/api/dashboard/session', { method: 'DELETE' }).catch(() => undefined);
@@ -312,29 +336,68 @@ export default function Dashboard() {
   }, [garments]);
 
   useEffect(() => {
-    if (!apiKey) return;
-    const script = document.createElement('script');
-    script.src = getSdkScriptUrl();
-    script.async = true;
-    script.onload = () => {
+    if (!previewProductId) return;
+    let cancelled = false;
+    const container = document.getElementById('drapixai-dashboard-demo');
+    if (!container) return;
+
+    let script = document.getElementById('drapixai-sdk') as HTMLScriptElement | null;
+    let resolveSdkLoad: (() => void) | null = null;
+    let rejectSdkLoad: (() => void) | null = null;
+
+    const loadSdk = () => new Promise<void>((resolve, reject) => {
       if (window.DrapixAI) {
-        const previewProductId =
-          garments.find((garment) => garment.confirmedProductId)?.confirmedProductId ||
-          catalogProducts[0]?.productId ||
-          'demo-product';
-        window.DrapixAI.init({
-          apiKey,
-          productId: previewProductId,
-          containerId: 'drapixai-dashboard-demo',
-          garmentType: 'upper'
-    });
+        resolve();
+        return;
       }
+      resolveSdkLoad = resolve;
+      rejectSdkLoad = () => reject(new Error('SDK_LOAD_FAILED'));
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'drapixai-sdk';
+        script.src = getSdkScriptUrl();
+        script.async = true;
+        document.body.appendChild(script);
+      }
+      script.addEventListener('load', resolveSdkLoad, { once: true });
+      script.addEventListener('error', rejectSdkLoad, { once: true });
+    });
+
+    const preparePreview = async () => {
+      setPreviewStatus('loading');
+      setPreviewError('');
+      const previewResponse = await fetch(dashboardApiPath('analytics/sdk-preview-token'), { method: 'POST' });
+      const previewPayload = (await previewResponse.json().catch(() => null)) as { token?: string } | null;
+      if (!previewResponse.ok || !previewPayload?.token) {
+        throw new Error('PREVIEW_TOKEN_FAILED');
+      }
+      await loadSdk();
+      if (cancelled || !window.DrapixAI) return;
+      await Promise.resolve(window.DrapixAI.init({
+        apiKey: previewPayload.token,
+        productId: previewProductId,
+        containerId: 'drapixai-dashboard-demo',
+        baseUrl: PUBLIC_API_BASE_URL,
+        garmentType: 'upper',
+        quality: 'standard',
+        enableDownload: true,
+      }));
+      if (!cancelled) setPreviewStatus('ready');
     };
-    document.body.appendChild(script);
+    preparePreview().catch((error: unknown) => {
+      if (!cancelled) {
+        setPreviewStatus('error');
+        setPreviewError(error instanceof Error ? error.message : 'PREVIEW_INIT_FAILED');
+      }
+    });
+
     return () => {
-      script.remove();
+      cancelled = true;
+      if (resolveSdkLoad) script?.removeEventListener('load', resolveSdkLoad);
+      if (rejectSdkLoad) script?.removeEventListener('error', rejectSdkLoad);
+      container.replaceChildren();
     };
-  }, [apiKey, garments, catalogProducts]);
+  }, [previewProductId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -402,9 +465,10 @@ export default function Dashboard() {
       return;
     }
 
-    setBulkGarmentStatus('Uploading upper-body garments...');
+    setBulkGarmentStatus(`Uploading ${bulkGarmentType === 'lower' ? 'lower-body V1' : 'upper-body'} garments...`);
 
     const form = new FormData();
+    form.append('garment_type', bulkGarmentType);
     bulkGarmentFiles.forEach((file) => {
       form.append('cloth_images', file);
     });
@@ -426,7 +490,7 @@ export default function Dashboard() {
     const successCount = items.filter((item: { cacheKey?: string }) => Boolean(item.cacheKey)).length;
     const failedCount = items.length - successCount;
     const firstFailure = items.find((item: { message?: string; error?: string }) => item.message || item.error);
-    const betaCount = items.filter((item: { supportLevel?: string }) => item.supportLevel === 'beta').length;
+    const betaCount = items.filter((item: { supportLevel?: string }) => item.supportLevel === 'beta' || item.supportLevel === 'future_lower_beta').length;
     setBulkGarmentStatus(
       failedCount && firstFailure
         ? `Uploaded ${successCount} garments. ${failedCount} file(s) failed. ${getApiErrorMessage(firstFailure, 'Review the rejected uploads and use isolated garment-only images.')}`
@@ -632,53 +696,25 @@ export default function Dashboard() {
 
   return (
     <div className={pageClass}>
-      {themePreference === 'light' ? (
-        <div className="fixed inset-0 pointer-events-none z-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_85%_18%,rgba(59,130,246,0.14),transparent_24%),linear-gradient(180deg,#f6fbff_0%,#edf4ff_100%)]" />
-          <div className="absolute inset-0 opacity-[0.35] bg-[linear-gradient(rgba(255,255,255,0.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.6)_1px,transparent_1px)] bg-[size:42px_42px]" />
-        </div>
-      ) : null}
-
       {toast ? (
-        <div className="fixed right-6 top-24 z-50 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
+        <div className="fixed right-6 top-24 z-50 border border-[#9bb6a8] bg-[#eaf0e9] px-4 py-3 text-sm font-semibold text-[#183f32] shadow-lg">
           {toast}
         </div>
       ) : null}
+      <WorkspaceHeader active="dashboard" onLogout={handleLogout} />
 
-      <header className={`relative z-10 border-b ${themePreference === 'light' ? 'border-slate-200/80 bg-white/70 backdrop-blur' : 'border-white/10'} p-6`}>
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            DrapixAI
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link href="/subscription" className={`text-sm transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
-              Subscription
-            </Link>
-            <Link href="/sdk-install" className={`text-sm transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
-              SDK Install
-            </Link>
-            <Link href="/settings" className={`text-sm transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
-              Settings
-            </Link>
-            <button onClick={handleLogout} className={`transition-colors ${themePreference === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-gray-400 hover:text-white'}`}>
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="relative z-10 max-w-7xl mx-auto p-6">
+      <main className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-12">
         <div className="mb-8">
-          <p className={`text-sm uppercase tracking-[0.25em] mb-3 ${themePreference === 'light' ? 'text-cyan-700/80' : 'text-cyan-400/80'}`}>Onboarding Wizard</p>
-          <h1 className="text-3xl font-bold mb-3">Give brands a clean path from garment upload to confirmed live mappings.</h1>
+          <p className={`mb-3 text-xs font-bold uppercase ${themePreference === 'light' ? 'text-[#31725b]' : 'text-[#7fb29a]'}`}>Onboarding workspace</p>
+          <h1 className="mb-3 max-w-4xl font-serif text-4xl leading-tight">From garment upload to a confirmed live product.</h1>
           <p className={`max-w-3xl text-base ${mutedTextClass}`}>
             The launch story is now: upload garments, discover products, review suggested matches, confirm the right pairings, then let the SDK use only those confirmed mappings on the storefront.
           </p>
         </div>
 
         {isQuotaExhausted ? (
-          <div className={`p-5 mb-8 border rounded-xl ${themePreference === 'light' ? 'border-rose-200 bg-rose-50' : 'border-rose-400/30 bg-rose-500/10'}`}>
-            <p className={`text-sm font-semibold uppercase tracking-[0.2em] ${themePreference === 'light' ? 'text-rose-700' : 'text-rose-200'}`}>Plan limit reached</p>
+          <div className={`p-5 mb-8 border rounded-md ${themePreference === 'light' ? 'border-rose-200 bg-rose-50' : 'border-rose-400/30 bg-rose-500/10'}`}>
+            <p className={`text-xs font-bold uppercase ${themePreference === 'light' ? 'text-rose-700' : 'text-rose-200'}`}>Plan limit reached</p>
             <p className={`text-sm mt-3 leading-7 ${themePreference === 'light' ? 'text-rose-900' : 'text-rose-100'}`}>
               You have used all {usage.quota} try-ons in the current period. Pause internal preview and live rollout here, then upgrade the plan or contact sales before trying to push more traffic.
             </p>
@@ -696,18 +732,18 @@ export default function Dashboard() {
             </div>
           </div>
         ) : usage.planType === 'trial' ? (
-          <div className="p-4 mb-8 border border-cyan-500/30 bg-cyan-500/10 rounded-xl">
-            <p className={`text-sm ${themePreference === 'light' ? 'text-cyan-900' : 'text-cyan-200'}`}>
+          <div className={`mb-8 border p-4 ${themePreference === 'light' ? 'border-[#9bb6a8] bg-[#e8f0eb]' : 'border-[#40624f] bg-[#1b2a20]'}`}>
+            <p className={`text-sm ${themePreference === 'light' ? 'text-[#183f32]' : 'text-[#cbe0d1]'}`}>
               Trial active: {usage.trialDaysLeft} day(s) left. You have {usage.quotaRemaining} try-ons remaining to validate product quality, onboarding, and storefront flow before scaling usage.
             </p>
             {usage.selectedPlanName ? (
-              <p className={`text-xs mt-2 ${themePreference === 'light' ? 'text-cyan-800/80' : 'text-cyan-100/80'}`}>
+              <p className={`mt-2 text-xs ${themePreference === 'light' ? 'text-[#3f6552]' : 'text-[#9fc2ad]'}`}>
                 Selected paid plan after trial: {usage.selectedPlanName}
               </p>
             ) : null}
           </div>
         ) : isQuotaLow ? (
-          <div className={`p-4 mb-8 border rounded-xl ${themePreference === 'light' ? 'border-amber-200 bg-amber-50' : 'border-amber-400/30 bg-amber-500/10'}`}>
+          <div className={`p-4 mb-8 border rounded-md ${themePreference === 'light' ? 'border-amber-200 bg-amber-50' : 'border-amber-400/30 bg-amber-500/10'}`}>
             <p className={`text-sm ${themePreference === 'light' ? 'text-amber-900' : 'text-amber-100'}`}>
               Usage warning: only {usage.quotaRemaining} try-ons remain in this period. If you expect more internal previews or live traffic soon, upgrade before rollout stalls.
             </p>
@@ -718,7 +754,7 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-5">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <CheckCircle2 className="w-6 h-6 text-cyan-400" />
+                <CheckCircle2 className="w-6 h-6 text-[#31725b]" />
                 <h2 className="text-xl font-bold">Brand launch checklist</h2>
               </div>
               <p className={`text-sm ${mutedTextClass}`}>
@@ -745,19 +781,19 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-5">
             <div className={panelClass}>
-              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Avg quality</p>
+              <p className={`text-xs font-bold uppercase ${mutedTextClass}`}>Avg quality</p>
               <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{typeof usage.averageQualityScore === 'number' ? usage.averageQualityScore.toFixed(2) : 'n/a'}</p>
             </div>
             <div className={panelClass}>
-              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Avg latency</p>
+              <p className={`text-xs font-bold uppercase ${mutedTextClass}`}>Avg latency</p>
               <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{typeof usage.averageLatencyMs === 'number' ? `${(usage.averageLatencyMs / 1000).toFixed(1)}s` : 'n/a'}</p>
             </div>
             <div className={panelClass}>
-              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Warning-free</p>
+              <p className={`text-xs font-bold uppercase ${mutedTextClass}`}>Warning-free</p>
               <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{usage.warningFreeTryOnCount || 0}</p>
             </div>
             <div className={panelClass}>
-              <p className={`text-xs uppercase tracking-[0.18em] ${mutedTextClass}`}>Excellent</p>
+              <p className={`text-xs font-bold uppercase ${mutedTextClass}`}>Excellent</p>
               <p className={`text-xl font-bold mt-2 ${strongTextClass}`}>{usage.excellentTryOnCount || 0}</p>
             </div>
           </div>
@@ -766,7 +802,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 mb-8">
           <section className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <Sparkles className="w-6 h-6 text-cyan-400" />
+              <Sparkles className="w-6 h-6 text-[#31725b]" />
               <h2 className="text-xl font-bold">Brand onboarding wizard</h2>
             </div>
             <p className={`text-sm mb-5 ${mutedTextClass}`}>
@@ -784,7 +820,12 @@ export default function Dashboard() {
                 </Link>
               </div>
               <div className={`h-2 rounded-full overflow-hidden ${themePreference === 'light' ? 'bg-slate-200' : 'bg-white/10'}`}>
-                <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all" style={{ width: `${onboardingProgress}%` }} />
+                <progress
+                  className="onboarding-progress h-full w-full"
+                  value={onboardingProgress}
+                  max={100}
+                  aria-label="Onboarding progress"
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -797,7 +838,7 @@ export default function Dashboard() {
                     </div>
                     <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${step.done ? 'text-emerald-400' : 'text-slate-400'}`} />
                   </div>
-                  <Link href={step.actionHref} className={`mt-4 inline-flex items-center gap-2 text-sm ${themePreference === 'light' ? 'text-cyan-700 hover:text-cyan-900' : 'text-cyan-300 hover:text-cyan-200'}`}>
+                  <Link href={step.actionHref} className={`mt-4 inline-flex items-center gap-2 text-sm ${themePreference === 'light' ? 'text-[#246048] hover:text-[#183f32]' : 'text-[#8fc4a8] hover:text-[#b4d8c3]'}`}>
                     {step.actionLabel}
                     <ArrowRight className="w-4 h-4" />
                   </Link>
@@ -849,7 +890,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6 mb-8">
           <div className={subtleCardClass}>
             <div className="flex items-center gap-3 mb-4">
-              <CheckCircle2 className="w-6 h-6 text-cyan-400" />
+              <CheckCircle2 className="w-6 h-6 text-[#31725b]" />
               <h2 className="text-xl font-bold">What success looks like</h2>
             </div>
             <p className={`text-sm mb-4 ${mutedTextClass}`}>
@@ -959,13 +1000,20 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className={`${cardClass} mb-8`}>
+        <div id="storefront-key-controls" className={`${cardClass} mb-8`}>
           <h2 className="text-xl font-bold mb-2">Technical install details</h2>
-          <p className={`mb-4 ${mutedTextClass}`}>You do not need this for early preview work. Come back here only when you are ready to install DrapixAI on a live storefront or hand setup to a technical teammate.</p>
-          <div className="flex gap-4">
-            <input type="text" value={apiKey} readOnly className={inputClass} />
+          <p className={`mb-4 ${mutedTextClass}`}>The domain-bound storefront key is separate from your dashboard session, so signing in again will not break an installed widget. A new secret is shown only when it is created or rotated.</p>
+          <div className="flex flex-col md:flex-row gap-4">
+            <input
+              type="text"
+              value={storefrontApiKey || (storefrontKeyExists ? 'Active storefront key hidden' : 'No storefront key created')}
+              readOnly
+              className={inputClass}
+            />
             <button
-              onClick={() => navigator.clipboard.writeText(apiKey).then(() => setToast('API key copied.'))}
+              type="button"
+              disabled={!storefrontApiKey}
+              onClick={() => navigator.clipboard.writeText(storefrontApiKey).then(() => setToast('Storefront key copied.'))}
               className={actionClass}
             >
               <span className="inline-flex items-center gap-2"><Copy className="w-4 h-4" />Copy</span>
@@ -977,20 +1025,16 @@ export default function Dashboard() {
     });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok || !data?.apiKey) {
-                  setToast('Unable to rotate API key right now.');
+                  setToast('Unable to create the storefront key right now.');
                   return;
                 }
-                setApiKey(data.apiKey);
-                await fetch('/api/dashboard/session', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ apiKey: data.apiKey })
-    }).catch(() => undefined);
-                setToast('API key rotated successfully.');
+                setStorefrontApiKey(data.apiKey);
+                setStorefrontKeyExists(true);
+                setToast(storefrontKeyExists ? 'Storefront key rotated. Update the installed widget with this new key.' : 'Storefront key created. Copy it now.');
               }}
               className={actionClass}
             >
-              <span className="inline-flex items-center gap-2"><KeyRound className="w-4 h-4" />Rotate</span>
+              <span className="inline-flex items-center gap-2"><KeyRound className="w-4 h-4" />{storefrontKeyExists ? 'Rotate' : 'Create'}</span>
             </button>
           </div>
         </div>
@@ -1036,7 +1080,7 @@ export default function Dashboard() {
 
         <div className={`${cardClass} mb-8`}>
           <div className="flex items-center gap-3 mb-4">
-            <UploadCloud className="w-6 h-6 text-cyan-400" />
+            <UploadCloud className="w-6 h-6 text-[#31725b]" />
             <h2 className="text-xl font-bold">Recent Try-On Activity</h2>
           </div>
           {!usage.recentRenders || usage.recentRenders.length === 0 ? (
@@ -1062,7 +1106,7 @@ export default function Dashboard() {
                       {render.status}
                     </span>
                     {render.outputUrl ? (
-                      <Link href={dashboardApiPath(`sdk/result/${render.id}`)} className="text-sm text-cyan-300 hover:text-cyan-200">
+                      <Link href={dashboardApiPath(`sdk/result/${render.id}`)} className="text-sm text-[#8fc4a8] hover:text-[#b4d8c3]">
                         Open result
                       </Link>
                     ) : null}
@@ -1084,7 +1128,7 @@ export default function Dashboard() {
             ) : null}
           </div>
           <p className={`mb-4 ${mutedTextClass}`}>
-            Upper-body only. The brand-facing flow is: upload garments, let DrapixAI validate them, discover products, review suggested matches, confirm the right pairings, then preview before launch.
+            Upper-body remains the production path. Lower-body V1 assets can be tested only when the server-side beta flag is enabled; those uploads stay review-gated before any public rollout.
           </p>
           <div id="mapping-flow" className={`mb-6 ${panelClass}`}>
             <p className={`text-sm font-medium mb-3 ${strongTextClass}`}>Confirmed mapping flow for brands</p>
@@ -1111,7 +1155,7 @@ export default function Dashboard() {
                   body: 'After RunPod upgrades, use the cache regeneration command to rebuild stored garment assets and mark failures for review.',
                 },
               ].map((item) => (
-                <div key={item.title} className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                <div key={item.title} className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                   <p className={`font-medium mb-2 ${strongTextClass}`}>{item.title}</p>
                   <p className={mutedTextClass}>{item.body}</p>
                 </div>
@@ -1147,7 +1191,7 @@ export default function Dashboard() {
             <div className={panelClass}>
               <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>1. Garment upload and validation</p>
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
-                Upload multiple upper-body garment files at once. DrapixAI validates the assets first, then uses catalog discovery to move toward suggested matches and later manual confirmation.
+                Upload multiple garment files at once. DrapixAI validates the assets first, then uses catalog discovery to move toward suggested matches and later manual confirmation.
               </p>
               <input
                 type="file"
@@ -1156,6 +1200,14 @@ export default function Dashboard() {
                 onChange={(e) => setBulkGarmentFiles(Array.from(e.target.files || []))}
                 className={`p-2 text-sm ${mutedTextClass}`}
               />
+              <select
+                value={bulkGarmentType}
+                onChange={(e) => setBulkGarmentType(e.target.value === 'lower' ? 'lower' : 'upper')}
+                className={`${inputClass} mt-3 w-full`}
+              >
+                <option value="upper">Upper-body production</option>
+                <option value="lower">Lower-body V1 beta</option>
+              </select>
               {bulkGarmentFiles.length ? (
                 <p className={`text-xs mt-2 ${mutedTextClass}`}>
                   Selected files: {bulkGarmentFiles.slice(0, 4).map((file) => file.name).join(', ')}
@@ -1213,15 +1265,15 @@ export default function Dashboard() {
               Optional operator upload. Use this only when you need to add or replace one asset manually behind the scenes. Brands should still experience the simpler flow: upload, discover, suggest, confirm, then preview.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 text-sm">
-              <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-emerald-100 bg-emerald-50/70' : 'border-emerald-500/20 bg-emerald-500/10'}`}>
+              <div className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-emerald-100 bg-emerald-50/70' : 'border-emerald-500/20 bg-emerald-500/10'}`}>
                 <p className={`font-medium mb-2 ${strongTextClass}`}>Launch-ready</p>
                 <p className={mutedTextClass}>Shirts, T-shirts, polos, blouses, and clean tops usually give the strongest 2D realism.</p>
               </div>
-              <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-amber-100 bg-amber-50/70' : 'border-amber-500/20 bg-amber-500/10'}`}>
+              <div className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-amber-100 bg-amber-50/70' : 'border-amber-500/20 bg-amber-500/10'}`}>
                 <p className={`font-medium mb-2 ${strongTextClass}`}>Beta</p>
                 <p className={mutedTextClass}>Short kurtis, hoodies, and sweatshirts are still supported, but they need cleaner assets and closer review.</p>
               </div>
-              <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-rose-100 bg-rose-50/70' : 'border-rose-500/20 bg-rose-500/10'}`}>
+              <div className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-rose-100 bg-rose-50/70' : 'border-rose-500/20 bg-rose-500/10'}`}>
                 <p className={`font-medium mb-2 ${strongTextClass}`}>Blocked</p>
                 <p className={mutedTextClass}>Long kurtas, jackets, blazers, coats, cardigans, and layered outerwear are rejected for now because they still hurt realism.</p>
               </div>
@@ -1245,6 +1297,14 @@ export default function Dashboard() {
                   </option>
                 ))}
               </select>
+              <select
+                value={garmentUploadType}
+                onChange={(e) => setGarmentUploadType(e.target.value === 'lower' ? 'lower' : 'upper')}
+                className={inputClass}
+              >
+                <option value="upper">Upper-body production</option>
+                <option value="lower">Lower-body V1 beta</option>
+              </select>
               <input
                 type="file"
                 accept="image/*"
@@ -1265,6 +1325,7 @@ export default function Dashboard() {
                   if (garmentUploadCategory.trim()) {
                     form.append('category', garmentUploadCategory.trim());
                   }
+                  form.append('garment_type', garmentUploadType);
                   form.append('cloth_image', garmentFile);
                   const res = await fetch(dashboardApiPath('sdk/garments'), {
                     method: 'POST',
@@ -1315,7 +1376,7 @@ export default function Dashboard() {
                   DrapixAI is now using real product discovery and real confirmation state. Each garment can carry a suggested product, and the storefront should only depend on the rows you explicitly confirm here.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 text-sm">
-                  <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                  <div className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                     <p className={`font-medium mb-2 ${strongTextClass}`}>Suggested matches</p>
                     <p className={mutedTextClass}>
                       {hasSuggestedMatches
@@ -1323,7 +1384,7 @@ export default function Dashboard() {
                         : 'Suggestions appear after at least one garment is validated and catalog discovery has run.'}
                     </p>
                   </div>
-                  <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                  <div className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                     <p className={`font-medium mb-2 ${strongTextClass}`}>Manual confirmation</p>
                     <p className={mutedTextClass}>
                       {hasConfirmedMappings
@@ -1331,7 +1392,7 @@ export default function Dashboard() {
                         : 'A human still needs to approve the final pairings before the storefront depends on them.'}
                     </p>
                   </div>
-                  <div className={`rounded-2xl border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
+                  <div className={`rounded-md border p-4 ${themePreference === 'light' ? 'border-sky-100 bg-white/80' : 'border-white/10 bg-black/20'}`}>
                     <p className={`font-medium mb-2 ${strongTextClass}`}>SDK live behavior</p>
                     <p className={mutedTextClass}>
                       {readyForGoLive
@@ -1430,7 +1491,30 @@ export default function Dashboard() {
           <h2 className="text-xl font-bold mb-4">Try-On Modal Preview</h2>
           <p className={`mb-4 ${mutedTextClass}`}>This is the milestone to aim for first: one believable internal preview before anything goes live on your store.</p>
           <div className={panelClass}>
-            <div id="drapixai-dashboard-demo"></div>
+            {previewProductId ? (
+              <div data-preview-status={previewStatus} aria-live="polite">
+                <div id="drapixai-dashboard-demo"></div>
+                {previewStatus === 'loading' ? <p className={`mt-3 text-sm ${mutedTextClass}`}>Loading secure SDK preview...</p> : null}
+                {previewStatus === 'ready' ? <p className={`mt-3 text-sm ${mutedTextClass}`}>Secure SDK preview ready.</p> : null}
+                {previewStatus === 'error' ? (
+                  <p role="alert" className="mt-3 text-sm text-rose-500">Preview unavailable: {previewError}</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className={`font-semibold ${strongTextClass}`}>Confirm a ready product mapping to unlock preview</p>
+                  <p className={`mt-1 text-sm ${mutedTextClass}`}>DrapixAI uses a short-lived preview credential; permanent dashboard and storefront keys stay private.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('garment-onboarding')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className={actionClass}
+                >
+                  Open product prep
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1452,11 +1536,19 @@ export default function Dashboard() {
 <div id="drapixai-container"></div>
 <script>
   DrapixAI.init({
-    apiKey: '${apiKey}',
+    tokenProvider: async function (productId) {
+      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const payload = await response.json();
+      if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
+      return payload.token;
+    },
     productId: 'your-product-id',
     containerId: 'drapixai-container',
     baseUrl: '${PUBLIC_API_BASE_URL}',
-    garmentType: 'upper'
+    garmentType: 'upper',
+    quality: 'standard',
+    timeoutMs: 20000,
+    enableDownload: true
   });
 </script>
 
@@ -1466,13 +1558,21 @@ export default function Dashboard() {
 </div>
 <script>
   DrapixAI.init({
-    apiKey: '${apiKey}',
+    tokenProvider: async function (productId) {
+      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const payload = await response.json();
+      if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
+      return payload.token;
+    },
     autoAttach: true,
     productSelector: '[data-drapix-product-id]',
     productIdAttribute: 'data-drapix-product-id',
     buttonTargetSelector: '[data-drapix-button-slot]',
     baseUrl: '${PUBLIC_API_BASE_URL}',
-    garmentType: 'upper'
+    garmentType: 'upper',
+    quality: 'standard',
+    timeoutMs: 20000,
+    enableDownload: true
   });
 </script>`}
           </pre>

@@ -28,6 +28,14 @@ export default function PrivacyPage() {
           ],
         },
         {
+          heading: 'Shopify Store Data',
+          body: [
+            'When a merchant installs the DrapixAI Shopify app, DrapixAI processes the shop domain, store name, primary storefront domain, app installation metadata, product and variant identifiers, product titles and types, and product garment images. The launch app requests read_products only; it does not request Shopify customer, order, payment, or checkout data.',
+            'Shopify product data is used only to synchronize the merchant catalog, prepare and review garment caches, map approved products to try-on assets, and operate the storefront try-on block. Storefront API keys are restricted to the merchant verified domain.',
+            'When Shopify reports an app uninstall, DrapixAI disables the store access token and storefront key. When Shopify sends the mandatory shop-redact request, Shopify-origin catalog records, garment caches, mappings, stored garment assets, installation records, and the storefront key are deleted. DrapixAI does not retain Shopify customer webhook payloads because the launch app does not use customer or order data.',
+          ],
+        },
+        {
           heading: 'Storage, Security, and Retention',
           body: [
             'DrapixAI uses technical and organizational safeguards to protect data in transit and at rest. Access to production systems is restricted to authorized personnel and service providers who need it to operate the platform.',
