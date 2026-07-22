@@ -17,7 +17,7 @@ export type TryOnQualityInput = {
 };
 
 const EXCELLENT_SCORE = Number(process.env.DRAPIXAI_EXCELLENT_QUALITY_SCORE || 0.95);
-const MIN_PUBLISHABLE_SCORE = Number(process.env.DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE || 0.90);
+const MIN_PUBLISHABLE_SCORE = Number(process.env.DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE || 0.95);
 const EXCELLENT_LATENCY_MS = Number(process.env.DRAPIXAI_EXCELLENT_LATENCY_MS || 10000);
 const MAX_PUBLISHABLE_LATENCY_MS = Number(process.env.DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS || 12000);
 
@@ -87,6 +87,15 @@ export const buildProductAccuracyReport = (input: TryOnQualityInput): ProductAcc
   };
 };
 
+const hasBlockingVisualFailure = (input: TryOnQualityInput) => {
+  const warnings = normalizeWarnings(input.warnings);
+  const score = typeof input.qualityScore === 'number' ? input.qualityScore : 0;
+  const accuracyValues = Object.values(buildProductAccuracyReport(input));
+  return score < MIN_PUBLISHABLE_SCORE
+    || warnings.some((warning) => BLOCKING_WARNINGS.has(warning))
+    || accuracyValues.includes('Not publishable');
+};
+
 export const getTryOnConfidenceBadge = (input: TryOnQualityInput): ConfidenceBadge => {
   const warnings = normalizeWarnings(input.warnings);
   const score = typeof input.qualityScore === 'number' ? input.qualityScore : 0;
@@ -94,14 +103,11 @@ export const getTryOnConfidenceBadge = (input: TryOnQualityInput): ConfidenceBad
   const accuracy = buildProductAccuracyReport(input);
   const accuracyValues = Object.values(accuracy);
 
-  if (
-    score < MIN_PUBLISHABLE_SCORE
-    || latencyMs > MAX_PUBLISHABLE_LATENCY_MS
-    || warnings.some((warning) => BLOCKING_WARNINGS.has(warning))
-    || accuracyValues.includes('Not publishable')
-  ) {
+  if (hasBlockingVisualFailure(input)) {
     return 'Not publishable';
   }
+
+  if (latencyMs > MAX_PUBLISHABLE_LATENCY_MS) return 'Review';
 
   if (
     score >= EXCELLENT_SCORE
@@ -117,5 +123,5 @@ export const getTryOnConfidenceBadge = (input: TryOnQualityInput): ConfidenceBad
 };
 
 export const shouldAutoRejectTryOn = (input: TryOnQualityInput) => {
-  return getTryOnConfidenceBadge(input) === 'Not publishable';
+  return hasBlockingVisualFailure(input);
 };

@@ -1,6 +1,20 @@
 import path from 'path';
 import fs from 'fs';
 import type { Request } from 'express';
+import sharp from 'sharp';
+
+export const PASSWORD_HASH_ROUNDS = 12;
+
+export const validatePasswordStrength = (value: unknown) => {
+  const password = String(value || '');
+  if (password.length < 12) return 'PASSWORD_TOO_SHORT';
+  if (password.length > 128) return 'PASSWORD_TOO_LONG';
+  if (!/[a-z]/.test(password)) return 'PASSWORD_REQUIRES_LOWERCASE';
+  if (!/[A-Z]/.test(password)) return 'PASSWORD_REQUIRES_UPPERCASE';
+  if (!/[0-9]/.test(password)) return 'PASSWORD_REQUIRES_NUMBER';
+  if (!/[^A-Za-z0-9]/.test(password)) return 'PASSWORD_REQUIRES_SYMBOL';
+  return null;
+};
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -52,16 +66,42 @@ export const detectImageMimeType = (buffer: Buffer) => {
   return null;
 };
 
-export const isAllowedImageFileContent = (file: Express.Multer.File) => {
+export const isAllowedImageFileContent = async (
+  file: Express.Multer.File,
+  limits: { maxPixels?: number; maxDimension?: number } = {},
+) => {
   if (!file?.path || !fs.existsSync(file.path)) return false;
   const fd = fs.openSync(file.path, 'r');
   try {
     const header = Buffer.alloc(16);
     const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
     const detected = detectImageMimeType(header.subarray(0, bytesRead));
-    return Boolean(detected && detected === normalizeImageMimeType(file.mimetype));
+    if (!detected || detected !== normalizeImageMimeType(file.mimetype)) return false;
   } finally {
     fs.closeSync(fd);
+  }
+
+  const configuredMaxPixels = Number(process.env.DRAPIXAI_MAX_IMAGE_PIXELS || 40_000_000);
+  const configuredMaxDimension = Number(process.env.DRAPIXAI_MAX_IMAGE_DIMENSION || 10_000);
+  const maxPixels = Math.max(1, Math.floor(limits.maxPixels ?? configuredMaxPixels));
+  const maxDimension = Math.max(1, Math.floor(limits.maxDimension ?? configuredMaxDimension));
+  try {
+    const metadata = await sharp(file.path, {
+      animated: false,
+      failOn: 'error',
+      limitInputPixels: maxPixels,
+    }).metadata();
+    const width = Number(metadata.width || 0);
+    const height = Number(metadata.height || 0);
+    const pages = Number(metadata.pages || 1);
+    return width > 0
+      && height > 0
+      && width <= maxDimension
+      && height <= maxDimension
+      && width * height <= maxPixels
+      && pages === 1;
+  } catch {
+    return false;
   }
 };
 
@@ -145,14 +185,28 @@ export const sanitizeUpstreamError = (fallback: string, raw: string) => {
 
 export const redactSensitiveText = (value: unknown) =>
   String(value ?? '')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [redacted]')
+    .replace(/\b(dpx(?:st|pv)?_[A-Za-z0-9_-]{12,})\b/g, '[redacted-api-key]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/(cookie|set-cookie)(\s*:\s*)[^\r\n]+/gi, '$1$2[redacted]')
+    .replace(/("?(?:person|cloth|image)_image_base64"?\s*[:=]\s*"?)[A-Za-z0-9+/=]{32,}/gi, '$1[redacted]')
+    .replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, 'data:image/[redacted]')
     .replace(/\b(?:postgresql|postgres|redis|smtp|https?):\/\/[^\s]+/gi, (match) => {
       const scheme = match.split('://')[0];
       return `${scheme}://[redacted]`;
     })
     .replace(/([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASS|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*=)([^\s]+)/gi, '$1[redacted]');
 
-export const formatLogError = (error: unknown) =>
-  redactSensitiveText(error instanceof Error ? error.message : error || 'UNKNOWN_ERROR');
+export const formatLogError = (error: unknown) => {
+  if (error instanceof Error) {
+    const errorWithCode = error as Error & { code?: unknown };
+    const code = typeof errorWithCode.code === 'string' ? errorWithCode.code.trim() : '';
+    const message = error.message.trim();
+    const fallback = error.name && error.name !== 'Error' ? error.name : 'UNKNOWN_ERROR';
+    return redactSensitiveText([code, message || fallback].filter(Boolean).join(': '));
+  }
+  return redactSensitiveText(error || 'UNKNOWN_ERROR');
+};
 
 export const getRequestOrigin = (req: Request) => {
   const origin = req.headers.origin;

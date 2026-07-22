@@ -1,10 +1,18 @@
 import dns from 'dns/promises';
+import http from 'http';
+import https from 'https';
 import net from 'net';
 
 type SafeFetchOptions = {
   allowedProtocols?: string[];
   maxBytes?: number;
   timeoutMs?: number;
+};
+
+type PinnedUrl = {
+  url: URL;
+  address: string;
+  family: 4 | 6;
 };
 
 const DEFAULT_MAX_BYTES = Number(process.env.DRAPIXAI_REMOTE_FETCH_MAX_BYTES || 2 * 1024 * 1024);
@@ -46,7 +54,7 @@ const isPublicIp = (address: string) => {
   return false;
 };
 
-const assertSafeUrl = async (rawUrl: string, allowedProtocols: string[]) => {
+const assertSafeUrl = async (rawUrl: string, allowedProtocols: string[]): Promise<PinnedUrl> => {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -69,7 +77,7 @@ const assertSafeUrl = async (rawUrl: string, allowedProtocols: string[]) => {
 
   if (net.isIP(hostname)) {
     if (!isPublicIp(hostname)) throw new Error('REMOTE_HOST_NOT_ALLOWED');
-    return parsed;
+    return { url: parsed, address: hostname, family: net.isIP(hostname) as 4 | 6 };
   }
 
   const records = await dns.lookup(hostname, { all: true, verbatim: true });
@@ -77,46 +85,80 @@ const assertSafeUrl = async (rawUrl: string, allowedProtocols: string[]) => {
     throw new Error('REMOTE_HOST_NOT_ALLOWED');
   }
 
-  return parsed;
+  return {
+    url: parsed,
+    address: records[0].address,
+    family: records[0].family as 4 | 6,
+  };
+};
+
+const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: number) => {
+  const transport = target.url.protocol === 'https:' ? https : http;
+
+  return new Promise<{ response: Response; buffer: Buffer }>((resolve, reject) => {
+    const request = transport.request(target.url, {
+      servername: target.url.hostname,
+      lookup: (_hostname, _options, callback) => callback(null, target.address, target.family),
+      headers: {
+        Accept: '*/*',
+        'User-Agent': 'DrapixAI-SecureFetcher/1.0',
+      },
+    }, (incoming) => {
+      const status = incoming.statusCode || 0;
+      if (status >= 300 && status < 400) {
+        incoming.resume();
+        reject(new Error('REMOTE_REDIRECT_NOT_ALLOWED'));
+        return;
+      }
+
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (Array.isArray(value)) value.forEach((item) => headers.append(name, item));
+        else if (value !== undefined) headers.set(name, String(value));
+      }
+
+      const contentLength = Number(headers.get('content-length') || 0);
+      if (contentLength > maxBytes) {
+        incoming.destroy(new Error('REMOTE_RESPONSE_TOO_LARGE'));
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let total = 0;
+      incoming.on('data', (chunk: Buffer) => {
+        total += chunk.length;
+        if (total > maxBytes) {
+          incoming.destroy(new Error('REMOTE_RESPONSE_TOO_LARGE'));
+          return;
+        }
+        chunks.push(Buffer.from(chunk));
+      });
+      incoming.on('end', () => {
+        const body = Buffer.concat(chunks);
+        resolve({
+          response: new Response(body, { status, headers }),
+          buffer: body,
+        });
+      });
+      incoming.on('error', reject);
+    });
+
+    request.setTimeout(timeoutMs, () => request.destroy(new Error('REMOTE_FETCH_TIMEOUT')));
+    request.on('error', reject);
+    request.end();
+  });
 };
 
 export const safeFetchText = async (rawUrl: string, options: SafeFetchOptions = {}) => {
   const allowedProtocols = options.allowedProtocols || ['https:'];
   const maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const url = await assertSafeUrl(rawUrl, allowedProtocols);
-
-  const response = await fetch(url, {
-    redirect: 'error',
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  const contentLength = Number(response.headers.get('content-length') || 0);
-  if (contentLength > maxBytes) {
-    throw new Error('REMOTE_RESPONSE_TOO_LARGE');
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return { response, text: '' };
-  }
-
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      throw new Error('REMOTE_RESPONSE_TOO_LARGE');
-    }
-    chunks.push(value);
-  }
+  const target = await assertSafeUrl(rawUrl, allowedProtocols);
+  const { response, buffer } = await fetchPinned(target, maxBytes, timeoutMs);
 
   return {
     response,
-    text: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8'),
+    text: buffer.toString('utf8'),
   };
 };
 
@@ -124,40 +166,8 @@ export const safeFetchBuffer = async (rawUrl: string, options: SafeFetchOptions 
   const allowedProtocols = options.allowedProtocols || ['https:'];
   const maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
   const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const url = await assertSafeUrl(rawUrl, allowedProtocols);
-
-  const response = await fetch(url, {
-    redirect: 'error',
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  const contentLength = Number(response.headers.get('content-length') || 0);
-  if (contentLength > maxBytes) {
-    throw new Error('REMOTE_RESPONSE_TOO_LARGE');
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return { response, buffer: Buffer.alloc(0) };
-  }
-
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      throw new Error('REMOTE_RESPONSE_TOO_LARGE');
-    }
-    chunks.push(value);
-  }
-
-  return {
-    response,
-    buffer: Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))),
-  };
+  const target = await assertSafeUrl(rawUrl, allowedProtocols);
+  return fetchPinned(target, maxBytes, timeoutMs);
 };
 
 export const normalizePublicDomain = (value: string) => {

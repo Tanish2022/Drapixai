@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import { CatalogSyncInputItem, detectCatalogCategory, isSupportedUpperBodyItem, normalizeCatalogItem } from './catalog-feed';
 
 type MatchCandidate = {
@@ -33,7 +34,7 @@ export const humanizeIdentifier = (value: string) =>
 
 export const buildGarmentAssetId = (rawLabel: string) => {
   const base = slugify(rawLabel) || 'garment';
-  return `${base}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${base}-${crypto.randomBytes(6).toString('hex')}`;
 };
 
 const listActualGarments = async (prisma: PrismaClient, userId: number) =>
@@ -105,7 +106,7 @@ const scoreMatch = (
 export const recomputeGarmentMatchesForUser = async (prisma: PrismaClient, userId: number) => {
   const [garments, products, existingMatches] = await Promise.all([
     listActualGarments(prisma, userId),
-    prisma.catalogProduct.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } }),
+    prisma.catalogProduct.findMany({ where: { userId, status: { not: 'archived' } }, orderBy: { updatedAt: 'desc' } }),
     prisma.garmentMatch.findMany({ where: { userId } }),
   ]);
 
@@ -176,21 +177,27 @@ export const upsertCatalogProductsForUser = async (
   for (const item of uniqueItems) {
     const detectedCategory = detectCatalogCategory(item);
     if (!detectedCategory) {
-      skipped.push({ productId: item.productId, reason: 'NOT_UPPER_BODY' });
+      skipped.push({ productId: item.productId, reason: 'UNSUPPORTED_GARMENT_CATEGORY' });
       continue;
     }
 
-    if (detectedCategory.supportLevel === 'unsupported' || !isSupportedUpperBodyItem(item)) {
-      skipped.push({ productId: item.productId, reason: 'UNSUPPORTED_UPPER_BODY_CATEGORY' });
+    if (
+      detectedCategory.supportLevel === 'unsupported'
+      || (detectedCategory.supportLevel !== 'future_lower_beta' && !isSupportedUpperBodyItem(item))
+    ) {
+      skipped.push({ productId: item.productId, reason: 'UNSUPPORTED_GARMENT_CATEGORY' });
       continue;
     }
+    const garmentType = detectedCategory.supportLevel === 'future_lower_beta' ? 'lower' : 'upper';
 
     const record = await prisma.catalogProduct.upsert({
       where: { userId_productId: { userId, productId: item.productId } },
       update: {
+        parentProductId: item.parentProductId,
+        isVariant: item.isVariant,
         productName: item.productName,
         category: detectedCategory.label,
-        garmentType: 'upper',
+        garmentType,
         imageUrl: item.imageUrl,
         source,
         status: 'discovered',
@@ -198,9 +205,11 @@ export const upsertCatalogProductsForUser = async (
       create: {
         userId,
         productId: item.productId,
+        parentProductId: item.parentProductId,
+        isVariant: item.isVariant,
         productName: item.productName,
         category: detectedCategory.label,
-        garmentType: 'upper',
+        garmentType,
         imageUrl: item.imageUrl,
         source,
         status: 'discovered',
@@ -231,30 +240,42 @@ export const confirmGarmentMatch = async (
   if (!product) {
     throw new Error('PRODUCT_NOT_FOUND');
   }
+  if ((garment.garmentType || 'upper') !== (product.garmentType || 'upper')) {
+    throw new Error('GARMENT_PRODUCT_TYPE_MISMATCH');
+  }
+  if (garment.status !== 'ready' || !garment.cacheKey) {
+    throw new Error('GARMENT_NOT_APPROVED');
+  }
 
-  await prisma.garmentMatch.updateMany({
-    where: { userId, confirmedProductId: productId, NOT: { garmentId } },
-    data: { confirmedProductId: null, status: 'suggested' },
-  });
-
-  return prisma.garmentMatch.upsert({
-    where: { userId_garmentId: { userId, garmentId } },
-    update: {
-      suggestedProductId: productId,
-      confirmedProductId: productId,
-      status: 'confirmed',
-      confidence: 1,
-      matchReason: 'Confirmed by brand operator.',
-    },
-    create: {
-      userId,
-      garmentId,
-      suggestedProductId: productId,
-      confirmedProductId: productId,
-      status: 'confirmed',
-      confidence: 1,
-      matchReason: 'Confirmed by brand operator.',
-    },
+  return prisma.$transaction(async (transaction) => {
+    await transaction.garmentMatch.updateMany({
+      where: { userId, confirmedProductId: productId, NOT: { garmentId } },
+      data: { confirmedProductId: null, status: 'suggested' },
+    });
+    const match = await transaction.garmentMatch.upsert({
+      where: { userId_garmentId: { userId, garmentId } },
+      update: {
+        suggestedProductId: productId,
+        confirmedProductId: productId,
+        status: 'confirmed',
+        confidence: 1,
+        matchReason: 'Confirmed by brand operator.',
+      },
+      create: {
+        userId,
+        garmentId,
+        suggestedProductId: productId,
+        confirmedProductId: productId,
+        status: 'confirmed',
+        confidence: 1,
+        matchReason: 'Confirmed by brand operator.',
+      },
+    });
+    await transaction.catalogProduct.updateMany({
+      where: { userId, productId, preparedGarmentId: garmentId },
+      data: { preparationStatus: 'ready' },
+    });
+    return match;
   });
 };
 
@@ -271,6 +292,10 @@ export const clearConfirmedGarmentMatch = async (prisma: PrismaClient, userId: n
     where: { userId_garmentId: { userId, garmentId } },
     data: { confirmedProductId: null },
   });
+  await prisma.catalogProduct.updateMany({
+    where: { userId, preparedGarmentId: garmentId, preparationStatus: 'ready' },
+    data: { preparationStatus: 'prepared' },
+  });
 
   await recomputeGarmentMatchesForUser(prisma, userId);
   return prisma.garmentMatch.findUnique({
@@ -283,14 +308,6 @@ export const resolveConfirmedGarmentForProduct = async (
   userId: number,
   productIdOrGarmentId: string
 ) => {
-  const direct = await prisma.garment.findUnique({
-    where: { userId_garmentId: { userId, garmentId: productIdOrGarmentId } },
-  });
-
-  if (direct?.cacheKey) {
-    return direct;
-  }
-
   const match = await prisma.garmentMatch.findFirst({
     where: {
       userId,
@@ -303,7 +320,8 @@ export const resolveConfirmedGarmentForProduct = async (
     return null;
   }
 
-  return prisma.garment.findUnique({
+  const garment = await prisma.garment.findUnique({
     where: { userId_garmentId: { userId, garmentId: match.garmentId } },
   });
+  return garment?.status === 'ready' && garment.cacheKey ? garment : null;
 };

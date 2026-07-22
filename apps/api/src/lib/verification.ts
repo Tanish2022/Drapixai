@@ -1,13 +1,15 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 10;
+const OTP_MAX_ATTEMPTS = 5;
 
 export const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 export const generateOtpCode = () =>
-  Array.from({ length: OTP_LENGTH }, () => Math.floor(Math.random() * 10)).join('');
+  crypto.randomInt(0, 10 ** OTP_LENGTH).toString().padStart(OTP_LENGTH, '0');
 
 export const issueVerificationCode = async (
   prisma: PrismaClient,
@@ -64,6 +66,7 @@ export const consumeVerificationCode = async (
       userId: params.userId ?? null,
       consumedAt: null,
       expiresAt: { gt: new Date() },
+      attemptCount: { lt: OTP_MAX_ATTEMPTS },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -72,15 +75,27 @@ export const consumeVerificationCode = async (
     return false;
   }
 
+  const attempt = await prisma.verificationCode.updateMany({
+    where: {
+      id: record.id,
+      consumedAt: null,
+      attemptCount: { lt: OTP_MAX_ATTEMPTS },
+    },
+    data: { attemptCount: { increment: 1 } },
+  });
+  if (attempt.count !== 1) {
+    return false;
+  }
+
   const matches = await bcrypt.compare(String(params.code || '').trim(), record.codeHash);
   if (!matches) {
     return false;
   }
 
-  await prisma.verificationCode.update({
-    where: { id: record.id },
+  const consumed = await prisma.verificationCode.updateMany({
+    where: { id: record.id, consumedAt: null },
     data: { consumedAt: new Date() },
   });
 
-  return true;
+  return consumed.count === 1;
 };

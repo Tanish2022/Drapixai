@@ -73,6 +73,7 @@ declare module 'sharp' {
     isProgressive?: boolean;
     hasProfile?: boolean;
     hasAlpha?: boolean;
+    pages?: number;
   }
 
   export interface OutputInfo {
@@ -175,14 +176,26 @@ declare module 'sharp' {
     background?: string | number[];
   }
 
+  export interface Create {
+    width: number;
+    height: number;
+    channels: 1 | 2 | 3 | 4;
+    background: string | number[] | { r: number; g: number; b: number; alpha?: number };
+  }
+
+  function sharp(options?: SharpOptions): Sharp;
   function sharp(input?: string | Buffer, options?: SharpOptions): Sharp;
 
   interface SharpOptions {
     failOnError?: boolean;
+    failOn?: 'none' | 'truncated' | 'error' | 'warning';
+    limitInputPixels?: number | boolean;
     pages?: number;
     page?: number;
     level?: number;
     subifd?: boolean;
+    animated?: boolean;
+    create?: Create;
     withMetadata?: boolean;
     withOrientation?: boolean;
   }

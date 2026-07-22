@@ -17,6 +17,7 @@ const prisma = new PrismaClient();
 const s3 = createStorageClient();
 const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
 const CACHE_VERSION = process.env.DRAPIXAI_GARMENT_CACHE_VERSION || 'v3-1024x1365';
+const LOWER_BODY_CACHE_VERSION = process.env.DRAPIXAI_LOWER_BODY_CACHE_VERSION || 'lower-v1-1024x1365';
 const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const ADMIN_BYPASS = (process.env.DRAPIXAI_CACHE_REGEN_ADMIN_BYPASS || '0') === '1';
 const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
@@ -24,6 +25,14 @@ const getAiHeaders = (headers: Record<string, string> = {}) => ({
   ...headers,
   ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
 });
+
+const normalizeGarmentType = (value: string | null | undefined) => {
+  const normalized = String(value || 'upper').trim().toLowerCase().replace(/-/g, '_');
+  return normalized === 'lower' || normalized === 'lower_body' ? 'lower' : 'upper';
+};
+
+const expectedCacheVersionFor = (garmentType: string) =>
+  garmentType === 'lower' ? LOWER_BODY_CACHE_VERSION : CACHE_VERSION;
 
 const isDatabaseConnectionError = (error: unknown) => {
   const value = error as { code?: string; message?: string };
@@ -113,6 +122,7 @@ const main = async () => {
 
   const summary = {
     cacheVersion: CACHE_VERSION,
+    lowerBodyCacheVersion: LOWER_BODY_CACHE_VERSION,
     dryRun,
     total: garments.length,
     ready: 0,
@@ -123,12 +133,14 @@ const main = async () => {
       garmentId: string;
       status: 'ready' | 'failed' | 'skipped';
       cacheKey?: string;
+      storedStatus?: string;
       reason?: string;
     }>,
   };
 
   for (const garment of garments) {
     const label = `${garment.userId}/${garment.garmentId}`;
+    const garmentType = normalizeGarmentType(garment.garmentType);
     const originalBytes = await fetchStoredImage(garment.originalUrl);
     if (!originalBytes) {
       const reason = 'ORIGINAL_IMAGE_NOT_FOUND';
@@ -164,6 +176,7 @@ const main = async () => {
           garment_id: garment.garmentId,
           category: garment.category || undefined,
           product_name: garment.productName || garment.displayName || garment.garmentId,
+          garment_type: garmentType,
           admin_bypass: ADMIN_BYPASS,
         }),
       });
@@ -177,15 +190,18 @@ const main = async () => {
       if (!result.cache_key) {
         throw new Error('CACHE_KEY_MISSING');
       }
+      if (!result.cache_key.startsWith(`${expectedCacheVersionFor(garmentType)}:`)) {
+        throw new Error(`CACHE_VERSION_MISMATCH:${expectedCacheVersionFor(garmentType)}`);
+      }
 
       await prisma.garment.update({
         where: { id: garment.id },
         data: {
           cacheKey: result.cache_key,
-          status: 'ready',
+          status: garmentType === 'lower' ? 'pending' : 'ready',
           rejectedReason: null,
-          category: garment.category || result.profile_label || 'Upper-Body Garment',
-          garmentType: garment.garmentType || 'upper',
+          category: garment.category || result.profile_label || (garmentType === 'lower' ? 'Lower-Body Garment' : 'Upper-Body Garment'),
+          garmentType,
         },
       });
 
@@ -195,9 +211,10 @@ const main = async () => {
         garmentId: garment.garmentId,
         status: 'ready',
         cacheKey: result.cache_key,
+        storedStatus: garmentType === 'lower' ? 'pending' : 'ready',
         reason: result.reason,
       });
-      console.log(`[ready] ${label} ${result.cache_key}`);
+      console.log(`[ready] ${label} ${result.cache_key}${garmentType === 'lower' ? ' stored=pending-review' : ''}`);
     } catch (error: any) {
       const reason = String(error?.message || 'CACHE_REGEN_FAILED').slice(0, 180);
       summary.failed += 1;

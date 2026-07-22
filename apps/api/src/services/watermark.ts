@@ -13,8 +13,8 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import crypto from 'crypto';
+import { createStorageClient, getStorageEncryptionParams, STORAGE_BUCKET } from '../lib/storage';
 
 // Use dynamic import for sharp
 let sharp: any = null;
@@ -186,9 +186,9 @@ export async function processWithWatermark(
   inputKey: string,
   userPlan: string
 ): Promise<string> {
-  const tempInput = path.join(os.tmpdir(), `${uuidv4()}-input.jpg`);
-  const tempOutput = path.join(os.tmpdir(), `${uuidv4()}-output.jpg`);
-  const outputKey = `outputs/${uuidv4()}.jpg`;
+  const tempInput = path.join(os.tmpdir(), `${crypto.randomUUID()}-input.jpg`);
+  const tempOutput = path.join(os.tmpdir(), `${crypto.randomUUID()}-output.jpg`);
+  const outputKey = `outputs/${crypto.randomUUID()}.jpg`;
   
   const tempFiles: string[] = [];
   
@@ -240,7 +240,8 @@ export async function processWithWatermark(
       Bucket: BUCKET,
       Key: outputKey,
       Body: fileContent,
-      ContentType: 'image/jpeg'
+      ContentType: 'image/jpeg',
+      ...getStorageEncryptionParams(),
     });
     
     await s3.send(putCommand);

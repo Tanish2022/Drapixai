@@ -1,5 +1,7 @@
 export type CatalogSyncInputItem = {
   productId?: string;
+  parentProductId?: string;
+  isVariant?: boolean;
   productName?: string;
   category?: string;
   garmentType?: string;
@@ -8,6 +10,8 @@ export type CatalogSyncInputItem = {
 
 export type NormalizedCatalogItem = {
   productId: string;
+  parentProductId?: string;
+  isVariant: boolean;
   productName?: string;
   category?: string;
   garmentType?: string;
@@ -17,7 +21,7 @@ export type NormalizedCatalogItem = {
 export type CatalogCategoryMatch = {
   key: string;
   label: string;
-  supportLevel: 'launch_ready' | 'beta' | 'unsupported';
+  supportLevel: 'launch_ready' | 'beta' | 'future_lower_beta' | 'unsupported';
 };
 
 const normalizeText = (value: unknown) => String(value || '').trim().toLowerCase();
@@ -29,6 +33,13 @@ const normalizeHaystack = (value: unknown) =>
     .trim();
 
 const CATEGORY_RULES: Array<CatalogCategoryMatch & { aliases: string[] }> = [
+  { key: 'jeans', label: 'Jeans', supportLevel: 'future_lower_beta', aliases: ['jeans', 'denim jeans', 'denim pants'] },
+  { key: 'pants', label: 'Pants', supportLevel: 'future_lower_beta', aliases: ['pants', 'chinos', 'slacks'] },
+  { key: 'trousers', label: 'Trousers', supportLevel: 'future_lower_beta', aliases: ['trousers', 'trouser', 'formal trousers', 'dress pants'] },
+  { key: 'shorts', label: 'Shorts', supportLevel: 'future_lower_beta', aliases: ['shorts', 'denim shorts'] },
+  { key: 'skirt', label: 'Skirt', supportLevel: 'future_lower_beta', aliases: ['skirt', 'mini skirt', 'pencil skirt'] },
+  { key: 'leggings', label: 'Leggings', supportLevel: 'future_lower_beta', aliases: ['leggings', 'tights', 'yoga pants'] },
+  { key: 'joggers', label: 'Joggers', supportLevel: 'future_lower_beta', aliases: ['joggers', 'sweatpants', 'track pants'] },
   { key: 'shirt', label: 'Shirt', supportLevel: 'launch_ready', aliases: ['oxford shirt', 'button down', 'button up', 'shirt', 'flannel'] },
   { key: 'tshirt', label: 'T-Shirt', supportLevel: 'launch_ready', aliases: ['t shirt', 'tshirt', 'tee shirt', 'graphic tee', 'tee'] },
   { key: 'polo', label: 'Polo', supportLevel: 'launch_ready', aliases: ['polo shirt', 'polo'] },
@@ -96,6 +107,17 @@ const NON_UPPER_BODY_KEYWORDS = [
   'socks'
 ];
 
+const ENABLE_LOWER_BODY = (process.env.DRAPIXAI_ENABLE_LOWER_BODY || '0') === '1';
+const LOWER_BODY_ALLOWED_CATEGORIES = new Set(
+  (process.env.DRAPIXAI_LOWER_BODY_ALLOWED_CATEGORIES || 'jeans,pants,trousers,shorts,skirt,leggings,joggers')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+const isLowerBodyRuleAllowed = (rule: CatalogCategoryMatch) =>
+  rule.supportLevel !== 'future_lower_beta' || (ENABLE_LOWER_BODY && LOWER_BODY_ALLOWED_CATEGORIES.has(rule.key));
+
 export const detectCatalogCategory = (item: CatalogSyncInputItem): CatalogCategoryMatch | null => {
   const explicitGarmentType = normalizeHaystack(item.garmentType);
   const haystack = [item.garmentType, item.category, item.productName]
@@ -116,7 +138,8 @@ export const detectCatalogCategory = (item: CatalogSyncInputItem): CatalogCatego
 
   if (candidates.length > 0) {
     candidates.sort((left, right) => right.aliasLength - left.aliasLength);
-    return candidates[0].rule;
+    const rule = candidates[0].rule;
+    return isLowerBodyRuleAllowed(rule) ? rule : null;
   }
 
   if (NON_UPPER_BODY_KEYWORDS.some((keyword) => haystack.includes(keyword))) {
@@ -238,9 +261,15 @@ export const normalizeCatalogItem = (item: CatalogSyncInputItem): NormalizedCata
 
   return {
     productId,
+    parentProductId: String(item.parentProductId || '').trim() || undefined,
+    isVariant: Boolean(item.isVariant),
     productName: String(item.productName || '').trim() || undefined,
     category: detectedCategory?.label || String(item.category || '').trim() || undefined,
-    garmentType: detectedCategory ? 'upper' : String(item.garmentType || '').trim() || undefined,
+    garmentType: detectedCategory
+      ? detectedCategory.supportLevel === 'future_lower_beta'
+        ? 'lower'
+        : 'upper'
+      : String(item.garmentType || '').trim() || undefined,
     imageUrl: String(item.imageUrl || '').trim() || undefined,
   };
 };

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { PASSWORD_HASH_ROUNDS } from '../lib/security';
 
 const prisma = new PrismaClient();
 
@@ -13,13 +14,14 @@ export const ensureAdminUser = async () => {
   }
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const passwordHash = await bcrypt.hash(adminPassword, PASSWORD_HASH_ROUNDS);
 
   if (!existing) {
     await prisma.user.create({
       data: {
         email: adminEmail,
         passwordHash,
+        role: 'system_admin',
         companyName: 'DrapixAI Admin',
         planType: 'pro',
         selectedPlan: 'pro',
@@ -37,6 +39,7 @@ export const ensureAdminUser = async () => {
   if (
     !passwordMatches ||
     existing.companyName !== 'DrapixAI Admin' ||
+    existing.role !== 'system_admin' ||
     existing.planType !== 'pro' ||
     existing.subscriptionPlan !== 'pro' ||
     existing.subscriptionStatus !== 'active'
@@ -45,6 +48,7 @@ export const ensureAdminUser = async () => {
       where: { id: existing.id },
       data: {
         passwordHash,
+        role: 'system_admin',
         companyName: 'DrapixAI Admin',
         planType: 'pro',
         selectedPlan: 'pro',

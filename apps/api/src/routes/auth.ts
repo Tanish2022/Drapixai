@@ -4,15 +4,24 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { formatLogError } from '../lib/security';
-import { v4 as uuidv4 } from 'uuid';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { issueApiKeyForUser } from '../lib/api-key-auth';
+import { resolveActiveApiKey } from '../lib/api-key-auth';
+import { verifyAdminTotp } from '../lib/admin-mfa';
+import { PASSWORD_HASH_ROUNDS, validatePasswordStrength } from '../lib/security';
 import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail } from '../services/emailer';
+import { appendSecurityAudit } from '../lib/audit-log';
 
 const router = Router();
 const prisma = new PrismaClient();
 const authRateLimit = createRateLimitMiddleware(10, 15 * 60 * 1000);
+const authIdentityRateLimit = createRateLimitMiddleware(5, 15 * 60 * 1000, (req) => {
+  const identity = normalizeEmail(String(req.body?.email || 'missing'));
+  const digest = crypto.createHash('sha256').update(identity).digest('hex');
+  return `auth-identity:${digest}:${req.path}`;
+});
 const AUTH_SYNC_TOKEN = process.env.DRAPIXAI_AUTH_SYNC_TOKEN || '';
 
 const getJwtSecret = () => {
@@ -28,23 +37,6 @@ const issueJwt = (userId: number) =>
     expiresIn: '7d',
     issuer: 'drapixai',
   });
-
-const issueApiKeyForUser = async (userId: number) => {
-  const apiKey = uuidv4().replace(/-/g, '');
-  const keyHash = await bcrypt.hash(apiKey, 10);
-
-  await prisma.$transaction([
-    prisma.apiKey.updateMany({
-      where: { userId, isActive: true },
-      data: { isActive: false },
-    }),
-    prisma.apiKey.create({
-      data: { userId, keyHash, domainWhitelist: '*' }
-    }),
-  ]);
-
-  return apiKey;
-};
 
 const isProduction = () => process.env.NODE_ENV === 'production';
 
@@ -66,8 +58,13 @@ const publicAuthFailure = (error: unknown, fallback: string, fallbackStatus = 40
 };
 
 router.use(authRateLimit);
+router.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 
-router.post('/register/request-otp', async (req, res) => {
+router.post('/register/request-otp', authIdentityRateLimit, async (req, res) => {
   try {
     const { email } = req.body || {};
     if (!email) {
@@ -96,7 +93,7 @@ router.post('/register/request-otp', async (req, res) => {
   }
 });
 
-router.post('/password-reset/request-otp', async (req, res) => {
+router.post('/password-reset/request-otp', authIdentityRateLimit, async (req, res) => {
   try {
     const { email } = req.body || {};
     if (!email) {
@@ -133,9 +130,8 @@ router.post('/password-reset/confirm', async (req, res) => {
     if (!email || !otp || !password) {
       return res.status(400).json({ error: 'EMAIL_OTP_AND_PASSWORD_REQUIRED' });
     }
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: 'PASSWORD_TOO_SHORT' });
-    }
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
 
     const normalizedEmail = normalizeEmail(String(email));
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -153,13 +149,22 @@ router.post('/password-reset/confirm', async (req, res) => {
       return res.status(400).json({ error: 'INVALID_OR_EXPIRED_OTP' });
     }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash: await bcrypt.hash(String(password), 10),
-        emailVerifiedAt: user.emailVerifiedAt || new Date(),
-      },
-    });
+    const revokedAt = new Date();
+    const passwordHash = await bcrypt.hash(String(password), PASSWORD_HASH_ROUNDS);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          emailVerifiedAt: user.emailVerifiedAt || revokedAt,
+          authVersion: { increment: 1 },
+        },
+      }),
+      prisma.apiKey.updateMany({
+        where: { userId: user.id, isActive: true },
+        data: { isActive: false, revokedAt },
+      }),
+    ]);
 
     return res.json({ ok: true });
   } catch (err: unknown) {
@@ -173,9 +178,8 @@ router.post('/register', async (req, res) => {
     if (!email || !password || !otp) {
       return res.status(400).json({ error: 'EMAIL_PASSWORD_AND_OTP_REQUIRED' });
     }
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: 'PASSWORD_TOO_SHORT' });
-    }
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) return res.status(400).json({ error: passwordError });
     const normalizedEmail = normalizeEmail(String(email));
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) return res.status(400).json({ error: 'EMAIL_ALREADY_REGISTERED' });
@@ -189,7 +193,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'INVALID_OR_EXPIRED_OTP' });
     }
     
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, PASSWORD_HASH_ROUNDS);
     const normalizedSelectedPlan = normalizeSelectedPlan(selectedPlan);
     const trialExpiresAt = new Date();
     trialExpiresAt.setDate(trialExpiresAt.getDate() + TRIAL_DAYS);
@@ -210,7 +214,7 @@ router.post('/register', async (req, res) => {
       }
     });
 
-    const apiKey = await issueApiKeyForUser(user.id);
+    const apiKey = await issueApiKeyForUser(prisma, user.id);
     const token = issueJwt(user.id);
     res.json({
       token,
@@ -228,16 +232,32 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', authIdentityRateLimit, async (req, res) => {
   try {
-    const { email, password, issueNewKey = true } = req.body || {};
+    const { email, password, issueNewKey = true, mfaCode } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: 'EMAIL_AND_PASSWORD_REQUIRED' });
     }
     const normalizedEmail = normalizeEmail(String(email));
     let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      await appendSecurityAudit(prisma, {
+        actorRole: 'unknown',
+        action: 'auth.login.denied',
+        outcome: 'denied',
+        ip: req.ip,
+      }).catch(() => undefined);
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    if (!verifyAdminTotp(normalizedEmail, mfaCode)) {
+      await appendSecurityAudit(prisma, {
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.mfa.denied',
+        outcome: 'denied',
+        ip: req.ip,
+      }).catch(() => undefined);
+      return res.status(401).json({ error: 'MFA_REQUIRED_OR_INVALID' });
     }
 
     if (!user.emailVerifiedAt) {
@@ -247,8 +267,16 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const apiKey = issueNewKey ? await issueApiKeyForUser(user.id) : null;
+    const apiKey = issueNewKey ? await issueApiKeyForUser(prisma, user.id) : null;
     const token = issueJwt(user.id);
+    await appendSecurityAudit(prisma, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      action: 'auth.login.succeeded',
+      targetType: 'user_session',
+      ip: req.ip,
+      metadata: { apiKeyIssued: Boolean(apiKey) },
+    });
     res.json({
       token,
       apiKey,
@@ -289,7 +317,7 @@ router.post('/oauth/google', async (req, res) => {
         data: {
           email: normalizedEmail,
           emailVerifiedAt: new Date(),
-          passwordHash: await bcrypt.hash(Math.random().toString(36).slice(2), 10),
+          passwordHash: await bcrypt.hash(crypto.randomBytes(32).toString('base64url'), PASSWORD_HASH_ROUNDS),
           companyName: name || null,
           planType: 'trial',
           selectedPlan: normalizedSelectedPlan,
@@ -313,13 +341,37 @@ router.post('/oauth/google', async (req, res) => {
 
     let apiKeyValue: string | null = null;
     if (issueNewKey) {
-      apiKeyValue = await issueApiKeyForUser(user.id);
+      apiKeyValue = await issueApiKeyForUser(prisma, user.id);
     }
 
     return res.json({ ok: true, userId: user.id, apiKey: apiKeyValue });
   } catch (error) {
     console.error('OAuth sync error:', formatLogError(error));
     return res.status(500).json({ error: 'OAUTH_SYNC_FAILED' });
+  }
+});
+
+router.post('/logout', async (req, res) => {
+  try {
+    const apiKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+    if (!apiKey) return res.status(401).json({ error: 'INVALID_API_KEY' });
+    await prisma.apiKey.update({
+      where: { id: apiKey.id },
+      data: { isActive: false, revokedAt: new Date() },
+    });
+    const user = await prisma.user.findUnique({ where: { id: apiKey.userId }, select: { role: true } });
+    await appendSecurityAudit(prisma, {
+      actorUserId: apiKey.userId,
+      actorRole: user?.role || 'unknown',
+      action: 'auth.logout.succeeded',
+      targetType: 'api_key',
+      targetId: apiKey.id,
+      ip: req.ip,
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('Logout error:', formatLogError(error));
+    return res.status(500).json({ error: 'LOGOUT_FAILED' });
   }
 });
 

@@ -14,6 +14,31 @@ const getAiHeaders = (headers: Record<string, string> = {}) => ({
   ...headers,
   ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
 });
+const PUBLIC_WEBSITE_EVENTS = new Set(['page_view', 'cta_click', 'trial_signup', 'user_login']);
+
+const sanitizeReferrer = (value: unknown) => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = new URL(value);
+    if (!['https:', 'http:'].includes(parsed.protocol)) return null;
+    return `${parsed.origin}${parsed.pathname}`.slice(0, 255);
+  } catch {
+    return null;
+  }
+};
+
+const sanitizeEventMetadata = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .slice(0, 10)
+      .filter(([, item]) => item === null || ['string', 'number', 'boolean'].includes(typeof item))
+      .map(([key, item]) => [
+        key.slice(0, 40),
+        typeof item === 'string' ? item.slice(0, 160) : item,
+      ])
+  );
+};
 
 const UPLOAD_ROOT = getUploadRoot();
 const upload = multer({
@@ -81,16 +106,16 @@ router.post(
   async (req, res) => {
     try {
       const { event, path, visitorId, referrer, metadata } = req.body || {};
-      if (!event || typeof event !== 'string') {
-        return res.status(400).json({ error: 'EVENT_REQUIRED' });
+      if (!event || typeof event !== 'string' || !PUBLIC_WEBSITE_EVENTS.has(event)) {
+        return res.status(400).json({ error: 'INVALID_EVENT' });
       }
 
       await trackWebsiteEvent(
         event.slice(0, 80),
         typeof path === 'string' ? path.slice(0, 255) : null,
         typeof visitorId === 'string' ? visitorId.slice(0, 120) : null,
-        typeof referrer === 'string' ? referrer.slice(0, 255) : null,
-        metadata && typeof metadata === 'object' ? metadata : {}
+        sanitizeReferrer(referrer),
+        sanitizeEventMetadata(metadata)
       );
 
       return res.json({ ok: true });
@@ -119,7 +144,7 @@ router.post(
       return res.status(400).json({ error: 'PERSON_AND_CLOTH_REQUIRED' });
     }
 
-    if (!isAllowedImageFileContent(personFile) || !isAllowedImageFileContent(clothFile)) {
+    if (!(await isAllowedImageFileContent(personFile)) || !(await isAllowedImageFileContent(clothFile))) {
       removeUploadedFile(personFile);
       removeUploadedFile(clothFile);
       return res.status(400).json({
@@ -198,7 +223,7 @@ router.post(
         processingMs,
       });
       res.setHeader('Content-Type', tryOnResponse.headers.get('content-type') || 'image/png');
-      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Cache-Control', 'no-store, private');
       if (engine) res.setHeader('x-drapixai-engine', engine);
       if (qualityScore) res.setHeader('x-drapixai-quality-score', qualityScore);
       if (candidateCount) res.setHeader('x-drapixai-candidate-count', candidateCount);

@@ -9,6 +9,9 @@ import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { formatPlanLabel } from '../lib/plans';
 import { buildProductAccuracyReport, getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
 import { formatLogError, readLocalUploadFile } from '../lib/security';
+import { withOperationTimeout } from '../lib/operation-timeout';
+import { appendSecurityAudit } from '../lib/audit-log';
+import { hasPermission } from '../lib/authorization';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -21,6 +24,28 @@ redis.on('error', (error) => {
 });
 redis.connect().catch(() => undefined);
 const adminRateLimit = createRateLimitMiddleware(60, 15 * 60 * 1000);
+
+const auditAdminAction = (req: any, input: {
+  action: string;
+  targetType?: string;
+  targetId?: string | number;
+  metadata?: Record<string, string | number | boolean | null>;
+}) => appendSecurityAudit(prisma, {
+  actorUserId: req.user.id,
+  actorRole: req.user.role,
+  action: input.action,
+  targetType: input.targetType,
+  targetId: input.targetId,
+  requestId: String(req.headers['x-request-id'] || '') || null,
+  ip: req.ip,
+  metadata: input.metadata,
+});
+
+router.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 
 const fetchStoredImage = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
   if (!storedUrl) return null;
@@ -66,7 +91,8 @@ const adminAuth = async (req: any, res: any, next: any) => {
   }
 
   const user = await prisma.user.findUnique({ where: { id: activeKey.userId } });
-  const isAdmin = Boolean(user && ((ADMIN_EMAIL && user.email === ADMIN_EMAIL) || (ADMIN_USER_ID && user.id === ADMIN_USER_ID)));
+  const matchesConfiguredAdmin = Boolean(user && ((ADMIN_EMAIL && user.email === ADMIN_EMAIL) || (ADMIN_USER_ID && user.id === ADMIN_USER_ID)));
+  const isAdmin = Boolean(user && hasPermission(user.role, 'system:admin') && matchesConfiguredAdmin);
   if (!user || !isAdmin) {
     return res.status(403).json({ error: 'ADMIN_REQUIRED' });
   }
@@ -79,7 +105,8 @@ const adminAuth = async (req: any, res: any, next: any) => {
 router.use(adminRateLimit);
 router.use(adminAuth);
 
-router.get('/verify', async (req, res) => {
+router.get('/verify', async (req: any, res) => {
+  await auditAdminAction(req, { action: 'admin.session.verified', targetType: 'admin_session' });
   res.json({ ok: true });
 });
 
@@ -208,15 +235,15 @@ router.get('/ops', async (_req, res) => {
   const aiBaseUrl = (process.env.DRAPIXAI_AI_URL || '').trim();
 
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await withOperationTimeout(prisma.$queryRaw`SELECT 1`, 3000, 'DATABASE_OPS_TIMEOUT');
     database = true;
   } catch {
     database = false;
   }
 
   try {
-    redisReady = (await redis.ping()) === 'PONG';
-    queueDepth = await redis.lLen('render_queue');
+    redisReady = (await withOperationTimeout(redis.ping(), 3000, 'REDIS_OPS_TIMEOUT')) === 'PONG';
+    queueDepth = await withOperationTimeout(redis.lLen('render_queue'), 3000, 'REDIS_QUEUE_TIMEOUT');
   } catch {
     redisReady = false;
     queueDepth = 0;
@@ -239,24 +266,26 @@ router.get('/ops', async (_req, res) => {
     }
   }
 
-  const [renderStats, recentFailures, dailyTraffic] = await Promise.all([
-    prisma.render.groupBy({
-      by: ['status'],
-      _count: { _all: true },
-    }),
-    prisma.render.findMany({
-      where: { status: 'failed' },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, error: true, createdAt: true },
-    }),
-    prisma.usageDaily.groupBy({
-      by: ['date'],
-      _sum: { count: true },
-      orderBy: { date: 'asc' },
-      take: 14,
-    }),
-  ]);
+  const [renderStats, recentFailures, dailyTraffic] = database
+    ? await withOperationTimeout(Promise.all([
+        prisma.render.groupBy({
+          by: ['status'],
+          _count: { _all: true },
+        }),
+        prisma.render.findMany({
+          where: { status: 'failed' },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, error: true, createdAt: true },
+        }),
+        prisma.usageDaily.groupBy({
+          by: ['date'],
+          _sum: { count: true },
+          orderBy: { date: 'asc' },
+          take: 14,
+        }),
+      ]), 5000, 'DATABASE_OPS_DETAILS_TIMEOUT')
+    : [[], [], []];
 
   const statusMap = new Map(renderStats.map((item) => [item.status, item._count._all]));
   res.json({
@@ -325,40 +354,70 @@ router.get('/garments', async (req, res) => {
 /**
  * POST /admin/garments/:id/approve
  */
-router.post('/garments/:id/approve', async (req, res) => {
+router.post('/garments/:id/approve', async (req: any, res) => {
   const id = Number(req.params.id);
-  const garment = await prisma.garment.update({
-    where: { id },
-    data: { status: 'ready', rejectedReason: null },
-    include: { user: true }
+  const garment = await prisma.$transaction(async (transaction) => {
+    const approved = await transaction.garment.update({
+      where: { id },
+      data: { status: 'ready', rejectedReason: null },
+      include: { user: true }
+    });
+    await transaction.catalogProduct.updateMany({
+      where: { userId: approved.userId, preparedGarmentId: approved.garmentId },
+      data: { preparationStatus: 'prepared' },
+    });
+    return approved;
   });
   if (garment.user?.email) {
     await sendGarmentApprovalEmail(garment.userId, garment.user.email, garment.garmentId, 'approved', null);
   }
+  await auditAdminAction(req, {
+    action: 'garment.approved',
+    targetType: 'garment',
+    targetId: garment.id,
+    metadata: { ownerUserId: garment.userId, garmentId: garment.garmentId },
+  });
   res.json({ id: garment.id, status: garment.status });
 });
 
 /**
  * POST /admin/garments/:id/reject
  */
-router.post('/garments/:id/reject', async (req, res) => {
+router.post('/garments/:id/reject', async (req: any, res) => {
   const id = Number(req.params.id);
   const reason = typeof req.body?.reason === 'string' ? req.body.reason : 'Rejected by admin';
-  const garment = await prisma.garment.update({
-    where: { id },
-    data: { status: 'rejected', rejectedReason: reason },
-    include: { user: true }
+  const garment = await prisma.$transaction(async (transaction) => {
+    const rejected = await transaction.garment.update({
+      where: { id },
+      data: { status: 'rejected', rejectedReason: reason },
+      include: { user: true }
+    });
+    await transaction.garmentMatch.updateMany({
+      where: { userId: rejected.userId, garmentId: rejected.garmentId },
+      data: { confirmedProductId: null, status: 'rejected' },
+    });
+    await transaction.catalogProduct.updateMany({
+      where: { userId: rejected.userId, preparedGarmentId: rejected.garmentId },
+      data: { preparationStatus: 'failed', preparationError: 'ADMIN_REJECTED' },
+    });
+    return rejected;
   });
   if (garment.user?.email) {
     await sendGarmentApprovalEmail(garment.userId, garment.user.email, garment.garmentId, 'rejected', reason);
   }
+  await auditAdminAction(req, {
+    action: 'garment.rejected',
+    targetType: 'garment',
+    targetId: garment.id,
+    metadata: { ownerUserId: garment.userId, garmentId: garment.garmentId },
+  });
   res.json({ id: garment.id, status: garment.status, reason });
 });
 
 /**
  * GET /admin/garments/:id/thumbnail
  */
-router.get('/garments/:id/thumbnail', async (req, res) => {
+router.get('/garments/:id/thumbnail', async (req: any, res) => {
   const id = Number(req.params.id);
   const garment = await prisma.garment.findUnique({ where: { id } });
   if (!garment || !garment.thumbnailUrl) {
@@ -370,6 +429,7 @@ router.get('/garments/:id/thumbnail', async (req, res) => {
     res.setHeader('Content-Type', 'image/png');
     return res.send(buffer);
   }
+  await auditAdminAction(req, { action: 'garment.image.accessed', targetType: 'garment', targetId: id });
   if (garment.thumbnailUrl.startsWith('s3://')) {
     const rest = garment.thumbnailUrl.replace('s3://', '');
     const [bucket, ...keyParts] = rest.split('/');
@@ -449,42 +509,47 @@ router.get('/tryon-results', async (req, res) => {
   });
 });
 
-router.get('/tryon-results/:id/person', async (req, res) => {
+router.get('/tryon-results/:id/person', async (req: any, res) => {
   const id = Number(req.params.id);
   const result = await prisma.tryOnResult.findUnique({ where: { id } });
   if (!result) return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+  await auditAdminAction(req, { action: 'tryon.person_image.accessed', targetType: 'tryon_result', targetId: id });
   return sendStoredImage(res, result.personImageUrl);
 });
 
-router.get('/tryon-results/:id/garment', async (req, res) => {
+router.get('/tryon-results/:id/garment', async (req: any, res) => {
   const id = Number(req.params.id);
   const result = await prisma.tryOnResult.findUnique({ where: { id } });
   if (!result) return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+  await auditAdminAction(req, { action: 'tryon.garment_image.accessed', targetType: 'tryon_result', targetId: id });
   return sendStoredImage(res, result.garmentImageUrl);
 });
 
-router.get('/tryon-results/:id/result', async (req, res) => {
+router.get('/tryon-results/:id/result', async (req: any, res) => {
   const id = Number(req.params.id);
   const result = await prisma.tryOnResult.findUnique({ where: { id } });
   if (!result) return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
+  await auditAdminAction(req, { action: 'tryon.result_image.accessed', targetType: 'tryon_result', targetId: id });
   return sendStoredImage(res, result.resultImageUrl);
 });
 
-router.post('/tryon-results/:id/approve', async (req, res) => {
+router.post('/tryon-results/:id/approve', async (req: any, res) => {
   const id = Number(req.params.id);
   const result = await prisma.tryOnResult.update({
     where: { id },
     data: { status: 'approved', approvedAt: new Date(), rejectedAt: null },
   });
+  await auditAdminAction(req, { action: 'tryon.approved', targetType: 'tryon_result', targetId: result.id });
   res.json({ id: result.id, status: result.status });
 });
 
-router.post('/tryon-results/:id/reject', async (req, res) => {
+router.post('/tryon-results/:id/reject', async (req: any, res) => {
   const id = Number(req.params.id);
   const result = await prisma.tryOnResult.update({
     where: { id },
     data: { status: 'rejected', rejectedAt: new Date(), approvedAt: null },
   });
+  await auditAdminAction(req, { action: 'tryon.rejected', targetType: 'tryon_result', targetId: result.id });
   res.json({ id: result.id, status: result.status });
 });
 

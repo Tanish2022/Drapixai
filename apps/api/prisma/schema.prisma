@@ -8,69 +8,84 @@ datasource db {
 }
 
 model User {
-  id                           Int      @id @default(autoincrement())
-  email                        String   @unique
-  emailVerifiedAt              DateTime?
-  passwordHash                 String
-  companyName                  String?
-  mobileNumber                 String?
-  themePreference              String   @default("dark")
-  storeVerificationToken       String?
-  storeVerifiedAt              DateTime?
-  catalogSyncSource            String?
-  catalogFeedUrl               String?
-  catalogLastSyncedAt          DateTime?
-  catalogLastSyncStatus        String?
-  planType                     String   @default("trial")
-  selectedPlan                 String?
-  subscriptionPlan             String?
-  subscriptionStatus           String?
-  subscriptionProvider         String?
-  subscriptionCustomerId       String?
-  subscriptionId               String?
+  id                              Int                   @id @default(autoincrement())
+  email                           String                @unique
+  emailVerifiedAt                 DateTime?
+  passwordHash                    String
+  role                            String                @default("brand_admin")
+  authVersion                     Int                   @default(1)
+  companyName                     String?
+  mobileNumber                    String?
+  themePreference                 String                @default("light")
+  storeVerificationToken          String?
+  storeVerifiedAt                 DateTime?
+  catalogSyncSource               String?
+  catalogFeedUrl                  String?
+  catalogLastSyncedAt             DateTime?
+  catalogLastSyncStatus           String?
+  planType                        String                @default("trial")
+  selectedPlan                    String?
+  subscriptionPlan                String?
+  subscriptionStatus              String?
+  subscriptionProvider            String?
+  subscriptionCustomerId          String?
+  subscriptionId                  String?
   subscriptionCurrentPeriodEndsAt DateTime?
-  trialExpiresAt               DateTime?
-  createdAt                    DateTime @default(now())
-  apiKeys                      ApiKey[]
-  catalogProducts              CatalogProduct[]
-  emailLogs                    EmailLog[]
-  garments                     Garment[]
-  garmentMatches               GarmentMatch[]
-  tryOnResults                 TryOnResult[]
-  tryOnFeedback                TryOnFeedback[]
-  verificationCodes            VerificationCode[]
+  trialExpiresAt                  DateTime?
+  createdAt                       DateTime              @default(now())
+  apiKeys                         ApiKey[]
+  catalogProducts                 CatalogProduct[]
+  emailLogs                       EmailLog[]
+  garments                        Garment[]
+  garmentMatches                  GarmentMatch[]
+  tryOnResults                    TryOnResult[]
+  tryOnFeedback                   TryOnFeedback[]
+  verificationCodes               VerificationCode[]
+  shopifyInstallations            ShopifyInstallation[]
 }
 
 model ApiKey {
-  id              Int      @id @default(autoincrement())
-  userId          Int
-  keyHash         String   @unique
-  domainWhitelist String
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  user            User     @relation(fields: [userId], references: [id])
-  renders         Render[]
-  usages          Usage[]
-  dailyUsages     UsageDaily[]
-  tryOnResults    TryOnResult[]
+  id                  Int                  @id @default(autoincrement())
+  userId              Int
+  keyHash             String               @unique
+  kind                String               @default("dashboard")
+  label               String?
+  domainWhitelist     String
+  isActive            Boolean              @default(true)
+  scopes              String                @default("")
+  expiresAt           DateTime?
+  lastUsedAt          DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime             @default(now())
+  user                User                 @relation(fields: [userId], references: [id])
+  renders             Render[]
+  usages              Usage[]
+  dailyUsages         UsageDaily[]
+  tryOnResults        TryOnResult[]
+  shopifyInstallation ShopifyInstallation?
+
+  @@index([userId, kind, isActive])
+  @@index([expiresAt])
 }
 
 model Usage {
-  id          Int     @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   apiKeyId    Int
-  renderCount Int     @default(0)
+  renderCount Int    @default(0)
   month       Int
   year        Int
-  apiKey      ApiKey  @relation(fields: [apiKeyId], references: [id])
+  apiKey      ApiKey @relation(fields: [apiKeyId], references: [id])
+
   @@unique([apiKeyId, month, year])
 }
 
 model UsageDaily {
-  id        Int      @id @default(autoincrement())
-  apiKeyId  Int
-  date      DateTime
-  count     Int      @default(0)
-  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id])
+  id       Int      @id @default(autoincrement())
+  apiKeyId Int
+  date     DateTime
+  count    Int      @default(0)
+  apiKey   ApiKey   @relation(fields: [apiKeyId], references: [id])
+
   @@unique([apiKeyId, date])
 }
 
@@ -99,7 +114,7 @@ model Render {
 }
 
 model TryOnResult {
-  id              Int      @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   userId          Int
   apiKeyId        Int?
   requestId       String?
@@ -110,18 +125,18 @@ model TryOnResult {
   resultImageUrl  String?
   engine          String
   qualityScore    Float?
-  candidateCount  Int      @default(1)
+  candidateCount  Int             @default(1)
   candidateScores Json?
   timingJson      Json?
   processingMs    Int?
   latencyMs       Int?
   warnings        Json?
-  status          String   @default("generated")
+  status          String          @default("generated")
   approvedAt      DateTime?
   rejectedAt      DateTime?
-  createdAt       DateTime @default(now())
-  user            User     @relation(fields: [userId], references: [id])
-  apiKey          ApiKey?  @relation(fields: [apiKeyId], references: [id])
+  createdAt       DateTime        @default(now())
+  user            User            @relation(fields: [userId], references: [id])
+  apiKey          ApiKey?         @relation(fields: [apiKeyId], references: [id])
   feedback        TryOnFeedback[]
 
   @@index([userId, createdAt])
@@ -130,64 +145,146 @@ model TryOnResult {
 }
 
 model TryOnFeedback {
-  id              Int      @id @default(autoincrement())
-  tryOnResultId   Int
-  userId          Int
-  looksReal       Boolean?
-  bodyChanged     Boolean  @default(false)
-  garmentChanged  Boolean  @default(false)
-  faceChanged     Boolean  @default(false)
-  badHands        Boolean  @default(false)
-  badNeck         Boolean  @default(false)
-  badSleeves      Boolean  @default(false)
+  id               Int         @id @default(autoincrement())
+  tryOnResultId    Int
+  userId           Int
+  looksReal        Boolean?
+  bodyChanged      Boolean     @default(false)
+  garmentChanged   Boolean     @default(false)
+  faceChanged      Boolean     @default(false)
+  badHands         Boolean     @default(false)
+  badNeck          Boolean     @default(false)
+  badSleeves       Boolean     @default(false)
   regenerateReason String?
-  notes           String?
-  createdAt       DateTime @default(now())
-  tryOnResult     TryOnResult @relation(fields: [tryOnResultId], references: [id])
-  user            User     @relation(fields: [userId], references: [id])
+  notes            String?
+  createdAt        DateTime    @default(now())
+  tryOnResult      TryOnResult @relation(fields: [tryOnResultId], references: [id])
+  user             User        @relation(fields: [userId], references: [id])
 
   @@index([tryOnResultId])
   @@index([userId, createdAt])
 }
 
 model Garment {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  garmentId   String
-  displayName String?
-  cacheKey    String?
-  originalHash String
-  originalUrl String?
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  garmentId      String
+  displayName    String?
+  cacheKey       String?
+  originalHash   String
+  originalUrl    String?
   sourceImageUrl String?
-  thumbnailUrl String?
-  productName String?
-  category    String?
-  garmentType String?
-  status      String   @default("missing")
+  thumbnailUrl   String?
+  productName    String?
+  category       String?
+  garmentType    String?
+  status         String   @default("missing")
   rejectedReason String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id])
+
   @@unique([userId, garmentId])
   @@index([userId])
 }
 
 model CatalogProduct {
-  id          Int      @id @default(autoincrement())
-  userId      Int
-  productId   String
-  productName String?
-  category    String?
-  garmentType String?
-  imageUrl    String?
-  source      String?
-  status      String   @default("discovered")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id])
+  id                       Int       @id @default(autoincrement())
+  userId                   Int
+  productId                String
+  parentProductId          String?
+  isVariant                Boolean   @default(false)
+  productName              String?
+  category                 String?
+  garmentType              String?
+  imageUrl                 String?
+  source                   String?
+  status                   String    @default("discovered")
+  preparationStatus        String    @default("not_queued")
+  preparationAttempts      Int       @default(0)
+  preparationError         String?
+  preparationWarnings      Json?
+  preparationQueuedAt      DateTime?
+  preparationStartedAt     DateTime?
+  preparationNextAttemptAt DateTime?
+  preparationCompletedAt   DateTime?
+  preparedImageUrl         String?
+  preparedGarmentId        String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  user                     User      @relation(fields: [userId], references: [id])
 
   @@unique([userId, productId])
   @@index([userId])
+  @@index([userId, preparationStatus])
+  @@index([preparationStatus, preparationNextAttemptAt])
+}
+
+model ShopifyInstallation {
+  id                     Int              @id @default(autoincrement())
+  userId                 Int?
+  shopDomain             String           @unique
+  shopName               String?
+  primaryDomain          String?
+  encryptedAccessToken   String
+  encryptedStorefrontKey String?
+  storefrontApiKeyId     Int?             @unique
+  scopes                 String
+  status                 String           @default("pending_link")
+  linkTokenHash          String?
+  linkTokenExpiresAt     DateTime?
+  installedAt            DateTime         @default(now())
+  linkedAt               DateTime?
+  uninstalledAt          DateTime?
+  lastSyncedAt           DateTime?
+  lastSyncStatus         String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  user                   User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  storefrontApiKey       ApiKey?          @relation(fields: [storefrontApiKeyId], references: [id], onDelete: SetNull)
+  syncRuns               ShopifySyncRun[]
+
+  @@index([userId, status])
+  @@index([status, lastSyncedAt])
+}
+
+model ShopifySyncRun {
+  id               Int                 @id @default(autoincrement())
+  installationId   Int
+  trigger          String
+  status           String              @default("running")
+  productsSeen     Int                 @default(0)
+  productsReady    Int                 @default(0)
+  productsSkipped  Int                 @default(0)
+  productsQueued   Int                 @default(0)
+  productsPrepared Int                 @default(0)
+  errorCode        String?
+  startedAt        DateTime            @default(now())
+  completedAt      DateTime?
+  installation     ShopifyInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@index([installationId, startedAt])
+}
+
+model ShopifyWebhookEvent {
+  id          Int       @id @default(autoincrement())
+  webhookId   String    @unique
+  shopDomain  String
+  topic       String
+  status      String    @default("received")
+  errorCode   String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([shopDomain, receivedAt])
+  @@index([topic, receivedAt])
+}
+
+model CatalogPreparationLease {
+  id         String   @id
+  ownerToken String
+  expiresAt  DateTime
+  updatedAt  DateTime @updatedAt
 }
 
 model GarmentMatch {
@@ -220,6 +317,25 @@ model WebsiteEvent {
   @@index([path, createdAt])
 }
 
+model SecurityAuditLog {
+  id           Int      @id @default(autoincrement())
+  actorUserId  Int?
+  actorRole    String
+  action       String
+  targetType   String?
+  targetId     String?
+  outcome      String   @default("success")
+  requestId    String?
+  ipHash       String?
+  metadata     Json?
+  previousHash String
+  entryHash    String   @unique
+  createdAt    DateTime @default(now())
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
 model VerificationCode {
   id         Int       @id @default(autoincrement())
   userId     Int?
@@ -228,6 +344,7 @@ model VerificationCode {
   codeHash   String
   expiresAt  DateTime
   consumedAt DateTime?
+  attemptCount Int      @default(0)
   createdAt  DateTime  @default(now())
   user       User?     @relation(fields: [userId], references: [id])
 

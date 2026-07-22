@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
@@ -9,12 +10,14 @@ import { upsertCatalogProductsForUser } from '../lib/catalog-matching';
 import { normalizePublicDomain, safeFetchText } from '../lib/remote-fetch';
 import { consumeVerificationCode, issueVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail } from '../services/emailer';
+import { PASSWORD_HASH_ROUNDS, validatePasswordStrength } from '../lib/security';
+import { hasPermission } from '../lib/authorization';
 
 const router = Router();
 const prisma = new PrismaClient();
 const accountRateLimit = createRateLimitMiddleware(20, 15 * 60 * 1000);
 
-const generateVerificationToken = () => `drapix_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+const generateVerificationToken = () => `drapix_${crypto.randomBytes(18).toString('base64url')}`;
 const normalizeDomainInput = (value: string) => normalizePublicDomain(value);
 const allowInsecureStoreVerification = () =>
   process.env.NODE_ENV !== 'production' && process.env.DRAPIXAI_ALLOW_INSECURE_STORE_VERIFICATION === '1';
@@ -72,6 +75,9 @@ const resolveUser = async (authorizationHeader: string | undefined) => {
   if (!user) {
     return null;
   }
+  if (!hasPermission(user.role, 'tenant:manage')) {
+    return null;
+  }
 
   return { activeKey, user };
 };
@@ -88,7 +94,7 @@ router.get('/profile', async (req, res) => {
     emailVerifiedAt: user.emailVerifiedAt?.toISOString() || null,
     companyName: user.companyName || '',
     mobileNumber: user.mobileNumber || '',
-    themePreference: user.themePreference || 'dark',
+    themePreference: user.themePreference || 'light',
     storeConnected: Boolean(activeKey.domainWhitelist && activeKey.domainWhitelist !== '*' && user.storeVerifiedAt),
     storeVerified: Boolean(user.storeVerifiedAt),
     domain: activeKey.domainWhitelist,
@@ -119,7 +125,7 @@ router.post('/profile', async (req, res) => {
     data: {
       companyName: typeof companyName === 'string' ? companyName.trim() : resolved.user.companyName,
       mobileNumber: typeof mobileNumber === 'string' ? mobileNumber.trim() || null : resolved.user.mobileNumber,
-      themePreference: nextTheme || resolved.user.themePreference || 'dark',
+      themePreference: nextTheme || resolved.user.themePreference || 'light',
     },
   });
 
@@ -127,7 +133,7 @@ router.post('/profile', async (req, res) => {
     ok: true,
     companyName: user.companyName || '',
     mobileNumber: user.mobileNumber || '',
-    themePreference: user.themePreference || 'dark',
+    themePreference: user.themePreference || 'light',
   });
 });
 
@@ -141,22 +147,28 @@ router.post('/password', async (req, res) => {
   if (!currentPassword || !newPassword) {
     return res.status(400).json({ error: 'CURRENT_AND_NEW_PASSWORD_REQUIRED' });
   }
-  if (String(newPassword).length < 8) {
-    return res.status(400).json({ error: 'PASSWORD_TOO_SHORT' });
-  }
+  const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) return res.status(400).json({ error: passwordError });
 
   const matches = await bcrypt.compare(String(currentPassword), resolved.user.passwordHash);
   if (!matches) {
     return res.status(400).json({ error: 'CURRENT_PASSWORD_INCORRECT' });
   }
 
-  const nextPasswordHash = await bcrypt.hash(String(newPassword), 10);
-  await prisma.user.update({
-    where: { id: resolved.user.id },
-    data: { passwordHash: nextPasswordHash },
-  });
+  const nextPasswordHash = await bcrypt.hash(String(newPassword), PASSWORD_HASH_ROUNDS);
+  const revokedAt = new Date();
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: resolved.user.id },
+      data: { passwordHash: nextPasswordHash, authVersion: { increment: 1 } },
+    }),
+    prisma.apiKey.updateMany({
+      where: { userId: resolved.user.id, isActive: true },
+      data: { isActive: false, revokedAt },
+    }),
+  ]);
 
-  return res.json({ ok: true });
+  return res.json({ ok: true, sessionsRevoked: true });
 });
 
 router.post('/email/request-change', async (req, res) => {
@@ -294,6 +306,10 @@ router.post('/store', async (req, res) => {
   const activeKey = await prisma.apiKey.update({
     where: { id: resolved.activeKey.id },
     data: { domainWhitelist: normalizedDomain || '*' },
+  });
+  await prisma.apiKey.updateMany({
+    where: { userId: resolved.user.id, kind: 'manual', isActive: true },
+    data: { domainWhitelist: activeKey.domainWhitelist },
   });
 
   return res.json({

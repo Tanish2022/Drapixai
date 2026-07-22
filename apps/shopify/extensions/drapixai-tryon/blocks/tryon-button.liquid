@@ -1,0 +1,47 @@
+{{ 'drapixai-theme.css' | asset_url | stylesheet_tag }}
+
+<div
+  id="drapixai-shopify-{{ block.id }}"
+  class="drapixai-shopify-block"
+  data-drapixai-shopify
+  data-container-id="drapixai-container-{{ block.id }}"
+  data-shop="{{ shop.permanent_domain | escape }}"
+  data-product-id="{{ product.id | escape }}"
+  data-api-base="{{ block.settings.api_base_url | escape }}"
+  data-button-text="{{ block.settings.button_text | escape }}"
+  data-buy-text="{{ block.settings.buy_button_text | escape }}"
+>
+  <div id="drapixai-container-{{ block.id }}"></div>
+  <p class="drapixai-shopify-status" data-drapixai-status hidden></p>
+</div>
+
+<script src="{{ 'drapixai-theme.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "DrapixAI Try-On",
+  "target": "section",
+  "templates": ["product"],
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Try-on button text",
+      "default": "Try it on"
+    },
+    {
+      "type": "text",
+      "id": "buy_button_text",
+      "label": "Result purchase button text",
+      "default": "Buy this item"
+    },
+    {
+      "type": "text",
+      "id": "api_base_url",
+      "label": "DrapixAI API URL",
+      "default": "https://api.drapixai.com",
+      "info": "Provided by DrapixAI during onboarding. Leave unchanged after activation."
+    }
+  ]
+}
+{% endschema %}

@@ -6,16 +6,21 @@ import { Router } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import sharp from 'sharp';
 import { processWithWatermark } from '../services/watermark';
-import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import { createStorageClient, getStorageEncryptionParams, STORAGE_BUCKET, STORAGE_LOCAL_FALLBACK_ALLOWED } from '../lib/storage';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
-import { resolveActiveApiKey } from '../lib/api-key-auth';
+import {
+  issueGenericStorefrontToken,
+  isStorefrontProductAllowed,
+  resolveActiveApiKey,
+  resolveSdkApiKey,
+  StorefrontCredentialContext,
+} from '../lib/api-key-auth';
 import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { CatalogSyncInputItem, isSupportedUpperBodyItem, normalizeCatalogItem } from '../lib/catalog-feed';
 import {
@@ -44,9 +49,17 @@ import {
   sanitizeUpstreamError,
   formatLogError,
 } from '../lib/security';
+import { getUserMonthlyUsage, incrementApiKeyUsage } from '../lib/usage';
+import { hasPermission, ownsTenantResource } from '../lib/authorization';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+router.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 type GarmentPreprocessResponse = {
   cache_key: string;
   image_base64: string;
@@ -88,6 +101,8 @@ const getGarmentValidationMessage = (code: string) => {
       return 'This garment is too long for the current upper-body launch scope. Use tops, shirts, blouses, or short kurtis with tighter framing.';
     case 'GARMENT_CATEGORY_UNSUPPORTED':
       return 'This garment category is not in the current realism-focused launch scope. Use shirts, t-shirts, polos, tops, blouses, or short upper-body kurtis.';
+    case 'LOWER_BODY_NOT_ENABLED':
+      return 'Lower-body try-on is not enabled for this environment yet.';
     default:
       return 'Garment upload failed validation. Use one isolated upper-body garment on a clean background.';
   }
@@ -106,8 +121,22 @@ redis.connect().catch((error) => {
 const s3 = createStorageClient();
 const BUCKET = STORAGE_BUCKET;
 const SINGLE_DOMAIN_REQUIRED = true;
+const ALLOW_SDK_DOMAIN_AUTO_BIND =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.DRAPIXAI_ALLOW_SDK_DOMAIN_AUTO_BIND || '0') === '1';
 const MAX_UPLOAD_BYTES = Number(process.env.DRAPIXAI_MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
 const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
+const LEGACY_ASYNC_RENDER_ENABLED = (process.env.DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER || '0') === '1';
+
+const requireLegacyAsyncRender = (_req: any, res: any, next: any) => {
+  if (!LEGACY_ASYNC_RENDER_ENABLED) {
+    return res.status(410).json({
+      error: 'LEGACY_ASYNC_RENDER_DISABLED',
+      message: 'Use POST /sdk/tryon for the supported Standard try-on flow.',
+    });
+  }
+  next();
+};
 
 // Configure multer for file uploads
 const UPLOAD_ROOT = getUploadRoot();
@@ -128,6 +157,15 @@ const AUTO_REJECT_BAD_RESULTS = (process.env.DRAPIXAI_AUTO_REJECT_BAD_RESULTS ||
 const SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON = (process.env.DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON || '0') === '1';
 const SDK_GENERATION_SOURCE = (process.env.DRAPIXAI_SDK_GENERATION_SOURCE || 'original_verified').toLowerCase();
 const EXPECTED_GARMENT_CACHE_VERSION = process.env.DRAPIXAI_GARMENT_CACHE_VERSION || 'v3-1024x1365';
+const ENABLE_LOWER_BODY = (process.env.DRAPIXAI_ENABLE_LOWER_BODY || '0') === '1';
+const LOWER_BODY_ADMIN_REVIEW_REQUIRED = (process.env.DRAPIXAI_LOWER_BODY_ADMIN_REVIEW_REQUIRED || '1') === '1';
+const EXPECTED_LOWER_BODY_CACHE_VERSION = process.env.DRAPIXAI_LOWER_BODY_CACHE_VERSION || 'lower-v1-1024x1365';
+const LOWER_BODY_ALLOWED_CATEGORIES = new Set(
+  (process.env.DRAPIXAI_LOWER_BODY_ALLOWED_CATEGORIES || 'jeans,pants,trousers,shorts,skirt,leggings,joggers')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+);
 const EXPECTED_GARMENT_CACHE_WIDTH = Number(process.env.DRAPIXAI_GARMENT_TARGET_WIDTH || 1024);
 const EXPECTED_GARMENT_CACHE_HEIGHT = Number(process.env.DRAPIXAI_GARMENT_TARGET_HEIGHT || 1365);
 
@@ -148,11 +186,47 @@ const normalizeSdkQuality = (value: unknown) => {
   return null;
 };
 
-const isExpectedCacheKey = (cacheKey: string | undefined | null) => {
-  return Boolean(cacheKey && cacheKey.startsWith(`${EXPECTED_GARMENT_CACHE_VERSION}:`));
+const normalizeGarmentType = (value: unknown) => {
+  const normalized = String(value || 'upper').trim().toLowerCase().replace(/-/g, '_');
+  if (normalized === 'upper' || normalized === 'upper_body') return 'upper';
+  if (normalized === 'lower' || normalized === 'lower_body') return 'lower';
+  return '';
 };
 
-const getCacheImageInfo = async (cacheKey: string) => {
+const getExpectedCacheVersion = (garmentType: string) =>
+  garmentType === 'lower' ? EXPECTED_LOWER_BODY_CACHE_VERSION : EXPECTED_GARMENT_CACHE_VERSION;
+
+const isLowerCategoryAllowed = (category: string | undefined | null, profile?: string | undefined | null) => {
+  const haystack = `${category || ''} ${profile || ''}`.toLowerCase();
+  if (!haystack.trim()) return true;
+  return Array.from(LOWER_BODY_ALLOWED_CATEGORIES).some((categoryKey) => haystack.includes(categoryKey));
+};
+
+const resolveLowerCategory = (category: string | undefined | null, profile?: string | undefined | null) => {
+  const haystack = `${category || ''} ${profile || ''}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  const paddedHaystack = ` ${haystack.replace(/\s+/g, ' ').trim()} `;
+  const aliases: Record<string, string[]> = {
+    jeans: ['jeans', 'denim jeans', 'denim pants'],
+    pants: ['pants', 'pant', 'chinos', 'slacks', 'bottoms'],
+    trousers: ['trousers', 'trouser'],
+    shorts: ['shorts', 'short', 'denim shorts'],
+    skirt: ['skirt', 'mini skirt', 'pencil skirt', 'a line skirt'],
+    leggings: ['leggings', 'legging', 'tights', 'yoga pants'],
+    joggers: ['joggers', 'jogger', 'sweatpants', 'track pants'],
+  };
+  for (const [categoryKey, terms] of Object.entries(aliases)) {
+    if (!LOWER_BODY_ALLOWED_CATEGORIES.has(categoryKey)) continue;
+    if (terms.some((term) => paddedHaystack.includes(` ${term} `))) return categoryKey;
+  }
+  return undefined;
+};
+
+const isExpectedCacheKey = (cacheKey: string | undefined | null, garmentType = 'upper') => {
+  const version = getExpectedCacheVersion(garmentType);
+  return Boolean(cacheKey && cacheKey.startsWith(`${version}:`));
+};
+
+const getCacheImageInfo = async (cacheKey: string, garmentType = 'upper') => {
   const response = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(cacheKey)}`, {
     headers: getAiHeaders()
   });
@@ -165,7 +239,7 @@ const getCacheImageInfo = async (cacheKey: string) => {
     height,
     version,
     matchesExpectedSize: width === EXPECTED_GARMENT_CACHE_WIDTH && height === EXPECTED_GARMENT_CACHE_HEIGHT,
-    matchesExpectedVersion: version === EXPECTED_GARMENT_CACHE_VERSION || isExpectedCacheKey(cacheKey),
+    matchesExpectedVersion: version === getExpectedCacheVersion(garmentType) || isExpectedCacheKey(cacheKey, garmentType),
   };
 };
 
@@ -194,10 +268,12 @@ const uploadReviewImage = async (
       Bucket: BUCKET,
       Key: key,
       Body: imageBytes,
-      ContentType: contentType
+      ContentType: contentType,
+      ...getStorageEncryptionParams(),
     }));
     return `s3://${BUCKET}/${key}`;
-  } catch {
+  } catch (error) {
+    if (!STORAGE_LOCAL_FALLBACK_ALLOWED) throw error;
     const localDir = buildUploadPath('tryon-review', userId, requestId);
     fs.mkdirSync(localDir, { recursive: true });
     const localPath = path.join(localDir, `${kind}${extension}`);
@@ -225,19 +301,21 @@ const uploadOriginalGarment = async (
   const fileContent = fs.readFileSync(filePath);
   const fileExtension = path.extname(filePath) || '.png';
   const storageGarmentId = sanitizePathSegment(garmentId, 'garment');
-  const key = `garments/originals/${userId}/${storageGarmentId}/${uuidv4()}${fileExtension}`;
+  const key = `garments/originals/${userId}/${storageGarmentId}/${crypto.randomUUID()}${fileExtension}`;
   try {
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       Body: fileContent,
-      ContentType: mime
+      ContentType: mime,
+      ...getStorageEncryptionParams(),
     }));
     return `s3://${BUCKET}/${key}`;
-  } catch {
+  } catch (error) {
+    if (!STORAGE_LOCAL_FALLBACK_ALLOWED) throw error;
     const localDir = buildUploadPath('garments', userId, storageGarmentId);
     fs.mkdirSync(localDir, { recursive: true });
-    const localPath = path.join(localDir, `${uuidv4()}${fileExtension}`);
+    const localPath = path.join(localDir, `${crypto.randomUUID()}${fileExtension}`);
     fs.writeFileSync(localPath, fileContent);
     return `local:${localPath}`;
   }
@@ -270,19 +348,21 @@ const uploadThumbnail = async (
 ): Promise<string> => {
   const thumb = await sharp(imageBytes).resize(256, 256, { fit: 'contain', background: '#00000000' }).png().toBuffer();
   const storageGarmentId = sanitizePathSegment(garmentId, 'garment');
-  const key = `garments/thumbs/${userId}/${storageGarmentId}/${uuidv4()}.png`;
+  const key = `garments/thumbs/${userId}/${storageGarmentId}/${crypto.randomUUID()}.png`;
   try {
     await s3.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       Body: thumb,
-      ContentType: 'image/png'
+      ContentType: 'image/png',
+      ...getStorageEncryptionParams(),
     }));
     return `s3://${BUCKET}/${key}`;
-  } catch {
+  } catch (error) {
+    if (!STORAGE_LOCAL_FALLBACK_ALLOWED) throw error;
     const localDir = buildUploadPath('garments', userId, storageGarmentId, 'thumbs');
     fs.mkdirSync(localDir, { recursive: true });
-    const localPath = path.join(localDir, `${uuidv4()}.png`);
+    const localPath = path.join(localDir, `${crypto.randomUUID()}.png`);
     fs.writeFileSync(localPath, thumb);
     return `local:${localPath}`;
   }
@@ -338,14 +418,15 @@ const listGarmentsWithMatchState = async (userId: number) => {
  */
 const authMiddleware = async (req: any, res: any, next: any) => {
   try {
-    const validKey = await resolveActiveApiKey(prisma, req.headers.authorization);
-    if (!validKey) {
+    const resolvedCredential = await resolveSdkApiKey(prisma, req.headers.authorization);
+    if (!resolvedCredential) {
       return res.status(401).json({ 
         error: 'Invalid API key',
         message: 'The provided API key is invalid or has been revoked'
       });
     }
 
+    const validKey = resolvedCredential.apiKey;
     const validUser = await prisma.user.findUnique({ where: { id: validKey.userId } });
     if (!validUser) {
       return res.status(401).json({
@@ -356,10 +437,35 @@ const authMiddleware = async (req: any, res: any, next: any) => {
 
     req.apiKey = validKey;
     req.user = validUser;
+    req.isDashboardPreview = resolvedCredential.dashboardPreview;
+    req.storefrontContext = resolvedCredential.storefront;
     
     next();
   } catch (error) {
     console.error('Auth middleware error:', formatLogError(error));
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+};
+
+const serverApiKeyMiddleware = async (req: any, res: any, next: any) => {
+  try {
+    const apiKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+    if (!apiKey || apiKey.kind !== 'manual' || !String(apiKey.scopes || '').split(',').includes('storefront:tryon')) {
+      return res.status(401).json({
+        error: 'SERVER_API_KEY_REQUIRED',
+        message: 'Use an active server-side DrapixAI storefront key for this operation.',
+      });
+    }
+    const user = await prisma.user.findUnique({ where: { id: apiKey.userId } });
+    if (!user) return res.status(401).json({ error: 'SERVER_API_KEY_REQUIRED' });
+    if (!hasPermission(user.role, 'tenant:manage')) {
+      return res.status(403).json({ error: 'TENANT_MANAGER_REQUIRED' });
+    }
+    req.apiKey = apiKey;
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Server API key middleware error:', formatLogError(error));
     res.status(500).json({ error: 'Authentication failed' });
   }
 };
@@ -374,6 +480,7 @@ const getRequestDomain = (req: any): string | null => {
       // ignore
     }
   }
+  if (process.env.NODE_ENV === 'production') return null;
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   if (host && typeof host === 'string') {
     return host.split(':')[0].toLowerCase();
@@ -391,7 +498,7 @@ const isDomainAllowed = (domainWhitelist: string, domain: string | null) => {
 
 const enforceSingleDomain = async (apiKeyId: number, current: string | null, domainWhitelist: string) => {
   if (!current) return domainWhitelist;
-  if (domainWhitelist === '*') {
+  if (domainWhitelist === '*' && ALLOW_SDK_DOMAIN_AUTO_BIND) {
     const updated = await prisma.apiKey.update({
       where: { id: apiKeyId },
       data: { domainWhitelist: normalizeDomain(current) }
@@ -403,8 +510,36 @@ const enforceSingleDomain = async (apiKeyId: number, current: string | null, dom
 
 const enforceSdkRequestDomain = async (req: any, res: any) => {
   const apiKey = req.apiKey;
+  const storefront = req.storefrontContext as StorefrontCredentialContext | null;
+  if (storefront?.channel === 'mobile') {
+    const requestAppId = String(req.headers['x-drapixai-app-id'] || '').trim();
+    if (!requestAppId || requestAppId !== storefront.appId) {
+      res.status(403).json({
+        error: 'MOBILE_APP_NOT_ALLOWED',
+        message: 'This shopper token is not authorized for the requesting mobile application.',
+      });
+      return false;
+    }
+    req.sdkDomainWhitelist = `mobile:${storefront.appId}`;
+    return true;
+  }
+  if (process.env.NODE_ENV === 'production' && !req.user?.storeVerifiedAt && !req.isDashboardPreview) {
+    res.status(403).json({
+      error: 'STOREFRONT_NOT_VERIFIED',
+      message: 'Verify storefront ownership in the DrapixAI dashboard before enabling shopper try-on.'
+    });
+    return false;
+  }
   const requestDomain = getRequestDomain(req);
-  const finalWhitelist = await enforceSingleDomain(apiKey.id, requestDomain, apiKey.domainWhitelist);
+  const finalWhitelist = storefront?.allowedDomain
+    || await enforceSingleDomain(apiKey.id, requestDomain, apiKey.domainWhitelist);
+  if (SINGLE_DOMAIN_REQUIRED && finalWhitelist === '*') {
+    res.status(403).json({
+      error: 'SDK_DOMAIN_NOT_CONFIGURED',
+      message: 'Configure and verify the storefront domain in the DrapixAI dashboard before using this API key.'
+    });
+    return false;
+  }
   if (SINGLE_DOMAIN_REQUIRED && !isDomainAllowed(finalWhitelist, requestDomain)) {
     res.status(403).json({
       error: 'Domain not allowed',
@@ -412,19 +547,93 @@ const enforceSdkRequestDomain = async (req: any, res: any) => {
     });
     return false;
   }
+  req.sdkDomainWhitelist = finalWhitelist;
   return true;
 };
-const incrementDailyUsage = async (apiKeyId: number) => {
-  const now = new Date();
-  const utcDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  await prisma.usageDaily.upsert({
-    where: { apiKeyId_date: { apiKeyId, date: utcDate } },
-    update: { count: { increment: 1 } },
-    create: { apiKeyId, date: utcDate, count: 1 }
-  });
+
+const requireShopperCredential = (req: any, res: any) => {
+  if (process.env.NODE_ENV === 'production' && !req.storefrontContext && !req.isDashboardPreview) {
+    res.status(403).json({
+      error: 'SHORT_LIVED_STOREFRONT_TOKEN_REQUIRED',
+      message: 'Shopper try-on requests require a short-lived, product-scoped DrapixAI token.',
+    });
+    return false;
+  }
+  return true;
 };
 
+const enforceStorefrontProductScope = (req: any, res: any, productId: unknown) => {
+  const storefront = req.storefrontContext as StorefrontCredentialContext | null;
+  if (!storefront) return true;
+  const normalizedProductId = String(productId || '').trim();
+  if (!normalizedProductId || !isStorefrontProductAllowed(storefront, normalizedProductId)) {
+    res.status(403).json({
+      error: 'TOKEN_PRODUCT_SCOPE_DENIED',
+      message: 'This shopper token is not authorized for the requested product.',
+    });
+    return false;
+  }
+  return true;
+};
 router.use(createRateLimitMiddleware(600, 15 * 60 * 1000));
+
+/**
+ * POST /sdk/storefront-token
+ * Server-to-server token exchange. Permanent keys must never be exposed to shoppers.
+ */
+router.post('/storefront-token', serverApiKeyMiddleware, async (req: any, res: any) => {
+  try {
+    const apiKey = req.apiKey;
+    const user = req.user;
+    const channel = req.body?.channel === 'mobile' ? 'mobile' : req.body?.channel === 'web' ? 'web' : null;
+    const requestedProductIds: unknown[] = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+    const productIds: string[] = [...new Set<string>(
+      requestedProductIds.map((value: unknown) => String(value || '').trim()),
+    )];
+    if (!channel || productIds.length === 0 || productIds.length > 50 || productIds.some((id) => !id || id.length > 160)) {
+      return res.status(400).json({ error: 'INVALID_STOREFRONT_TOKEN_REQUEST' });
+    }
+
+    let allowedDomain: string | null = null;
+    let appId: string | null = null;
+    if (channel === 'web') {
+      allowedDomain = String(apiKey.domainWhitelist || '').trim().toLowerCase();
+      if (!user.storeVerifiedAt || !allowedDomain || allowedDomain === '*') {
+        return res.status(403).json({ error: 'STOREFRONT_NOT_VERIFIED' });
+      }
+    } else {
+      appId = String(req.body?.appId || '').trim();
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/.test(appId)) {
+        return res.status(400).json({ error: 'INVALID_MOBILE_APP_ID' });
+      }
+    }
+
+    const unavailableProducts: string[] = [];
+    for (const productId of productIds) {
+      const garment = await resolveConfirmedGarmentForProduct(prisma, user.id, productId);
+      if (!garment) unavailableProducts.push(productId);
+    }
+    if (unavailableProducts.length > 0) {
+      return res.status(409).json({
+        error: 'PRODUCT_NOT_DRAPIXAI_READY',
+        productIds: unavailableProducts,
+      });
+    }
+
+    const token = issueGenericStorefrontToken({
+      apiKeyId: apiKey.id,
+      userId: user.id,
+      channel,
+      allowedDomain,
+      appId,
+      productIds,
+    });
+    return res.json({ token, tokenType: 'Bearer', expiresInSeconds: 300, productIds, channel });
+  } catch (error) {
+    console.error('Storefront token exchange error:', formatLogError(error));
+    return res.status(500).json({ error: 'STOREFRONT_TOKEN_ISSUE_FAILED' });
+  }
+});
 
 /**
  * POST /sdk/validate
@@ -432,20 +641,12 @@ router.use(createRateLimitMiddleware(600, 15 * 60 * 1000));
  */
 router.post('/validate', authMiddleware, async (req: any, res: any) => {
   try {
-    const { domain } = req.body;
-    const apiKey = req.apiKey;
     const user = req.user;
-
-    // Check domain whitelist
-    const currentDomain = domain || getRequestDomain(req);
-    const finalWhitelist = await enforceSingleDomain(apiKey.id, currentDomain, apiKey.domainWhitelist);
-    if (SINGLE_DOMAIN_REQUIRED && !isDomainAllowed(finalWhitelist, currentDomain)) {
-      return res.status(403).json({ 
-        valid: false, 
-        error: 'Domain not allowed',
-        message: `This API key is not authorized for domain: ${currentDomain || 'unknown'}`
-      });
-    }
+    const apiKey = req.apiKey;
+    if (!requireShopperCredential(req, res)) return;
+    if (!(await enforceSdkRequestDomain(req, res))) return;
+    if (!enforceStorefrontProductScope(req, res, req.body?.productId)) return;
+    const finalWhitelist = req.sdkDomainWhitelist as string;
 
     // Check subscription status
     const plan = getUserPlanContext(user);
@@ -462,20 +663,14 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
 
     // Get usage stats
     const now = new Date();
-    const usage = await prisma.usage.findFirst({ 
-      where: { 
-        apiKeyId: apiKey.id, 
-        month: now.getMonth() + 1, 
-        year: now.getFullYear() 
-      } 
-    });
+    const rendersUsed = await getUserMonthlyUsage(prisma, user.id, now);
 
     res.json({ 
       valid: true,
       plan: plan.normalizedPlan,
       planName: plan.planName,
-      rendersUsed: usage?.renderCount || 0,
-      quotaRemaining: Math.max(0, plan.quota - (usage?.renderCount || 0)),
+      rendersUsed,
+      quotaRemaining: Math.max(0, plan.quota - rendersUsed),
       quota: plan.quota,
       domain: finalWhitelist,
       selectedPlan: user.selectedPlan || null,
@@ -493,18 +688,13 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
  * POST /sdk/render
  * Submit a new render job
  */
-router.post('/render', authMiddleware, upload.single('image'), async (req: any, res: any) => {
+router.post('/render', authMiddleware, requireLegacyAsyncRender, upload.single('image'), async (req: any, res: any) => {
   try {
     const apiKey = req.apiKey;
     const user = req.user;
-    const requestDomain = getRequestDomain(req);
-    const finalWhitelist = await enforceSingleDomain(apiKey.id, requestDomain, apiKey.domainWhitelist);
-
-    if (SINGLE_DOMAIN_REQUIRED && !isDomainAllowed(finalWhitelist, requestDomain)) {
-      return res.status(403).json({
-        error: 'Domain not allowed',
-        message: `This API key is not authorized for domain: ${requestDomain || 'unknown'}`
-      });
+    if (!(await enforceSdkRequestDomain(req, res))) {
+      removeUploadedFile(req.file);
+      return;
     }
     const { productId } = req.body;
 
@@ -515,7 +705,7 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       });
     }
 
-    if (!isAllowedImageFileContent(req.file)) {
+    if (!(await isAllowedImageFileContent(req.file))) {
       removeUploadedFile(req.file);
       return res.status(400).json({ error: 'INVALID_IMAGE_CONTENT' });
     }
@@ -543,15 +733,9 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
     }
 
     const now = new Date();
-    let usage = await prisma.usage.findFirst({ 
-      where: { 
-        apiKeyId: apiKey.id, 
-        month: now.getMonth() + 1, 
-        year: now.getFullYear() 
-      } 
-    });
+    const rendersUsed = await getUserMonthlyUsage(prisma, user.id, now);
 
-    if (usage && usage.renderCount >= plan.quota) {
+    if (rendersUsed >= plan.quota) {
       return res.status(403).json({ 
         error: 'Quota exceeded',
         message: `You've reached your monthly limit of ${plan.quota} renders. Please upgrade your plan.`
@@ -563,7 +747,7 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
     const fileExtension = path.extname(req.file.originalname) || '.jpg';
     
     // Session-based storage
-    const inputKey = `session/${uuidv4()}-${Date.now()}${fileExtension}`;
+    const inputKey = `session/${crypto.randomUUID()}-${Date.now()}${fileExtension}`;
 
     // Upload to S3/MinIO
     try {
@@ -571,10 +755,12 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
         Bucket: BUCKET,
         Key: inputKey,
         Body: fileContent,
-        ContentType: req.file.mimetype
+        ContentType: req.file.mimetype,
+        ...getStorageEncryptionParams(),
       }));
       console.log(`Uploaded session image to ${inputKey}`);
     } catch (s3Error) {
+      if (!STORAGE_LOCAL_FALLBACK_ALLOWED) throw s3Error;
       console.log('S3 not available, using local temp storage');
     }
 
@@ -601,22 +787,7 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
     }));
 
     // Update usage count
-    if (usage) {
-      await prisma.usage.update({ 
-        where: { id: usage.id }, 
-        data: { renderCount: { increment: 1 } } 
-      });
-    } else {
-      await prisma.usage.create({ 
-        data: { 
-          apiKeyId: apiKey.id, 
-          renderCount: 1, 
-          month: now.getMonth() + 1, 
-          year: now.getFullYear() 
-        } 
-      });
-    }
-    await incrementDailyUsage(apiKey.id);
+    await incrementApiKeyUsage(prisma, apiKey.id, now);
 
     // Clean up temp file
     fs.unlinkSync(req.file.path);
@@ -635,6 +806,8 @@ router.post('/render', authMiddleware, upload.single('image'), async (req: any, 
       error: 'Render failed',
       message: 'Failed to process your request. Please try again.'
     });
+  } finally {
+    removeUploadedFile(req.file);
   }
 });
 
@@ -656,21 +829,23 @@ router.post('/tryon', authMiddleware, upload.fields([
       removeUploadedFile(personFile);
       removeUploadedFile(clothFile);
     };
-    const requestDomain = getRequestDomain(req);
-    const finalWhitelist = await enforceSingleDomain(apiKey.id, requestDomain, apiKey.domainWhitelist);
-
-    if (SINGLE_DOMAIN_REQUIRED && !isDomainAllowed(finalWhitelist, requestDomain)) {
+    if (!requireShopperCredential(req, res)) {
       cleanupTryOnUploadFiles();
-      return res.status(403).json({
-        error: 'Domain not allowed',
-        message: `This API key is not authorized for domain: ${requestDomain || 'unknown'}`
-      });
+      return;
+    }
+    if (!(await enforceSdkRequestDomain(req, res))) {
+      cleanupTryOnUploadFiles();
+      return;
     }
 
     const explicitGarmentId = req.body.garment_id as string | undefined;
     const requestedProductId = req.body.productId as string | undefined;
     const garmentId = explicitGarmentId || requestedProductId;
     const clothCacheKey = req.body.cloth_cache_key as string | undefined;
+    if (!enforceStorefrontProductScope(req, res, requestedProductId)) {
+      cleanupTryOnUploadFiles();
+      return;
+    }
 
     if (!personFile) {
       cleanupTryOnUploadFiles();
@@ -680,7 +855,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       });
     }
 
-    if (!isAllowedImageFileContent(personFile) || (clothFile && !isAllowedImageFileContent(clothFile))) {
+    if (!(await isAllowedImageFileContent(personFile)) || (clothFile && !(await isAllowedImageFileContent(clothFile)))) {
       cleanupTryOnUploadFiles();
       return res.status(400).json({
         error: 'INVALID_IMAGE_CONTENT',
@@ -716,27 +891,25 @@ router.post('/tryon', authMiddleware, upload.fields([
           : 'Please upgrade your plan to continue using DrapixAI'
       });
     }
-    let usage = await prisma.usage.findFirst({
-      where: {
-        apiKeyId: apiKey.id,
-        month: now.getMonth() + 1,
-        year: now.getFullYear()
-      }
-    });
+    const rendersUsed = await getUserMonthlyUsage(prisma, user.id, now);
 
-    if (usage && usage.renderCount >= plan.quota) {
+    if (rendersUsed >= plan.quota) {
       cleanupTryOnUploadFiles();
       return res.status(429).json({ error: 'TRY_ON_LIMIT_EXCEEDED' });
     }
 
-    const garmentType = String(req.body.garment_type || 'upper').toLowerCase();
-    if (garmentType !== 'upper') {
+    const garmentType = normalizeGarmentType(req.body.garment_type || 'upper');
+    if (!garmentType) {
       cleanupTryOnUploadFiles();
-      return res.status(400).json({ error: 'UPPER_BODY_ONLY' });
+      return res.status(400).json({ error: 'UNSUPPORTED_GARMENT_TYPE' });
+    }
+    if (garmentType === 'lower' && !ENABLE_LOWER_BODY) {
+      cleanupTryOnUploadFiles();
+      return res.status(403).json({ error: 'LOWER_BODY_NOT_ENABLED' });
     }
 
     const requestStartedAt = Date.now();
-    const requestId = uuidv4();
+    const requestId = crypto.randomUUID();
 
     try {
       const personBytes = fs.readFileSync(personFile.path);
@@ -761,14 +934,22 @@ router.post('/tryon', authMiddleware, upload.fields([
         }
         garmentRecord = garment;
         actualGarmentId = garment.garmentId;
+        const storedGarmentType = normalizeGarmentType(garment.garmentType || 'upper');
+        if (storedGarmentType !== garmentType) {
+          return res.status(409).json({
+            error: 'GARMENT_TYPE_MISMATCH',
+            message: `This garment is stored as ${storedGarmentType || 'unknown'}, but the request asked for ${garmentType}.`
+          });
+        }
         garmentReviewUrl = garment.thumbnailUrl || garment.originalUrl || undefined;
         if (!garment.cacheKey) {
           return res.status(409).json({ error: 'GARMENT_NOT_READY' });
         }
-        if (GARMENT_APPROVAL_REQUIRED && garment.status === 'pending') {
+        const approvalRequiredForType = GARMENT_APPROVAL_REQUIRED || (garmentType === 'lower' && LOWER_BODY_ADMIN_REVIEW_REQUIRED);
+        if (approvalRequiredForType && garment.status === 'pending') {
           return res.status(403).json({ error: 'GARMENT_PENDING_APPROVAL' });
         }
-        if (GARMENT_APPROVAL_REQUIRED && garment.status === 'rejected') {
+        if (garment.status === 'rejected') {
           return res.status(403).json({ error: 'GARMENT_REJECTED', reason: garment.rejectedReason || '' });
         }
         cacheKey = garment.cacheKey;
@@ -817,6 +998,7 @@ router.post('/tryon', authMiddleware, upload.fields([
           garment_id: actualGarmentId,
           category: garmentRecord.category || undefined,
           product_name: garmentRecord.productName || garmentRecord.displayName || undefined,
+          garment_type: garmentType,
           admin_bypass: false
         };
         const regenRes = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
@@ -826,29 +1008,29 @@ router.post('/tryon', authMiddleware, upload.fields([
         });
         if (!regenRes.ok) return false;
         const regen = await regenRes.json() as GarmentPreprocessResponse;
-        if (!regen.cache_key || !isExpectedCacheKey(regen.cache_key)) return false;
+        if (!regen.cache_key || !isExpectedCacheKey(regen.cache_key, garmentType)) return false;
         finalCacheKey = regen.cache_key as string;
         garmentCacheStatus = reason;
         sdkOperationalWarnings.push(reason.toUpperCase());
         await prisma.garment.update({
           where: { userId_garmentId: { userId: user.id, garmentId: actualGarmentId } },
-          data: { cacheKey: finalCacheKey, status: 'ready' }
+          data: { cacheKey: finalCacheKey, status: garmentType === 'lower' ? garmentRecord.status : 'ready' }
         });
         return true;
       };
 
       if (finalCacheKey) {
-        if (!isExpectedCacheKey(finalCacheKey)) {
+        if (!isExpectedCacheKey(finalCacheKey, garmentType)) {
           const regenerated = await regenerateCacheFromOriginal('garment_cache_regenerated_stale_version');
           if (!regenerated) {
             return res.status(409).json({
               error: 'GARMENT_CACHE_STALE',
-              message: `Regenerate this garment cache with ${EXPECTED_GARMENT_CACHE_VERSION} before storefront try-on.`
+              message: `Regenerate this garment cache with ${getExpectedCacheVersion(garmentType)} before storefront try-on.`
             });
           }
         }
 
-        const cacheInfo = await getCacheImageInfo(finalCacheKey);
+        const cacheInfo = await getCacheImageInfo(finalCacheKey, garmentType);
         if (!cacheInfo.ok) {
           const regenerated = await regenerateCacheFromOriginal('garment_cache_regenerated_miss');
           if (!regenerated) {
@@ -889,6 +1071,9 @@ router.post('/tryon', authMiddleware, upload.fields([
         cloth_image_base64: clothBase64,
         quality: selectedQuality,
         garment_type: garmentType,
+        garment_category: garmentType === 'lower'
+          ? resolveLowerCategory(garmentRecord?.category || req.body.garment_category, garmentRecord?.productName || garmentRecord?.displayName)
+          : undefined,
         cloth_cache_key: generationGarmentSource === 'cache' ? finalCacheKey : undefined
       };
 
@@ -917,6 +1102,7 @@ router.post('/tryon', authMiddleware, upload.fields([
       const timingJson = aiResponse.headers.get('x-drapixai-timing-json') || '';
       const qualityJson = aiResponse.headers.get('x-drapixai-quality-json') || '';
       const qualityMode = aiResponse.headers.get('x-drapixai-quality-mode') || selectedQuality;
+      const qualityProfile = aiResponse.headers.get('x-drapixai-quality-profile') || '';
       const garmentSource = generationGarmentSource || aiResponse.headers.get('x-drapixai-garment-source') || (finalCacheKey ? 'cache' : 'direct_upload');
       const parsedTimingJson = parseJsonSafe<Record<string, unknown>>(timingJson);
       const parsedQualityJson = parseJsonSafe<Record<string, unknown>>(qualityJson);
@@ -1001,22 +1187,7 @@ router.post('/tryon', authMiddleware, upload.fields([
         });
       }
 
-      if (usage) {
-        await prisma.usage.update({
-          where: { id: usage.id },
-          data: { renderCount: { increment: 1 } }
-        });
-      } else {
-        await prisma.usage.create({
-          data: {
-            apiKeyId: apiKey.id,
-            renderCount: 1,
-            month: now.getMonth() + 1,
-            year: now.getFullYear()
-          }
-        });
-      }
-      await incrementDailyUsage(apiKey.id);
+      await incrementApiKeyUsage(prisma, apiKey.id, now);
 
       res.setHeader('Content-Type', contentType);
       res.setHeader('x-drapixai-tryon-result-id', String(tryOnResult.id));
@@ -1032,9 +1203,10 @@ router.post('/tryon', authMiddleware, upload.fields([
       res.setHeader('x-drapixai-confidence-badge', confidenceBadge);
       res.setHeader('x-drapixai-product-accuracy-json', JSON.stringify(productAccuracyReport));
       res.setHeader('x-drapixai-quality-mode', qualityMode);
+      if (qualityProfile) res.setHeader('x-drapixai-quality-profile', qualityProfile);
       res.setHeader('x-drapixai-garment-source', garmentSource);
       res.setHeader('x-drapixai-garment-cache-status', garmentCacheStatus);
-      res.setHeader('x-drapixai-garment-cache-version', EXPECTED_GARMENT_CACHE_VERSION);
+      res.setHeader('x-drapixai-garment-cache-version', getExpectedCacheVersion(garmentType));
       res.send(buffer);
     } finally {
       cleanupTryOnUploadFiles();
@@ -1051,6 +1223,7 @@ router.post('/tryon', authMiddleware, upload.fields([
  */
 router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
   try {
+    if (!requireShopperCredential(req, res)) return;
     if (!(await enforceSdkRequestDomain(req, res))) return;
     const user = req.user;
     const tryOnResultId = Number(req.body?.tryOnResultId || req.body?.try_on_result_id || 0);
@@ -1059,9 +1232,10 @@ router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
     }
 
     const result = await prisma.tryOnResult.findUnique({ where: { id: tryOnResultId } });
-    if (!result || result.userId !== user.id) {
+    if (!result || !ownsTenantResource(user.id, result.userId)) {
       return res.status(404).json({ error: 'TRYON_RESULT_NOT_FOUND' });
     }
+    if (!enforceStorefrontProductScope(req, res, result.productId)) return;
 
     const feedback = await prisma.tryOnFeedback.create({
       data: {
@@ -1097,13 +1271,26 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
     const requestedCategory = String(req.body.category || '').trim();
     const requestedProductName = String(req.body.product_name || req.body.display_name || '').trim();
     const requestedProfile = String(req.body.garment_profile || '').trim();
+    const requestedGarmentType = normalizeGarmentType(req.body.garment_type || 'upper');
     const adminBypass = String(req.body.admin_bypass || '').toLowerCase() === 'true';
+
+    if (!requestedGarmentType) {
+      return res.status(400).json({ error: 'UNSUPPORTED_GARMENT_TYPE' });
+    }
+    if (requestedGarmentType === 'lower') {
+      if (!ENABLE_LOWER_BODY) {
+        return res.status(403).json({ error: 'LOWER_BODY_NOT_ENABLED', message: getGarmentValidationMessage('LOWER_BODY_NOT_ENABLED') });
+      }
+      if (!isLowerCategoryAllowed(requestedCategory, requestedProfile)) {
+        return res.status(422).json({ error: 'UNSUPPORTED_LOWER_CATEGORY' });
+      }
+    }
 
     if (!req.file) {
       return res.status(400).json({ error: 'CLOTH_IMAGE_REQUIRED' });
     }
 
-    if (!isAllowedImageFileContent(req.file)) {
+    if (!(await isAllowedImageFileContent(req.file))) {
       return res.status(400).json({ error: 'INVALID_IMAGE_CONTENT' });
     }
 
@@ -1122,6 +1309,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
       category: requestedCategory || undefined,
       product_name: requestedProductName || displayName,
       garment_profile: requestedProfile || undefined,
+      garment_type: requestedGarmentType,
       admin_bypass: adminBypass
     };
 
@@ -1145,11 +1333,11 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
 
     const result = await aiResponse.json() as GarmentPreprocessResponse;
     const cacheKey = result.cache_key as string;
-    const normalizedCategory = requestedCategory || result.profile_label || 'Upper-Body Garment';
+    const normalizedCategory = requestedCategory || result.profile_label || (requestedGarmentType === 'lower' ? 'Lower-Body Garment' : 'Upper-Body Garment');
     const normalizedProductName = requestedProductName || displayName;
 
     const thumbnailUrl = await uploadThumbnail(user.id, garmentId, Buffer.from(result.image_base64, 'base64'));
-    const status = GARMENT_APPROVAL_REQUIRED ? 'pending' : 'ready';
+    const status = GARMENT_APPROVAL_REQUIRED || (requestedGarmentType === 'lower' && LOWER_BODY_ADMIN_REVIEW_REQUIRED) ? 'pending' : 'ready';
     await prisma.garment.upsert({
       where: { userId_garmentId: { userId: user.id, garmentId } },
       update: {
@@ -1160,7 +1348,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
         thumbnailUrl,
         status,
         category: normalizedCategory,
-        garmentType: 'upper',
+        garmentType: requestedGarmentType,
         productName: normalizedProductName,
       },
       create: {
@@ -1173,7 +1361,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
         thumbnailUrl,
         status,
         category: normalizedCategory,
-        garmentType: 'upper',
+        garmentType: requestedGarmentType,
         productName: normalizedProductName,
       }
     });
@@ -1187,6 +1375,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
       reason: result.reason,
       status,
       category: normalizedCategory,
+      garmentType: requestedGarmentType,
       supportLevel: result.support_level || 'launch_ready',
       warnings: result.warnings || [],
     });
@@ -1211,13 +1400,20 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
     }
 
     const results: any[] = [];
+    const requestedGarmentType = normalizeGarmentType(req.body?.garment_type || 'upper');
+    if (!requestedGarmentType) {
+      return res.status(400).json({ error: 'UNSUPPORTED_GARMENT_TYPE' });
+    }
+    if (requestedGarmentType === 'lower' && !ENABLE_LOWER_BODY) {
+      return res.status(403).json({ error: 'LOWER_BODY_NOT_ENABLED', message: getGarmentValidationMessage('LOWER_BODY_NOT_ENABLED') });
+    }
     for (const file of files) {
       const fileLabel = path.parse(file.originalname).name;
       if (!fileLabel) {
         results.push({ file: file.originalname, error: 'INVALID_FILENAME' });
         continue;
       }
-      if (!isAllowedImageFileContent(file)) {
+      if (!(await isAllowedImageFileContent(file))) {
         results.push({ file: file.originalname, error: 'INVALID_IMAGE_CONTENT' });
         continue;
       }
@@ -1231,6 +1427,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
         brand_id: String(user.id),
         garment_id: garmentId,
         product_name: displayName,
+        garment_type: requestedGarmentType,
         admin_bypass: false
       };
       const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
@@ -1250,9 +1447,9 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
       }
       const result = await aiResponse.json() as GarmentPreprocessResponse;
       const cacheKey = result.cache_key as string;
-      const normalizedCategory = result.profile_label || 'Upper-Body Garment';
+      const normalizedCategory = result.profile_label || (requestedGarmentType === 'lower' ? 'Lower-Body Garment' : 'Upper-Body Garment');
       const thumbnailUrl = await uploadThumbnail(user.id, garmentId, Buffer.from(result.image_base64, 'base64'));
-      const status = GARMENT_APPROVAL_REQUIRED ? 'pending' : 'ready';
+      const status = GARMENT_APPROVAL_REQUIRED || (requestedGarmentType === 'lower' && LOWER_BODY_ADMIN_REVIEW_REQUIRED) ? 'pending' : 'ready';
       await prisma.garment.upsert({
         where: { userId_garmentId: { userId: user.id, garmentId } },
         update: {
@@ -1263,7 +1460,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
           thumbnailUrl,
           status,
           category: normalizedCategory,
-          garmentType: 'upper',
+          garmentType: requestedGarmentType,
           productName: displayName,
         },
         create: {
@@ -1276,7 +1473,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
           thumbnailUrl,
           status,
           category: normalizedCategory,
-          garmentType: 'upper',
+          garmentType: requestedGarmentType,
           productName: displayName,
         }
       });
@@ -1286,6 +1483,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
         cacheKey,
         status,
         category: normalizedCategory,
+        garmentType: requestedGarmentType,
         supportLevel: result.support_level || 'launch_ready',
         warnings: result.warnings || [],
       });
@@ -1567,7 +1765,7 @@ router.get('/garments/:garmentId/thumbnail', authMiddleware, requireDashboardPro
  * GET /sdk/status/:jobId
  * Check render job status
  */
-router.get('/status/:jobId', authMiddleware, async (req: any, res: any) => {
+router.get('/status/:jobId', authMiddleware, requireLegacyAsyncRender, async (req: any, res: any) => {
   try {
     if (!(await enforceSdkRequestDomain(req, res))) return;
     const jobId = parseInt(req.params.jobId);
@@ -1622,7 +1820,7 @@ router.get('/status/:jobId', authMiddleware, async (req: any, res: any) => {
  * GET /sdk/result/:jobId
  * Get the final rendered image
  */
-router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
+router.get('/result/:jobId', authMiddleware, requireLegacyAsyncRender, async (req: any, res: any) => {
   try {
     if (!(await enforceSdkRequestDomain(req, res))) return;
     const jobId = parseInt(req.params.jobId);
@@ -1688,7 +1886,7 @@ router.get('/result/:jobId', authMiddleware, async (req: any, res: any) => {
  * DELETE /sdk/job/:jobId
  * Cancel a pending job
  */
-router.delete('/job/:jobId', authMiddleware, async (req: any, res: any) => {
+router.delete('/job/:jobId', authMiddleware, requireLegacyAsyncRender, async (req: any, res: any) => {
   try {
     if (!(await enforceSdkRequestDomain(req, res))) return;
     const jobId = parseInt(req.params.jobId);

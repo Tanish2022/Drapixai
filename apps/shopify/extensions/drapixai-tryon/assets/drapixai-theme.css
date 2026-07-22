@@ -1,0 +1,13 @@
+.drapixai-shopify-block {
+  display: block;
+  width: 100%;
+  margin-block: 12px;
+}
+
+.drapixai-shopify-status {
+  margin: 8px 0 0;
+  color: rgb(100, 116, 139);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
