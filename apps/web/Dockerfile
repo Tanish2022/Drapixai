@@ -10,7 +10,7 @@ WORKDIR /app
 COPY . .
 
 RUN cd apps/web \
-    && npm ci \
+    && npm ci --include=dev \
     && npm run build \
     && npm prune --omit=dev
 

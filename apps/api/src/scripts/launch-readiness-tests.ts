@@ -283,7 +283,6 @@ const catvtonDownload = read('drapixai_ai/scripts/download_catvton.py');
 const catvtonPrepare = read('drapixai_ai/scripts/prepare_catvton.py');
 const catvtonProductionPatch = read('drapixai_ai/patches/catvton-local-vae.patch');
 const catvtonEngine = read('drapixai_ai/engines/catvton.py');
-const catvtonPipeline = read('drapixai_ai/third_party/CatVTON/model/pipeline.py');
 const runLaunchTryon = read('deploy/runpod/run-launch-tryon-test.sh');
 const runpodSdkApiSetup = read('deploy/runpod/setup-sdk-api-stack.sh');
 const runpodFreshSetup = read('deploy/runpod/setup-fresh-runpod.sh');
@@ -1225,8 +1224,10 @@ assertNotIncludes(launchWorkflow, '--disable-pip', 'Launch CI must resolve trans
 assertIncludes(launchWorkflow, '--ignore-vuln PYSEC-2026-2274', 'Launch CI may suppress only the documented rembg path-traversal server advisory');
 assertIncludes(launchWorkflow, '--ignore-vuln GHSA-55v6-g8pm-pw4c', 'Launch CI may suppress only the documented rembg SSRF/CORS server advisory');
 assertIncludes(launchWorkflow, '--ignore-vuln PYSEC-2026-3447', 'Launch CI may suppress only the documented macOS sdist Setuptools advisory');
+assertIncludes(launchWorkflow, '--ignore-vuln GHSA-rrmf-rvhw-rf47', 'Launch CI may suppress only the documented local-only Torch JIT advisory');
 assertIncludes(aiRuntimeSecurityDoc, 'does not install or expose the rembg HTTP server', 'Security docs must explain why rembg server advisories are non-reachable');
 assertIncludes(aiRuntimeSecurityDoc, 'does not build or publish source distributions at runtime', 'Security docs must explain why the Setuptools sdist advisory is non-reachable');
+assertIncludes(aiRuntimeSecurityDoc, 'does not invoke `torch.jit.script`', 'Security docs must explain why the Torch JIT advisory is non-reachable');
 assertIncludes(runpodSecurityCandidate, '-m pip_audit', 'RunPod candidate preparation must audit the complete resolved dependency graph');
 assertIncludes(catvtonDownload, 'revision=model_revision', 'Every downloaded model snapshot must use an immutable revision');
 assertIncludes(catvtonDownload, 'model-lock.json', 'Model preparation must write an auditable model lock');
@@ -1235,7 +1236,7 @@ assertIncludes(catvtonPrepare, 'git", "-C", str(CATVTON), "apply", "--check"', '
 assertIncludes(catvtonProductionPatch, 'vae_ckpt="stabilityai/sd-vae-ft-mse"', 'Tracked CatVTON patch must add an injectable local VAE path');
 assertIncludes(catvtonEngine, 'revision=settings.catvton_model_revision', 'CatVTON fallback download must remain revision-pinned');
 assertIncludes(catvtonEngine, 'vae_ckpt=settings.catvton_vae_model', 'CatVTON must load the pinned local VAE');
-assertIncludes(catvtonPipeline, 'AutoencoderKL.from_pretrained(vae_ckpt)', 'Vendored CatVTON must not hardcode an unpinned remote VAE');
+assertIncludes(catvtonProductionPatch, 'AutoencoderKL.from_pretrained(vae_ckpt)', 'Tracked CatVTON patch must replace the unpinned remote VAE before runtime');
 assertIncludes(runpodPreflight, 'Immutable model revisions verified.', 'RunPod preflight must verify the model lock');
 assertIncludes(runpodStartAll, 'flock -n 9', 'RunPod AI supervisor must reject duplicate service sets');
 assertIncludes(runpodStartAll, 'trap cleanup EXIT', 'RunPod AI supervisor must clean up child processes on exit');
@@ -1435,6 +1436,9 @@ assertIncludes(auditLog, 'pg_advisory_xact_lock', 'Audit hash-chain appends must
 assertIncludes(auditLog, 'verifySecurityAuditChain', 'Operators must be able to verify the immutable audit chain');
 assertIncludes(apiDockerfile, 'USER node', 'API container must run as a non-root user');
 assertIncludes(webDockerfile, 'USER node', 'Web container must run as a non-root user');
+assertIncludes(apiDockerfile, 'npm ci --include=dev', 'API build stage must install compiler dependencies before pruning them');
+assertIncludes(webDockerfile, 'npm ci --include=dev', 'Web build stage must install compiler dependencies before pruning them');
+assertIncludes(apiDockerfile, 'apt-get install -y --no-install-recommends openssl', 'API container must include the OpenSSL runtime required by Prisma');
 assertIncludes(aiDockerfile, 'USER 10001:10001', 'AI container must run as a dedicated non-root user');
 assertIncludes(edgeCompose, 'read_only: true', 'Production edge services must use read-only root filesystems');
 assertIncludes(edgeCompose, 'cap_drop:', 'Production edge services must drop Linux capabilities');

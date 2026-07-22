@@ -59,7 +59,8 @@ AUDIT_PYTHON="$AUDIT_VENV/bin/python"
   --progress-spinner off \
   --ignore-vuln PYSEC-2026-2274 \
   --ignore-vuln GHSA-55v6-g8pm-pw4c \
-  --ignore-vuln PYSEC-2026-3447
+  --ignore-vuln PYSEC-2026-3447 \
+  --ignore-vuln GHSA-rrmf-rvhw-rf47
 
 CANDIDATE_PYTHON="$CANDIDATE_VENV/bin/python"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
