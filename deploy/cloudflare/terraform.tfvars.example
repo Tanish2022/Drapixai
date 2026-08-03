@@ -1,0 +1,4 @@
+zone_id               = "replace-with-zone-id"
+api_hostname          = "api.drapixai.com"
+origin_ipv4           = "203.0.113.10"
+managed_waf_ruleset_id = "replace-with-managed-ruleset-id"

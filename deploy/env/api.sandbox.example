@@ -1,0 +1,13 @@
+NODE_ENV=production
+PORT=8000
+DRAPIXAI_API_ENVIRONMENT=sandbox
+DRAPIXAI_SECRETS_PROVIDER=aws-secrets-manager
+DRAPIXAI_AWS_SECRET_ID=drapixai/sandbox/api
+DATABASE_URL=postgresql://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-db.internal:5432/drapixai_sandbox?sslmode=verify-full
+REDIS_URL=rediss://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-redis.internal:6379/1
+DRAPIXAI_AI_URL=https://sandbox-ai.drapixai.internal
+DRAPIXAI_AI_ALLOWED_HOSTS=sandbox-ai.drapixai.internal
+DRAPIXAI_AI_PRIVATE_NETWORK=1
+S3_BUCKET=drapixai-sandbox
+AWS_REGION=ap-south-1
+DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY=1

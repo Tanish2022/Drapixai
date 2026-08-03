@@ -35,5 +35,7 @@ tmp_*
 tmp/
 *.pem
 deploy/env/*.production.env
+deploy/env/*.staging.env
+deploy/staging/private/
 output/
 outputs/

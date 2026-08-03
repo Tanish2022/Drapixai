@@ -1,0 +1,148 @@
+name: drapixai-staging-edge
+
+services:
+  postgres:
+    image: ${DRAPIXAI_POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: drapixai_staging
+      POSTGRES_DB: drapixai_staging
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - staging_postgres:/var/lib/postgresql/data
+      - ./private/postgres_password:/run/secrets/postgres_password:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drapixai_staging -d drapixai_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - data
+
+  redis:
+    image: ${DRAPIXAI_REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - exec redis-server --save '' --appendonly no --requirepass "$$(cat /run/secrets/redis_password)"
+    volumes:
+      - ./private/redis_password:/run/secrets/redis_password:ro
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    read_only: true
+    tmpfs:
+      - /data:size=256m,mode=0700
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - data
+
+  minio:
+    image: ${DRAPIXAI_MINIO_IMAGE:-minio/minio}
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+      MINIO_BROWSER: "off"
+    volumes:
+      - staging_minio:/data
+      - ./private/minio_root_user:/run/secrets/minio_root_user:ro
+      - ./private/minio_root_password:/run/secrets/minio_root_password:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - data
+
+  minio-init:
+    image: ${DRAPIXAI_MINIO_MC_IMAGE:-minio/mc}
+    restart: "no"
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      set -eu;
+      until mc alias set staging http://minio:9000
+      "$$(cat /run/secrets/minio_root_user)"
+      "$$(cat /run/secrets/minio_root_password)"; do sleep 2; done;
+      mc mb --ignore-existing staging/drapixai-staging;
+      mc anonymous set none staging/drapixai-staging
+    volumes:
+      - ./private/minio_root_user:/run/secrets/minio_root_user:ro
+      - ./private/minio_root_password:/run/secrets/minio_root_password:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - data
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../env/api.staging.env
+    volumes:
+      - ./private/drapixai-api.json:/run/secrets/drapixai-api:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${DRAPIXAI_STAGING_API_PORT:-18000}:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /app/apps/api/uploads:size=256m,mode=0700,uid=1000,gid=1000
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - edge
+      - data
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../env/web.staging.env
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${DRAPIXAI_STAGING_WEB_PORT:-13000}:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/apps/web/.next/cache:size=128m,mode=0700,uid=1000,gid=1000
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - edge
+
+volumes:
+  staging_postgres:
+  staging_minio:
+
+networks:
+  edge:
+  data:
+    internal: true

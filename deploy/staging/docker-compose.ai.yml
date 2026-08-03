@@ -1,0 +1,88 @@
+name: drapixai-staging-ai
+
+services:
+  redis:
+    image: ${DRAPIXAI_REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - exec redis-server --save '' --appendonly no --requirepass "$$(cat /run/secrets/ai_redis_password)"
+    volumes:
+      - ./private/ai_redis_password:/run/secrets/ai_redis_password:ro
+    read_only: true
+    tmpfs:
+      - /data:size=256m,mode=0700
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - ai-private
+
+  ai-api:
+    build:
+      context: ../..
+      dockerfile: drapixai_ai/docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../release/standard-catvton-rc1.env
+      - ../env/ai.staging.env
+    command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
+    depends_on:
+      - redis
+    ports:
+      - "127.0.0.1:${DRAPIXAI_STAGING_AI_PORT:-18080}:8080"
+    volumes:
+      - ../../models:/workspace/drapixai/models:ro
+      - staging_ai_runtime:/workspace/drapixai/runtime
+      - staging_ai_hf_cache:/workspace/.cache/huggingface
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    shm_size: 8gb
+    networks:
+      - ai-private
+    gpus: all
+
+  ai-worker:
+    build:
+      context: ../..
+      dockerfile: drapixai_ai/docker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../release/standard-catvton-rc1.env
+      - ../env/ai.staging.env
+    environment:
+      DRAPIXAI_WORKER_ROLE: upper
+    command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-worker.sh"]
+    depends_on:
+      - redis
+    volumes:
+      - ../../models:/workspace/drapixai/models:ro
+      - staging_ai_runtime:/workspace/drapixai/runtime
+      - staging_ai_hf_cache:/workspace/.cache/huggingface
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    shm_size: 8gb
+    networks:
+      - ai-private
+    gpus: all
+
+volumes:
+  staging_ai_runtime:
+  staging_ai_hf_cache:
+
+networks:
+  ai-private:
+    internal: true

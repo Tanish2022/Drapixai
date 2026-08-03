@@ -1,0 +1,17 @@
+DRAPIXAI_ENV=staging
+DRAPIXAI_GPU_PRESET=rtx-pro-6000-blackwell
+DRAPIXAI_DEVICE=cuda
+DRAPIXAI_CUDA_DEVICE=0
+DRAPIXAI_REDIS_URL=redis://default:REPLACED_BY_PRIVATE_FILE@redis:6379/0
+DRAPIXAI_REDIS_PASSWORD=replace-with-generated-ai-redis-password
+DRAPIXAI_QUEUE_NAME=drapixai_staging_tryon
+DRAPIXAI_MODEL_DIR=/workspace/drapixai/models/catvton
+DRAPIXAI_CATVTON_MODEL_DIR=/workspace/drapixai/models/catvton
+DRAPIXAI_AI_SERVICE_TOKEN=replace-with-the-staging-api-ai-service-token
+DRAPIXAI_ADMIN_TOKEN=replace-with-a-separate-staging-admin-token
+DRAPIXAI_TRANSIENT_SPOOL_DIR=/workspace/drapixai/runtime/tryon-spool
+DRAPIXAI_TRANSIENT_SPOOL_TTL=900
+DRAPIXAI_RESULT_TTL=60
+DRAPIXAI_FAILURE_TTL=60
+DRAPIXAI_PRELOAD_MODEL=1
+DRAPIXAI_ADAPTIVE_BATCHING=0
