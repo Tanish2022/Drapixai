@@ -21,8 +21,16 @@ from drapixai_ai.worker.gpu_worker import run_tryon_job
 class TryOnService:
     def __init__(self) -> None:
         self.limiter = UsageLimiter()
-        self.queue = get_queue()
+        self.upper_queue = get_queue(settings.queue_name)
+        self.lower_queue = get_queue(settings.lower_body_queue_name)
         cleanup_expired_transients()
+
+    @staticmethod
+    def _is_lower_body(garment_type: str | None) -> bool:
+        normalized = (garment_type or "upper").strip().lower().replace("-", "_")
+        return normalized in {"lower", "lower_body"} or normalized.startswith(
+            ("lower:", "lower_body:")
+        )
 
     def enqueue_tryon(
         self,
@@ -58,7 +66,8 @@ class TryOnService:
                 "enqueued_at_ms": int(time.time() * 1000),
             }
 
-            return self.queue.enqueue(
+            queue = self.lower_queue if self._is_lower_body(garment_type) else self.upper_queue
+            return queue.enqueue(
                 run_tryon_job,
                 payload,
                 job_timeout=settings.job_timeout_seconds,

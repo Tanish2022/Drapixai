@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import sys
 import time
@@ -37,6 +38,9 @@ ALLOW_BYPASS_VALIDATION = os.getenv("DRAPIXAI_LOWER_BODY_MATRIX_ALLOW_BYPASS", "
 FAIL_ON_QUALITY = os.getenv("DRAPIXAI_LOWER_BODY_MATRIX_FAIL_ON_QUALITY", "1") == "1"
 MIN_CASES_PER_CATEGORY = int(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_MIN_CASES", "12"))
 MIN_CATEGORY_PASS_RATE = float(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_PASS_RATE", "0.90"))
+MIN_ADMIN_PASS_RATE = float(os.getenv("DRAPIXAI_LOWER_BODY_ADMIN_PASS_RATE", "0.95"))
+RUN_ID = os.getenv("DRAPIXAI_LOWER_BODY_RUN_ID", OUTPUT_ROOT.name)
+BENCHMARK_SEED = int(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_SEED", "42"))
 
 
 @dataclass(frozen=True)
@@ -88,6 +92,22 @@ def _save_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _percentile(values: list[int], percentile: float) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = int(round((len(ordered) - 1) * percentile))
+    return ordered[max(0, min(len(ordered) - 1, index))]
+
+
 def main() -> None:
     if not settings.enable_lower_body:
         raise RuntimeError("Set DRAPIXAI_ENABLE_LOWER_BODY=1 before running the lower-body V1 matrix.")
@@ -122,9 +142,19 @@ def main() -> None:
             "quality_mode": "standard",
             "garment_type": "lower",
             "settings": {
-                "engine": settings.tryon_engine,
-                "inference_steps": settings.inference_steps,
-                "guidance_scale": settings.guidance_scale,
+                "engine": settings.lower_body_engine,
+                "inference_steps": (
+                    settings.fashn_num_timesteps
+                    if settings.lower_body_engine.strip().lower().replace("-", "_") in {"fashn", "fashn_vton", "fashn_vton_1_5"}
+                    else settings.inference_steps
+                ),
+                "guidance_scale": (
+                    settings.fashn_guidance_scale
+                    if settings.lower_body_engine.strip().lower().replace("-", "_") in {"fashn", "fashn_vton", "fashn_vton_1_5"}
+                    else settings.guidance_scale
+                ),
+                "seed": BENCHMARK_SEED,
+                "fashn_postprocess_enabled": settings.fashn_enable_postprocess,
                 "min_quality_score": settings.min_quality_score,
                 "lower_body_allowed_categories": settings.lower_body_allowed_categories,
                 "lower_body_cache_version": settings.lower_body_cache_version,
@@ -189,10 +219,9 @@ def main() -> None:
             result = pipeline.run_tryon_with_metadata(
                 person,
                 garment,
-                inference_steps=settings.inference_steps,
-                guidance_scale=settings.guidance_scale,
                 garment_type=f"lower:{case.category}",
                 quality="standard",
+                seed=BENCHMARK_SEED,
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
             result.image.save(case_dir / "result.png", format="PNG")
@@ -284,7 +313,7 @@ def main() -> None:
             "consistent_quality_gate_passed": (
                 len(eligible) >= MIN_CASES_PER_CATEGORY
                 and automated_rate >= MIN_CATEGORY_PASS_RATE
-                and release_rate >= MIN_CATEGORY_PASS_RATE
+                and release_rate >= MIN_ADMIN_PASS_RATE
             ),
         }
     all_categories_consistent = bool(category_summary) and all(
@@ -293,8 +322,13 @@ def main() -> None:
     )
 
     report = {
+        "run_id": RUN_ID,
         "matrix_file": str(MATRIX_FILE),
+        "matrix_sha256": _sha256(MATRIX_FILE),
+        "benchmark_version": json.loads(MATRIX_FILE.read_text(encoding="utf-8")).get("benchmark_version"),
         "output_root": str(OUTPUT_ROOT),
+        "engine": settings.lower_body_engine,
+        "seed": BENCHMARK_SEED,
         "selected_cases": len(selected_cases),
         "succeeded": succeeded,
         "failed": failed,
@@ -306,11 +340,14 @@ def main() -> None:
         "all_categories_consistent": all_categories_consistent,
         "minimum_cases_per_category": MIN_CASES_PER_CATEGORY,
         "minimum_category_pass_rate": MIN_CATEGORY_PASS_RATE,
+        "minimum_admin_pass_rate": MIN_ADMIN_PASS_RATE,
         "category_summary": category_summary,
         "fail_on_quality": FAIL_ON_QUALITY,
         "average_quality_score": sum(quality_scores) / len(quality_scores) if quality_scores else None,
         "average_latency_ms": sum(latencies) / len(latencies) if latencies else None,
         "warm_average_latency_ms": sum(latencies[1:]) / len(latencies[1:]) if len(latencies) > 1 else None,
+        "latency_p50_ms": _percentile(latencies, 0.50),
+        "latency_p95_ms": _percentile(latencies, 0.95),
         "cases": summary,
     }
     _save_json(OUTPUT_ROOT / "summary.json", report)

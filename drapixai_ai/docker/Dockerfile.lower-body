@@ -1,0 +1,53 @@
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV HF_HOME=/workspace/.cache/huggingface
+ENV DRAPIXAI_APP_ROOT=/workspace/drapixai
+ENV DRAPIXAI_TRYON_ENGINE=catvton
+ENV DRAPIXAI_LOWER_BODY_ENGINE=fashn_vton
+ENV DRAPIXAI_WORKER_ROLE=lower
+ENV DRAPIXAI_FASHN_WEIGHTS_DIR=/workspace/drapixai/models/fashn-vton-1.5
+ENV DRAPIXAI_GPU_PRESET=runpod-a100
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        ffmpeg \
+        git \
+        libgl1 \
+        libglib2.0-0 \
+        libgomp1 \
+        libsm6 \
+        libxext6 \
+        libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace/drapixai
+
+COPY drapixai_ai/requirements.txt /tmp/requirements.txt
+COPY drapixai_ai/requirements.lower-body.txt /tmp/requirements.lower-body.txt
+
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && python -m pip install -r /tmp/requirements.txt \
+    && python -m pip uninstall -y onnxruntime opencv-python-headless \
+    && python -m pip install -r /tmp/requirements.lower-body.txt \
+    && python -m pip install --no-deps fashn-human-parser==0.1.1 fashn-vton==1.5.0 \
+    && python -m pip check
+
+COPY drapixai_ai /workspace/drapixai/drapixai_ai
+COPY deploy /workspace/drapixai/deploy
+
+RUN mkdir -p /workspace/drapixai/models /workspace/drapixai/runtime /workspace/.cache/huggingface
+
+RUN groupadd --gid 10001 drapixai \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin drapixai \
+    && chown -R 10001:10001 /workspace/drapixai/runtime /workspace/.cache
+
+ENV PYTHONPATH=/workspace/drapixai
+
+USER 10001:10001
+
+CMD ["bash", "/workspace/drapixai/deploy/runpod/start-ai-worker.sh"]

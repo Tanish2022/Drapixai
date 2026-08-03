@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {
+      "id": "tenant-a",
+      "person": "/secure/test-assets/tenant-a-person.jpg",
+      "product_id": "TENANT-A-SKU",
+      "token_env": "DRAPIXAI_TENANT_A_ACCESS_TOKEN"
+    },
+    {
+      "id": "tenant-b",
+      "person": "/secure/test-assets/tenant-b-person.jpg",
+      "product_id": "TENANT-B-SKU",
+      "token_env": "DRAPIXAI_TENANT_B_ACCESS_TOKEN"
+    },
+    {
+      "id": "tenant-c",
+      "person": "/secure/test-assets/tenant-c-person.jpg",
+      "product_id": "TENANT-C-SKU",
+      "token_env": "DRAPIXAI_TENANT_C_ACCESS_TOKEN"
+    }
+  ]
+}

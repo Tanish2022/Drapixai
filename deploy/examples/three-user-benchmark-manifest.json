@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "id": "shopper-1",
+      "user_id": "benchmark-shopper-1",
+      "person": "/path/to/person-1.jpg",
+      "cloth_cache_key": "v3-1024x1365:replace-product-1",
+      "garment_type": "upper"
+    },
+    {
+      "id": "shopper-2",
+      "user_id": "benchmark-shopper-2",
+      "person": "/path/to/person-2.jpg",
+      "cloth_cache_key": "v3-1024x1365:replace-product-2",
+      "garment_type": "upper"
+    },
+    {
+      "id": "shopper-3",
+      "user_id": "benchmark-shopper-3",
+      "person": "/path/to/person-3.jpg",
+      "cloth_cache_key": "v3-1024x1365:replace-product-3",
+      "garment_type": "upper"
+    }
+  ]
+}

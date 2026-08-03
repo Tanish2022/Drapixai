@@ -47,6 +47,17 @@ def _apply_gpu_preset() -> None:
             "DRAPIXAI_OPENPOSE_DEVICE": "cuda",
             "DRAPIXAI_PRELOAD_MODEL": "1",
         },
+        "rtx-pro-6000-blackwell": {
+            "DRAPIXAI_INPUT_MAX_SIDE": "640",
+            "DRAPIXAI_JOB_TIMEOUT": "1800",
+            "DRAPIXAI_MAX_WAIT": "300",
+            "DRAPIXAI_LOW_VRAM": "0",
+            "DRAPIXAI_OPENPOSE_DEVICE": "cuda",
+            "DRAPIXAI_PRELOAD_MODEL": "1",
+            "DRAPIXAI_ADAPTIVE_BATCHING": "1",
+            "DRAPIXAI_GPU_BATCH_MAX": "3",
+            "DRAPIXAI_BATCH_WAIT_MS": "150",
+        },
         "t4": {
             "DRAPIXAI_INPUT_MAX_SIDE": "512",
             "DRAPIXAI_INFERENCE_STEPS": "22",
@@ -69,6 +80,10 @@ class Settings:
     redis_url: str = os.getenv("DRAPIXAI_REDIS_URL", "redis://localhost:6379/0")
     redis_password: str = os.getenv("DRAPIXAI_REDIS_PASSWORD", "")
     queue_name: str = os.getenv("DRAPIXAI_QUEUE_NAME", "drapixai_tryon")
+    lower_body_queue_name: str = os.getenv(
+        "DRAPIXAI_LOWER_BODY_QUEUE_NAME", "drapixai_lower_tryon"
+    )
+    worker_role: str = os.getenv("DRAPIXAI_WORKER_ROLE", "upper")
     model_dir: str = os.getenv("DRAPIXAI_MODEL_DIR", "models/catvton")
     tryon_engine: str = os.getenv("DRAPIXAI_TRYON_ENGINE", "catvton")
     catvton_model_dir: str = os.getenv("DRAPIXAI_CATVTON_MODEL_DIR", "models/catvton")
@@ -128,6 +143,15 @@ class Settings:
     max_wait_seconds: int = int(os.getenv("DRAPIXAI_MAX_WAIT", "120"))
     poll_interval_seconds: float = float(os.getenv("DRAPIXAI_POLL_INTERVAL", "0.5"))
     target_tryon_ms: int = int(os.getenv("DRAPIXAI_TARGET_TRYON_MS", "12000"))
+    adaptive_batching: bool = os.getenv("DRAPIXAI_ADAPTIVE_BATCHING", "0") == "1"
+    # Three is the validated launch target. Batch four requires a separate
+    # quality, latency, and VRAM approval before this cap may be raised.
+    gpu_batch_max: int = min(3, max(1, int(os.getenv("DRAPIXAI_GPU_BATCH_MAX", "3"))))
+    batch_wait_ms: int = max(0, min(500, int(os.getenv("DRAPIXAI_BATCH_WAIT_MS", "150"))))
+    batch_oom_fallback: bool = os.getenv("DRAPIXAI_BATCH_OOM_FALLBACK", "1") == "1"
+    batch_vram_headroom_ratio: float = float(
+        os.getenv("DRAPIXAI_BATCH_VRAM_HEADROOM_RATIO", "0.20")
+    )
     transient_spool_dir: str = os.getenv("DRAPIXAI_TRANSIENT_SPOOL_DIR", "runtime/tryon-spool")
     transient_spool_ttl_seconds: int = int(os.getenv("DRAPIXAI_TRANSIENT_SPOOL_TTL", "900"))
 
@@ -153,6 +177,23 @@ class Settings:
     upper_body_edge_ratio: float = float(os.getenv("DRAPIXAI_UPPER_BODY_EDGE_RATIO", "0.7"))
     upper_body_reject_edge_ratio: bool = os.getenv("DRAPIXAI_UPPER_BODY_REJECT_EDGE_RATIO", "0") == "1"
     enable_lower_body: bool = os.getenv("DRAPIXAI_ENABLE_LOWER_BODY", "0") == "1"
+    lower_body_engine: str = os.getenv("DRAPIXAI_LOWER_BODY_ENGINE", "catvton")
+    fashn_weights_dir: str = os.getenv(
+        "DRAPIXAI_FASHN_WEIGHTS_DIR", "models/fashn-vton-1.5"
+    )
+    fashn_num_timesteps: int = int(os.getenv("DRAPIXAI_FASHN_NUM_TIMESTEPS", "50"))
+    fashn_guidance_scale: float = float(
+        os.getenv("DRAPIXAI_FASHN_GUIDANCE_SCALE", "1.5")
+    )
+    fashn_garment_photo_type: str = os.getenv(
+        "DRAPIXAI_FASHN_GARMENT_PHOTO_TYPE", "flat-lay"
+    )
+    fashn_segmentation_free: bool = (
+        os.getenv("DRAPIXAI_FASHN_SEGMENTATION_FREE", "1") == "1"
+    )
+    fashn_enable_postprocess: bool = (
+        os.getenv("DRAPIXAI_FASHN_ENABLE_POSTPROCESS", "0") == "1"
+    )
     lower_body_allowed_categories: str = os.getenv(
         "DRAPIXAI_LOWER_BODY_ALLOWED_CATEGORIES",
         "jeans,pants,trousers,shorts,skirt,leggings,joggers",

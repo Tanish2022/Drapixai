@@ -7,7 +7,7 @@ from drapixai_ai.configs.settings import settings
 
 
 _redis_conn: redis.Redis | None = None
-_queue: Queue | None = None
+_queues: dict[str, Queue] = {}
 
 
 def get_redis() -> redis.Redis:
@@ -21,8 +21,8 @@ def get_redis() -> redis.Redis:
     return _redis_conn
 
 
-def get_queue() -> Queue:
-    global _queue
-    if _queue is None:
-        _queue = Queue(name=settings.queue_name, connection=get_redis())
-    return _queue
+def get_queue(name: str | None = None) -> Queue:
+    queue_name = name or settings.queue_name
+    if queue_name not in _queues:
+        _queues[queue_name] = Queue(name=queue_name, connection=get_redis())
+    return _queues[queue_name]

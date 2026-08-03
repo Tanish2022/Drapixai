@@ -1482,6 +1482,7 @@ const publicApiSpec = read('apps/api/src/openapi/v1.ts');
 const webhookService = read('apps/api/src/services/webhooks.ts');
 const publicApiMigration = read('apps/api/prisma/migrations/20260729180000_public_api_v1/migration.sql');
 const publicApiDocs = read('docs/public-api-v1.md');
+const threeTenantPublicApiBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const pricingPage = read('apps/web/app/pricing/page.tsx');
 const developerDocsPage = read('apps/web/app/docs/page.tsx');
 assertIncludes(apiServer, "app.use('/v1', v1Routes)", 'Public API must expose a stable versioned route');
@@ -1502,6 +1503,10 @@ assertIncludes(publicApiMigration, 'ApiIdempotencyRecord_userId_route_keyHash_ke
 assertIncludes(publicApiMigration, 'WebhookDelivery_endpointId_eventId_key', 'Webhook event delivery must be deduplicated per endpoint');
 assertIncludes(publicApiSpec, "openapi: '3.1.0'", 'Public API must publish a machine-readable OpenAPI contract');
 assertIncludes(publicApiDocs, 'Live and sandbox are separate deployments', 'Public API docs must require infrastructure isolation');
+assertIncludes(threeTenantPublicApiBenchmark, 'ThreadPoolExecutor(max_workers=3)', 'Staging certification must submit three tenants concurrently');
+assertIncludes(threeTenantPublicApiBenchmark, 'cross_response.status_code != 404', 'Staging certification must prove cross-tenant result isolation');
+assertIncludes(threeTenantPublicApiBenchmark, 'shopper_consent', 'Three-tenant certification must use the privacy consent contract');
+assertNotIncludes(threeTenantPublicApiBenchmark, '"token":', 'Three-tenant benchmark manifests must not embed tenant tokens');
 assertIncludes(publicApiSpec, "'x-drapixai-usage-billing'", 'OpenAPI must define successful-result billing semantics');
 assertIncludes(publicApiSpec, 'HTTP 422 quality-gate rejection', 'OpenAPI must state that quality rejections do not consume usage');
 assertIncludes(publicApiDocs, '| Starter | $49 | 1,000 |', 'Public API docs must publish Starter API pricing');

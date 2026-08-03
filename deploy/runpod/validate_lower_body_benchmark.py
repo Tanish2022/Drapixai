@@ -148,6 +148,7 @@ def main() -> int:
 
     report = {
         "manifest": str(MANIFEST_PATH),
+        "manifest_sha256": _sha256(MANIFEST_PATH),
         "benchmark_version": payload.get("benchmark_version"),
         "release_policy": payload.get("release_policy"),
         "valid": not errors,

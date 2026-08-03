@@ -80,7 +80,7 @@ def main() -> int:
             "minimum_cases_per_category": 12,
             "target_cases_per_category": 24,
             "minimum_automated_pass_rate": 0.90,
-            "minimum_admin_approval_rate": 0.90,
+            "minimum_admin_approval_rate": 0.95,
             "required_consecutive_passing_runs": 2,
         },
         "stage_order": [

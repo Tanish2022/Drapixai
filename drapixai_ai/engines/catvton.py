@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 import torch
@@ -25,7 +26,9 @@ class CatVTONEngine(TryOnEngine):
     def __init__(self) -> None:
         self.loaded = False
         self.last_safety_blocked = False
+        self.last_safety_blocked_flags: list[bool] = []
         self.last_generation_mask: Image.Image | None = None
+        self.last_generation_masks: list[Image.Image] = []
         self.device = settings.device if torch.cuda.is_available() else "cpu"
         self.width = settings.catvton_width
         self.height = settings.catvton_height
@@ -289,3 +292,111 @@ class CatVTONEngine(TryOnEngine):
                 self.last_safety_blocked = ImageChops.difference(result, safety_marker).getbbox() is None
 
         return result
+
+    def generate_batch(
+        self,
+        persons: Sequence[Image.Image],
+        garments: Sequence[Image.Image],
+        masks: Sequence[Image.Image | None] | None = None,
+        *,
+        inference_steps: int | None = None,
+        guidance_scale: float | None = None,
+        seeds: Sequence[int | None] | None = None,
+        garment_types: Sequence[str | None] | None = None,
+    ) -> list[Image.Image]:
+        self.load()
+        count = len(persons)
+        if count == 0:
+            return []
+        if len(garments) != count:
+            raise ValueError("BATCH_INPUT_LENGTH_MISMATCH")
+
+        batch_masks = list(masks) if masks is not None else [None] * count
+        batch_seeds = list(seeds) if seeds is not None else [None] * count
+        batch_types = list(garment_types) if garment_types is not None else [None] * count
+        if not (len(batch_masks) == len(batch_seeds) == len(batch_types) == count):
+            raise ValueError("BATCH_INPUT_LENGTH_MISMATCH")
+
+        size = (self.width, self.height)
+        normalized_persons: list[Image.Image] = []
+        normalized_garments: list[Image.Image] = []
+        prepared_masks: list[Image.Image] = []
+        for person, garment, mask, garment_type in zip(
+            persons,
+            garments,
+            batch_masks,
+            batch_types,
+        ):
+            normalized_person, normalized_garment = normalize_tryon_inputs(person, garment, size)
+            prepared_mask = (
+                mask.resize(size, Image.BICUBIC)
+                if mask is not None
+                else self._build_mask(normalized_person, garment_type)
+            )
+            prepared_mask = self._preserve_untucked_hem(prepared_mask, garment_type)
+            prepared_mask = self._preserve_long_sleeves(
+                prepared_mask,
+                normalized_garment,
+                garment_type,
+            )
+            prepared_mask = self.mask_processor.blur(
+                prepared_mask,
+                blur_factor=settings.catvton_mask_blur,
+            ).convert("L")
+            normalized_persons.append(normalized_person)
+            normalized_garments.append(normalized_garment)
+            prepared_masks.append(prepared_mask)
+
+        # The vendored CatVTON pipeline accepts tensors with a leading batch
+        # dimension. Converting here avoids its PIL-only single-image checks.
+        person_tensor = torch.from_numpy(
+            np.stack([np.asarray(image.convert("RGB")) for image in normalized_persons])
+        ).permute(0, 3, 1, 2).to(dtype=torch.float32) / 127.5 - 1.0
+        garment_tensor = torch.from_numpy(
+            np.stack([np.asarray(image.convert("RGB")) for image in normalized_garments])
+        ).permute(0, 3, 1, 2).to(dtype=torch.float32) / 127.5 - 1.0
+        mask_tensor = torch.from_numpy(
+            np.stack([np.asarray(mask, dtype=np.float32) / 255.0 for mask in prepared_masks])
+        ).unsqueeze(1)
+
+        generators = None
+        if self.device == "cuda" and any(seed is not None for seed in batch_seeds):
+            generators = [
+                torch.Generator(device=self.device).manual_seed(
+                    int(seed) if seed is not None else int(torch.seed())
+                )
+                for seed in batch_seeds
+            ]
+
+        with torch.inference_mode():
+            results = self.pipeline(
+                image=person_tensor,
+                condition_image=garment_tensor,
+                mask=mask_tensor,
+                num_inference_steps=inference_steps or settings.inference_steps,
+                guidance_scale=guidance_scale or settings.guidance_scale,
+                generator=generators,
+                height=self.height,
+                width=self.width,
+            )
+
+        converted = [result.convert("RGB") for result in results]
+        safety_flags = [False] * len(converted)
+        if not settings.catvton_skip_safety_check:
+            safety_marker_path = CATVTON_ROOT / "resource" / "img" / "NSFW.jpg"
+            if safety_marker_path.is_file():
+                safety_marker = Image.open(safety_marker_path).convert("RGB")
+                safety_flags = [
+                    ImageChops.difference(
+                        result,
+                        safety_marker.resize(result.size),
+                    ).getbbox()
+                    is None
+                    for result in converted
+                ]
+
+        self.last_generation_masks = [mask.copy() for mask in prepared_masks]
+        self.last_safety_blocked_flags = safety_flags
+        self.last_generation_mask = self.last_generation_masks[0]
+        self.last_safety_blocked = safety_flags[0]
+        return converted

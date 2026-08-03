@@ -8,6 +8,7 @@ from PIL import Image, ImageFilter
 from drapixai_ai.engines.base import TryOnCandidate
 from drapixai_ai.preprocess.garment_analyzer import prepare_garment_for_tryon
 from drapixai_ai.preprocess.lower_body_regions import build_lower_body_region_masks
+from drapixai_ai.preprocess.mask_builder import build_lower_body_mask_for_category
 
 
 LOWER_BODY_CATEGORY_PROFILES: dict[str, dict[str, float | str]] = {
@@ -188,6 +189,9 @@ class TryOnScorer:
     ) -> TryOnScore:
         profile = LOWER_BODY_CATEGORY_PROFILES.get(category or "", LOWER_BODY_CATEGORY_PROFILES["pants"])
         region_masks = build_lower_body_region_masks(candidate, category)
+        candidate_garment_mask = self._candidate_lower_garment_mask(
+            garment, candidate, category
+        )
         color_similarity = self._color_similarity(garment, candidate)
         texture_similarity = self._texture_similarity(garment, candidate)
         face_similarity = self._face_similarity(person, candidate)
@@ -203,6 +207,12 @@ class TryOnScorer:
         lower_garment_coverage = self._lower_garment_coverage_score(garment, candidate)
         hem_alignment = self._lower_hem_alignment(candidate, region_masks["hem"])
         crotch_artifact_score = self._crotch_artifact_score(candidate, region_masks["crotch"])
+        layered_garment_score = self._layered_garment_score(
+            person, candidate, category, candidate_garment_mask
+        )
+        revealed_leg_integrity = self._revealed_leg_integrity(
+            person, candidate, category
+        )
         edge_quality = self._edge_quality(candidate)
         artifact_score = self._artifact_score(candidate)
         rectangular_artifact_score = self._rectangular_artifact_score(candidate)
@@ -283,6 +293,8 @@ class TryOnScorer:
                 "lower_garment_coverage": lower_garment_coverage,
                 "hem_alignment": hem_alignment,
                 "crotch_artifact_score": crotch_artifact_score,
+                "experimental_layered_garment_score": layered_garment_score,
+                "experimental_revealed_leg_integrity": revealed_leg_integrity,
                 "edge_quality": edge_quality,
                 "artifact_score": artifact_score,
                 "rectangular_artifact_score": rectangular_artifact_score,
@@ -721,7 +733,11 @@ class TryOnScorer:
         return float(max(0.0, min(1.0, 0.40 * density_score + 0.40 * overlap + 0.20 * row_score)))
 
     @classmethod
-    def _waistband_alignment(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+    def _waistband_alignment(
+        cls,
+        candidate: Image.Image,
+        region_mask: Image.Image | None = None,
+    ) -> float:
         edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
         h, w = edges.shape
         if region_mask is None:
@@ -793,7 +809,11 @@ class TryOnScorer:
         return float(max(0.0, min(1.0, 0.70 * min(1.0, coverage * 1.7) + 0.30 * mean_similarity)))
 
     @classmethod
-    def _lower_hem_alignment(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:
+    def _lower_hem_alignment(
+        cls,
+        candidate: Image.Image,
+        region_mask: Image.Image | None = None,
+    ) -> float:
         edges = np.asarray(candidate.convert("L").filter(ImageFilter.FIND_EDGES)).astype(np.float32) / 255.0
         h, w = edges.shape
         hem = (
@@ -805,6 +825,85 @@ class TryOnScorer:
             return 0.45
         row_profile = hem.mean(axis=1)
         return float(max(0.0, min(1.0, float(row_profile.max()) * 3.2)))
+
+    @staticmethod
+    def _lower_category_window(shape: tuple[int, int], category: str | None) -> np.ndarray:
+        h, w = shape
+        normalized = category or "pants"
+        y0 = 0.38
+        y1 = 0.76 if normalized == "shorts" else 0.88 if normalized == "skirt" else 0.95
+        window = np.zeros((h, w), dtype=bool)
+        window[int(h * y0) : int(h * y1), int(w * 0.16) : int(w * 0.84)] = True
+        return window
+
+    def _candidate_lower_garment_mask(
+        self,
+        garment: Image.Image,
+        candidate: Image.Image,
+        category: str | None,
+    ) -> np.ndarray:
+        palette = self._foreground_palette(garment)
+        arr = np.asarray(candidate.convert("RGB"), dtype=np.float32) / 255.0
+        distance = np.linalg.norm(
+            arr[:, :, None, :] - palette[None, None, :, :], axis=3
+        ).min(axis=2)
+        window = self._lower_category_window(distance.shape, category)
+        mask = (distance < 0.255) & window
+
+        # Remove isolated color matches while retaining seams and narrow cuffs.
+        neighbours = np.zeros_like(mask, dtype=np.uint8)
+        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            neighbours += np.roll(mask, (dy, dx), axis=(0, 1))
+        return mask & (neighbours >= 1)
+
+    def _layered_garment_score(
+        self,
+        person: Image.Image,
+        candidate: Image.Image,
+        category: str | None,
+        garment_mask: np.ndarray,
+    ) -> float:
+        person_arr = np.asarray(person.convert("RGB"), dtype=np.float32) / 255.0
+        candidate_arr = np.asarray(candidate.convert("RGB"), dtype=np.float32) / 255.0
+        expected = self._region_bool(
+            build_lower_body_mask_for_category(candidate, category), candidate.size
+        )
+        if not expected.any():
+            return 0.5
+        changed = np.linalg.norm(candidate_arr - person_arr, axis=2) > 0.07
+        replaced = changed | garment_mask
+        return float(max(0.0, min(1.0, replaced[expected].mean() * 1.12)))
+
+    def _revealed_leg_integrity(
+        self,
+        person: Image.Image,
+        candidate: Image.Image,
+        category: str | None,
+    ) -> float:
+        if category not in {"shorts", "skirt"}:
+            return 1.0
+        person_arr = np.asarray(person.convert("RGB"), dtype=np.float32) / 255.0
+        candidate_arr = np.asarray(candidate.convert("RGB"), dtype=np.float32) / 255.0
+        h, w = candidate_arr.shape[:2]
+        arm_regions = np.concatenate(
+            [
+                person_arr[int(h * 0.30) : int(h * 0.62), int(w * 0.12) : int(w * 0.30)].reshape(-1, 3),
+                person_arr[int(h * 0.30) : int(h * 0.62), int(w * 0.70) : int(w * 0.88)].reshape(-1, 3),
+            ],
+            axis=0,
+        )
+        if arm_regions.size == 0:
+            return 0.5
+        skin_palette = np.percentile(arm_regions, [35, 50, 65], axis=0)
+        y0 = 0.64 if category == "shorts" else 0.76
+        reveal = candidate_arr[int(h * y0) : int(h * 0.90), int(w * 0.20) : int(w * 0.80)]
+        if reveal.size == 0:
+            return 0.5
+        distance = np.linalg.norm(
+            reveal[:, :, None, :] - skin_palette[None, None, :, :], axis=3
+        ).min(axis=2)
+        skin_ratio = float((distance < 0.24).mean())
+        return float(max(0.0, min(1.0, skin_ratio / 0.32)))
 
     @classmethod
     def _crotch_artifact_score(cls, candidate: Image.Image, region_mask: Image.Image | None = None) -> float:

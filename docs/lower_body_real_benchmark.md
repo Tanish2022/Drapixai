@@ -48,26 +48,56 @@ Automated gates remain separate:
 - Face, upper-body, and background context preservation
 - Waist, crotch, knee, hem, ankle, and shoe thresholds
 
-A case passes the release gate only when every automated metric passes and an admin marks it approved. A category is consistent only when it has at least 12 eligible cases and at least 90% automated and admin-approved pass rates. Two consecutive complete passing runs are required.
+A case passes the release gate only when every automated metric passes and an admin marks it approved with all four review dimensions rated at least 4/5 and no severe failure. A category is consistent only when it has at least 12 eligible cases, at least 90% automated pass rate, and at least 95% admin and combined pass rates. Two complete passing runs with distinct seeds are required. Each run must have zero inference failures, zero severe visual failures, and A100 end-to-end p95 latency at or below 35 seconds.
 
 ## Commands
 
 ```bash
+python -m drapixai_ai.scripts.download_fashn_vton \
+  --weights-dir /workspace/drapixai/models/fashn-vton-1.5
+
+python deploy/runpod/verify_lower_body_runtime.py \
+  --weights-dir /workspace/drapixai/models/fashn-vton-1.5 \
+  --output runtime/lower_body_runtime_verification.json \
+  --load-model
+
 python deploy/runpod/validate_lower_body_benchmark.py
 
 DRAPIXAI_ENABLE_LOWER_BODY=1 \
+DRAPIXAI_LOWER_BODY_ENGINE=fashn_vton \
+DRAPIXAI_FASHN_ENABLE_POSTPROCESS=0 \
+DRAPIXAI_LOWER_BODY_RUN_ID=fashn-v1-seed-42 \
+DRAPIXAI_LOWER_BODY_BENCHMARK_SEED=42 \
 DRAPIXAI_LOWER_BODY_MATRIX_FILE=runtime/test_assets/lower_body_benchmark/manifest.json \
-DRAPIXAI_LOWER_BODY_MATRIX_DIR=runtime/lower_body_benchmark/catvton-run-01 \
+DRAPIXAI_LOWER_BODY_MATRIX_DIR=runtime/lower_body_benchmark/fashn-v1-seed-42 \
 python deploy/runpod/run_lower_body_matrix.py
 
-DRAPIXAI_LOWER_BODY_BENCHMARK_SUMMARIES="runtime/lower_body_benchmark/catvton-run-01/summary.json:runtime/lower_body_benchmark/catvton-run-02/summary.json" \
-python deploy/runpod/evaluate_lower_body_model_decision.py
+python deploy/runpod/apply_lower_body_admin_reviews.py \
+  --summary runtime/lower_body_benchmark/fashn-v1-seed-42/summary.json \
+  --reviews runtime/lower_body_benchmark/fashn-v1-seed-42/reviews.json \
+  --output runtime/lower_body_benchmark/fashn-v1-seed-42/reviewed-summary.json
+
+# Repeat the identical manifest with run ID fashn-v1-seed-43 and seed 43,
+# then apply its independent review file.
+python deploy/runpod/evaluate_lower_body_release.py \
+  --intake-report runtime/lower_body_benchmark_validation.json \
+  --approvals runtime/lower_body_benchmark/release-approvals.json \
+  --summaries \
+    runtime/lower_body_benchmark/fashn-v1-seed-42/reviewed-summary.json \
+    runtime/lower_body_benchmark/fashn-v1-seed-43/reviewed-summary.json \
+  --output runtime/lower_body_benchmark/release-decision.json
+
+python deploy/runpod/calibrate_lower_body_scorer.py \
+  --summaries runtime/lower_body_benchmark/*/reviewed-summary.json \
+  --output runtime/lower_body_benchmark/scorer-proposals.json
 ```
 
-Use the platform path separator for the summary list (`:` on Linux, `;` on Windows).
+Before the two release runs, execute one same-seed A/B comparison with `DRAPIXAI_FASHN_ENABLE_POSTPROCESS=0` and `1`. Select one frozen configuration through admin review; do not mix configurations in the two release runs. Calibration writes proposals only and never changes production thresholds automatically.
 
 ## CatVTON Decision
 
-CatVTON remains the baseline until the real benchmark is complete. If two sufficient runs show repeated silhouette failures, add a stronger bottoms-capable engine and run the identical manifest. FASHN VTON v1.5 is the first candidate because its official implementation supports bottoms and uses an Apache-2.0 code license. Fine-tuning is considered after side-by-side testing identifies whether the gap is model capacity, training distribution, masking, or texture conditioning.
+CatVTON remains the measured baseline. The seven-case diagnostic showed materially cleaner FASHN silhouettes, especially for pants, joggers, shorts, and skirts, but those assets are not release eligible. FASHN VTON 1.5 is therefore the active candidate, not an approved public model. Fine-tuning is considered only after reviewed real cases identify a repeatable model limitation.
 
-No stronger model is promoted until it passes the same per-category gates and admin review.
+`evaluate_lower_body_release.py` can only emit `eligible_for_manual_public_enable`; it never changes `DRAPIXAI_ENABLE_LOWER_BODY`. Public launch remains blocked while the canonical manifest has no commercially cleared cases.
+
+The release-approval document must include named approvers and evidence references for the FASHN code/weights, the human-parser model license, DWPose attribution, benchmark asset rights, privacy/retention, and security review. The human-parser model card identifies an NVIDIA SegFormer license, so it requires explicit legal clearance before public commercial use or redistribution.

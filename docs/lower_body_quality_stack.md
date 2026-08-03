@@ -1,6 +1,6 @@
 # DrapixAI Lower-Body Quality Stack Plan
 
-Lower-body try-on will ship as a future, feature-flagged extension of the current CatVTON production stack. The existing upper-body launch path remains the only public production path until this stack passes RunPod matrix review and admin approval.
+Lower-body try-on is a future, feature-flagged extension with a dedicated FASHN VTON 1.5 worker and DrapixAI quality stack. CatVTON remains the measured lower-body baseline. The existing CatVTON upper-body launch path remains unchanged and is the only public production path until the lower stack passes the real-data release gates.
 
 ## Product Scope
 
@@ -16,7 +16,8 @@ Initial lower-body scope:
 
 Release ladder:
 
-- V1: CatVTON lower mode for jeans, pants, trousers, shorts, skirts, leggings, and joggers
+- V1 generation candidate: FASHN VTON 1.5 for jeans, pants, trousers, shorts, skirts, leggings, and joggers
+- V1 baseline and fallback: CatVTON lower mode
 - V1 quality: DrapixAI lower-body validator, lower masks, lower scorer, and admin review
 - V1 release: internal beta only
 
@@ -33,13 +34,13 @@ Explicitly out of v1:
 
 ## Production Principle
 
-The lower-body engine is:
+The lower-body candidate stack is:
 
 ```txt
-CatVTON lower mode + DrapixAI quality stack
+FASHN VTON 1.5 bottoms mode + DrapixAI quality stack
 ```
 
-CatVTON is the generation core. DrapixAI owns production quality through validation, preprocessing, mask safety, scoring, cache versioning, debug artifacts, admin review, and controlled rollout.
+FASHN is isolated in a dedicated lower-body queue, worker role, dependency set, and container. CatVTON remains the upper-body engine. DrapixAI owns production quality through validation, preprocessing, category rules, scoring, benchmark provenance, debug artifacts, admin review, and controlled rollout.
 
 ## Category Profiles
 
@@ -67,6 +68,12 @@ Required future beta flags:
 
 ```txt
 DRAPIXAI_ENABLE_LOWER_BODY=1
+DRAPIXAI_LOWER_BODY_ENGINE=fashn_vton
+DRAPIXAI_LOWER_BODY_QUEUE_NAME=drapixai_lower_tryon
+DRAPIXAI_WORKER_ROLE=lower
+DRAPIXAI_FASHN_NUM_TIMESTEPS=50
+DRAPIXAI_FASHN_GUIDANCE_SCALE=1.5
+DRAPIXAI_FASHN_ENABLE_POSTPROCESS=0
 DRAPIXAI_LOWER_BODY_ALLOWED_CATEGORIES=jeans,pants,trousers,shorts,skirt,leggings,joggers
 DRAPIXAI_LOWER_BODY_ADMIN_REVIEW_REQUIRED=1
 DRAPIXAI_LOWER_BODY_PRESERVE_SHOES=1
@@ -77,7 +84,7 @@ DRAPIXAI_LOWER_BODY_COLOR_FIX_STRENGTH=0.78
 DRAPIXAI_LOWER_BODY_CACHE_VERSION=lower-v1-1024x1365
 ```
 
-Lower-body postprocessing is confined to the intersection of CatVTON's generation mask and the category-specific lower mask. The original person image is restored outside that region, preserving the background, face, upper-body garment, hands, and shoes. Color transfer and texture refinement run only inside the inset, feathered garment region so they cannot recolor nearby pixels or create a hard outer halo.
+FASHN postprocessing is disabled by default because its official output is already composited. `DRAPIXAI_FASHN_ENABLE_POSTPROCESS=1` enables an internal A/B candidate only. It cannot become the release configuration unless real admin review shows that it improves garment fidelity without harming background, identity, edges, or anatomy.
 
 ## Software Requirements
 
@@ -109,6 +116,16 @@ AI runtime requirements:
 - `onnxruntime`
 - `pycocotools`
 
+Dedicated FASHN lower-worker additions:
+
+- Python 3.11
+- CUDA 12.4 and cuDNN 9
+- `fashn-vton==1.5.0`
+- `fashn-human-parser==0.1.1`
+- `onnxruntime-gpu==1.20.1`
+- FASHN VTON 1.5 model weights and DWPose ONNX weights pinned to explicit revisions
+- `drapixai_ai/docker/Dockerfile.lower-body`
+
 CatVTON requirements:
 
 - CatVTON checkout: `drapixai_ai/third_party/CatVTON`
@@ -120,7 +137,7 @@ CatVTON requirements:
 
 Hardware requirements:
 
-- A100: production-quality validation and preferred launch GPU
+- A100 80 GB: benchmark and preferred initial launch GPU
 - A10: staging and acceptable backup
 - T4: smoke tests only
 - Windows/local: syntax and integration checks only
@@ -252,7 +269,7 @@ Deliverables:
 
 ### Phase 6: RunPod Matrix
 
-Status: runner implemented; production matrix still requires real lower-body test assets and RunPod execution.
+Status: diagnostic A100 runs completed; the commercially cleared release matrix is still empty and therefore blocks public launch.
 
 Deliverables:
 
