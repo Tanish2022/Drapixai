@@ -12,7 +12,7 @@
     "drapixai": "file:../..",
     "lucide-react": "^0.575.0",
     "next": "16.2.11",
-    "next-auth": "^4.24.14",
+    "next-auth": "4.24.15",
     "react": "^18",
     "react-dom": "^18"
   },
@@ -21,14 +21,12 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
-    "postcss": "^8.5.10",
+    "postcss": "8.5.24",
     "tailwindcss": "^3.3.0",
     "typescript": "^5"
   },
   "overrides": {
-    "next": {
-      "postcss": "8.5.10"
-    },
+    "postcss": "8.5.24",
     "next-auth": {
       "uuid": "11.1.1"
     },

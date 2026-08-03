@@ -21,6 +21,14 @@ const auditSecret = () => {
   return secret || 'development-audit-secret-not-for-production';
 };
 
+const auditVerificationSecrets = () => {
+  const previous = (process.env.DRAPIXAI_AUDIT_LOG_PREVIOUS_SECRETS || '')
+    .split(',')
+    .map((secret) => secret.trim())
+    .filter((secret) => secret.length >= 32);
+  return [...new Set([auditSecret(), ...previous])];
+};
+
 const hashIp = (ip: string | null | undefined) => ip
   ? crypto.createHmac('sha256', auditSecret()).update(ip).digest('hex')
   : null;
@@ -37,8 +45,8 @@ const canonicalize = (value: unknown): unknown => {
   return value;
 };
 
-const buildAuditHash = (payload: Record<string, unknown>) => crypto
-  .createHmac('sha256', auditSecret())
+const buildAuditHash = (payload: Record<string, unknown>, secret = auditSecret()) => crypto
+  .createHmac('sha256', secret)
   .update(JSON.stringify(canonicalize(payload)))
   .digest('hex');
 
@@ -91,7 +99,7 @@ export const verifySecurityAuditChain = async (prisma: PrismaClient) => {
     if (entry.previousHash !== expectedPreviousHash) {
       return { valid: false, checked: entries.length, invalidEntryId: entry.id, reason: 'PREVIOUS_HASH_MISMATCH' };
     }
-    const expectedHash = buildAuditHash({
+    const hashPayload = {
       actorUserId: entry.actorUserId,
       actorRole: entry.actorRole,
       action: entry.action,
@@ -103,10 +111,14 @@ export const verifySecurityAuditChain = async (prisma: PrismaClient) => {
       metadata: entry.metadata,
       previousHash: entry.previousHash,
       createdAt: entry.createdAt.toISOString(),
-    });
+    };
+    const hashMatches = /^[a-f0-9]{64}$/.test(entry.entryHash)
+      && auditVerificationSecrets().some((secret) => {
+        const expectedHash = buildAuditHash(hashPayload, secret);
+        return crypto.timingSafeEqual(Buffer.from(entry.entryHash, 'hex'), Buffer.from(expectedHash, 'hex'));
+      });
     if (
-      !/^[a-f0-9]{64}$/.test(entry.entryHash)
-      || !crypto.timingSafeEqual(Buffer.from(entry.entryHash, 'hex'), Buffer.from(expectedHash, 'hex'))
+      !hashMatches
     ) {
       return { valid: false, checked: entries.length, invalidEntryId: entry.id, reason: 'ENTRY_HASH_MISMATCH' };
     }

@@ -8,15 +8,23 @@ const LEGACY_API_KEY_PATTERN = /^[a-f0-9]{32}$/i;
 const STOREFRONT_TOKEN_PREFIX = 'dpxst_';
 const GENERIC_STOREFRONT_TOKEN_PREFIX = 'dpxsf_';
 const DASHBOARD_PREVIEW_TOKEN_PREFIX = 'dpxpv_';
+const PUBLIC_API_TOKEN_PREFIX = 'dpxapi_';
 
 export type ApiKeyKind = 'dashboard' | 'manual' | 'shopify';
 export type StorefrontCredentialContext = {
-  channel: 'web' | 'mobile';
+  channel: 'web' | 'mobile' | 'api';
   allowedDomain: string | null;
   appId: string | null;
   productIds: string[];
   purpose: 'tryon';
+  environment?: 'live' | 'sandbox';
+  scopes?: string[];
 };
+
+export const getApiEnvironment = (): 'live' | 'sandbox' =>
+  (process.env.DRAPIXAI_API_ENVIRONMENT || (process.env.NODE_ENV === 'production' ? 'live' : 'sandbox')) === 'live'
+    ? 'live'
+    : 'sandbox';
 
 export const isStorefrontProductAllowed = (
   context: StorefrontCredentialContext | null | undefined,
@@ -46,7 +54,7 @@ export const issueApiKeyForUser = async (
     ? ['dashboard']
     : kind === 'shopify'
       ? ['shopify:storefront']
-      : ['storefront:tryon'];
+      : ['storefront:tryon', 'api:token:issue', 'api:tryon', 'api:usage', 'api:webhooks'];
   const apiKey = generateApiKey();
   const keyHash = hashApiKey(apiKey);
 
@@ -77,6 +85,26 @@ const getStorefrontTokenSecret = () => {
   const secret = (process.env.DRAPIXAI_STOREFRONT_TOKEN_SECRET || '').trim();
   if (secret.length < 32) throw new Error('STOREFRONT_TOKEN_SECRET_NOT_CONFIGURED');
   return secret;
+};
+
+const getStorefrontVerificationSecrets = () => {
+  const current = getStorefrontTokenSecret();
+  const previous = (process.env.DRAPIXAI_STOREFRONT_TOKEN_PREVIOUS_SECRETS || '')
+    .split(',')
+    .map((secret) => secret.trim())
+    .filter((secret) => secret.length >= 32);
+  return [...new Set([current, ...previous])];
+};
+
+const verifyStorefrontJwt = (token: string, options: jwt.VerifyOptions) => {
+  for (const secret of getStorefrontVerificationSecrets()) {
+    try {
+      return jwt.verify(token, secret, options) as jwt.JwtPayload;
+    } catch {
+      // Continue through the bounded rotation key ring.
+    }
+  }
+  throw new Error('STOREFRONT_TOKEN_INVALID');
 };
 
 const getDashboardPreviewTokenSecret = () => {
@@ -143,8 +171,29 @@ export const issueGenericStorefrontToken = (input: {
   { algorithm: 'HS256', audience: 'drapixai-storefront', issuer: 'drapixai-api', expiresIn: '5m' },
 )}`;
 
-const parseScopedProductIds = (value: unknown) => {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 50) return null;
+export const issuePublicApiToken = (input: {
+  apiKeyId: number;
+  userId: number;
+  scopes: string[];
+  productIds: string[];
+  environment: 'live' | 'sandbox';
+}) => `${PUBLIC_API_TOKEN_PREFIX}${jwt.sign(
+  {
+    kind: 'public-api',
+    apiKeyId: input.apiKeyId,
+    userId: input.userId,
+    scopes: input.scopes,
+    productIds: input.productIds,
+    environment: input.environment,
+    purpose: 'tryon',
+    jti: crypto.randomUUID(),
+  },
+  getStorefrontTokenSecret(),
+  { algorithm: 'HS256', audience: 'drapixai-public-api', issuer: 'drapixai-api', expiresIn: '15m' },
+)}`;
+
+const parseScopedProductIds = (value: unknown, allowEmpty = false) => {
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0) || value.length > 50) return null;
   const productIds = value.map((item) => typeof item === 'string' ? item.trim() : '');
   if (productIds.some((item) => !item || item.length > 160)) return null;
   return [...new Set(productIds)];
@@ -153,11 +202,10 @@ const parseScopedProductIds = (value: unknown) => {
 const resolveStorefrontToken = async (prisma: PrismaClient, credential: string) => {
   if (!credential.startsWith(STOREFRONT_TOKEN_PREFIX)) return null;
   try {
-    const claims = jwt.verify(
+    const claims = verifyStorefrontJwt(
       credential.slice(STOREFRONT_TOKEN_PREFIX.length),
-      getStorefrontTokenSecret(),
       { algorithms: ['HS256'], audience: 'drapixai-storefront', issuer: 'drapixai-api' },
-    ) as jwt.JwtPayload;
+    );
     const productIds = parseScopedProductIds(claims.productIds);
     if (
       claims.kind !== 'shopify-storefront'
@@ -198,11 +246,10 @@ const resolveStorefrontToken = async (prisma: PrismaClient, credential: string) 
 const resolveGenericStorefrontToken = async (prisma: PrismaClient, credential: string) => {
   if (!credential.startsWith(GENERIC_STOREFRONT_TOKEN_PREFIX)) return null;
   try {
-    const claims = jwt.verify(
+    const claims = verifyStorefrontJwt(
       credential.slice(GENERIC_STOREFRONT_TOKEN_PREFIX.length),
-      getStorefrontTokenSecret(),
       { algorithms: ['HS256'], audience: 'drapixai-storefront', issuer: 'drapixai-api' },
-    ) as jwt.JwtPayload;
+    );
     const productIds = parseScopedProductIds(claims.productIds);
     const channel = claims.channel === 'web' || claims.channel === 'mobile' ? claims.channel : null;
     const allowedDomain = typeof claims.allowedDomain === 'string' ? claims.allowedDomain.trim().toLowerCase() : null;
@@ -279,6 +326,62 @@ const resolveDashboardPreviewToken = async (prisma: PrismaClient, credential: st
   }
 };
 
+export const resolvePublicApiToken = async (prisma: PrismaClient, credential: string) => {
+  if (!credential.startsWith(PUBLIC_API_TOKEN_PREFIX)) return null;
+  try {
+    const claims = verifyStorefrontJwt(
+      credential.slice(PUBLIC_API_TOKEN_PREFIX.length),
+      { algorithms: ['HS256'], audience: 'drapixai-public-api', issuer: 'drapixai-api' },
+    );
+    const productIds = parseScopedProductIds(claims.productIds, true);
+    const scopes = Array.isArray(claims.scopes)
+      ? claims.scopes.filter((scope): scope is string => typeof scope === 'string')
+      : [];
+    const environment = claims.environment === 'live' || claims.environment === 'sandbox'
+      ? claims.environment
+      : null;
+    if (
+      claims.kind !== 'public-api'
+      || !Number.isInteger(claims.apiKeyId)
+      || !Number.isInteger(claims.userId)
+      || claims.purpose !== 'tryon'
+      || !productIds
+      || !environment
+      || environment !== getApiEnvironment()
+      || scopes.length === 0
+    ) return null;
+
+    const apiKey = await prisma.apiKey.findFirst({
+      where: {
+        id: Number(claims.apiKeyId),
+        userId: Number(claims.userId),
+        kind: 'manual',
+        isActive: true,
+        revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
+    if (!apiKey) return null;
+    const keyScopes = new Set(String(apiKey.scopes || '').split(',').filter(Boolean));
+    if (scopes.some((scope) => !keyScopes.has(scope))) return null;
+    return {
+      apiKey,
+      scopes,
+      context: {
+        channel: 'api' as const,
+        allowedDomain: null,
+        appId: null,
+        productIds,
+        purpose: 'tryon' as const,
+        environment,
+        scopes,
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
 const legacyApiKeyLookupEnabled = () =>
   process.env.NODE_ENV !== 'production' || process.env.DRAPIXAI_ALLOW_LEGACY_API_KEYS === '1';
 
@@ -332,7 +435,8 @@ export const resolveSdkApiKey = async (prisma: PrismaClient, rawApiKey: string |
   }
 
   const storefrontCredential = await resolveStorefrontToken(prisma, credential)
-    || await resolveGenericStorefrontToken(prisma, credential);
+    || await resolveGenericStorefrontToken(prisma, credential)
+    || await resolvePublicApiToken(prisma, credential);
   if (storefrontCredential) {
     await prisma.apiKey.update({
       where: { id: storefrontCredential.apiKey.id },

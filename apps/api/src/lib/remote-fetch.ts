@@ -37,6 +37,8 @@ const isPrivateIpv4 = (address: string) => {
 
 const isPrivateIpv6 = (address: string) => {
   const normalized = address.toLowerCase();
+  const mappedIpv4 = normalized.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)?.[1];
+  if (mappedIpv4) return isPrivateIpv4(mappedIpv4);
   return (
     normalized === '::1' ||
     normalized === '::' ||
@@ -145,6 +147,55 @@ const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: numbe
 
     request.setTimeout(timeoutMs, () => request.destroy(new Error('REMOTE_FETCH_TIMEOUT')));
     request.on('error', reject);
+    request.end();
+  });
+};
+
+export const safePostJson = async (
+  rawUrl: string,
+  body: string,
+  headers: Record<string, string>,
+  options: SafeFetchOptions = {},
+) => {
+  const target = await assertSafeUrl(rawUrl, options.allowedProtocols || ['https:']);
+  const maxBytes = options.maxBytes || 64 * 1024;
+  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const transport = target.url.protocol === 'https:' ? https : http;
+
+  return new Promise<{ status: number; body: Buffer }>((resolve, reject) => {
+    const request = transport.request(target.url, {
+      method: 'POST',
+      servername: target.url.hostname,
+      lookup: (_hostname, _options, callback) => callback(null, target.address, target.family),
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': String(Buffer.byteLength(body)),
+        'User-Agent': 'DrapixAI-Webhook/1.0',
+        ...headers,
+      },
+    }, (incoming) => {
+      const status = incoming.statusCode || 0;
+      if (status >= 300 && status < 400) {
+        incoming.resume();
+        reject(new Error('REMOTE_REDIRECT_NOT_ALLOWED'));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      let total = 0;
+      incoming.on('data', (chunk: Buffer) => {
+        total += chunk.length;
+        if (total > maxBytes) {
+          incoming.destroy(new Error('REMOTE_RESPONSE_TOO_LARGE'));
+          return;
+        }
+        chunks.push(Buffer.from(chunk));
+      });
+      incoming.on('end', () => resolve({ status, body: Buffer.concat(chunks) }));
+      incoming.on('error', reject);
+    });
+    request.setTimeout(timeoutMs, () => request.destroy(new Error('REMOTE_FETCH_TIMEOUT')));
+    request.on('error', reject);
+    request.write(body);
     request.end();
   });
 };

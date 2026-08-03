@@ -32,7 +32,7 @@ export const runTryOnReviewRetention = async (
   prisma: PrismaClient,
   options: { retentionDays: number; batchSize: number; dryRun?: boolean },
 ) => {
-  const retentionDays = Math.max(1, Math.floor(options.retentionDays));
+  const retentionDays = Math.max(0, Math.floor(options.retentionDays));
   const batchSize = Math.min(1000, Math.max(1, Math.floor(options.batchSize)));
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
   const expiredResults = await prisma.tryOnResult.findMany({

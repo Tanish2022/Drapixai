@@ -100,6 +100,7 @@ $shopifyStateSecret = New-SecretValue
 $storefrontTokenSecret = New-SecretValue
 $auditLogSecret = New-SecretValue
 $shopifyEncryptionKey = New-Base64Key
+$webhookEncryptionKey = New-Base64Key
 
 Write-EnvFile `
     -SourcePath (Join-Path $envDir "api.production.example") `
@@ -120,6 +121,8 @@ Write-EnvFile `
         "DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY" = $shopifyEncryptionKey
         "DRAPIXAI_STOREFRONT_TOKEN_SECRET" = $storefrontTokenSecret
         "DRAPIXAI_AUDIT_LOG_SECRET" = $auditLogSecret
+        "DRAPIXAI_API_ENVIRONMENT" = "live"
+        "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY" = $webhookEncryptionKey
         "BILLING_UPGRADE_URL" = "https://$Domain/pricing"
         "S3_BUCKET" = $S3Bucket
         "AWS_REGION" = $AwsRegion
@@ -164,7 +167,7 @@ Write-Host "- DRAPIXAI_AI_URL"
 Write-Host "- Confirm DRAPIXAI_AUTH_SYNC_TOKEN matches between API and web env files"
 Write-Host "- Confirm DRAPIXAI_DASHBOARD_PROXY_TOKEN matches between API and web env files"
 Write-Host "- Confirm DRAPIXAI_AI_SERVICE_TOKEN matches between API and AI env files"
-Write-Host "- AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY"
+Write-Host "- Attach an AWS workload identity with Secrets Manager, S3, and KMS access; do not create long-lived access keys"
 Write-Host "- DRAPIXAI_S3_ACCESS_KEY_ID / DRAPIXAI_S3_SECRET_ACCESS_KEY"
 Write-Host "- SMTP_HOST / SMTP_USER / SMTP_PASS"
 Write-Host "- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET if Google login is enabled"

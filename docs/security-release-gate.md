@@ -42,7 +42,17 @@ CI builds and scans the API and web runtime images with the immutable Trivy imag
 
 1. Deploy the exact release commit to an isolated production-like staging environment.
 2. Create two disposable brand tenants, one ready product per tenant, one shopper token for tenant A, and one try-on result for tenant B.
-3. Run `npm --prefix apps/api run test:security:live` with the documented `DRAPIXAI_SECURITY_TEST_*` environment variables. Delete the test tenants afterward.
+3. Run `npm --prefix apps/api run test:security:live` with two disposable tenants and:
+   - `DRAPIXAI_SECURITY_TEST_API_URL`
+   - `DRAPIXAI_SECURITY_TEST_SERVER_KEY_A`
+   - `DRAPIXAI_SECURITY_TEST_SHOPPER_TOKEN_A`
+   - `DRAPIXAI_SECURITY_TEST_EXPIRED_SHOPPER_TOKEN_A`
+   - `DRAPIXAI_SECURITY_TEST_PRODUCT_A`
+   - `DRAPIXAI_SECURITY_TEST_PRODUCT_B`
+   - `DRAPIXAI_SECURITY_TEST_RESULT_B`
+   - `DRAPIXAI_SECURITY_TEST_ORIGIN_A`
+
+   The harness exercises cross-tenant product and result access, expired-token replay, cross-origin token replay, forged image uploads, and brand-to-admin privilege escalation. Delete the test tenants afterward.
 4. Run `deploy/scripts/pentest-staging.sh https://staging.example.com` with an approved digest-pinned ZAP image.
 5. Verify `npm --prefix apps/api run security:audit:verify` reports `valid: true`.
 6. Exercise retention with a short test window, confirm object deletion, database URL clearing, failure retry, and immutable audit evidence.

@@ -10,6 +10,8 @@ const main = async () => {
   const baseUrl = required('DRAPIXAI_SECURITY_TEST_API_URL').replace(/\/+$/, '');
   const serverKeyA = required('DRAPIXAI_SECURITY_TEST_SERVER_KEY_A');
   const shopperTokenA = required('DRAPIXAI_SECURITY_TEST_SHOPPER_TOKEN_A');
+  const expiredShopperTokenA = required('DRAPIXAI_SECURITY_TEST_EXPIRED_SHOPPER_TOKEN_A');
+  const productA = required('DRAPIXAI_SECURITY_TEST_PRODUCT_A');
   const productB = required('DRAPIXAI_SECURITY_TEST_PRODUCT_B');
   const resultB = required('DRAPIXAI_SECURITY_TEST_RESULT_B');
   const originA = required('DRAPIXAI_SECURITY_TEST_ORIGIN_A');
@@ -46,12 +48,53 @@ const main = async () => {
   });
   assert.equal(foreignFeedback.status, 404, 'Cross-tenant try-on result lookup must be indistinguishable from missing data');
 
+  const replayedExpiredToken = await fetch(`${baseUrl}/sdk/validate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${expiredShopperTokenA}`,
+      Origin: originA,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ productId: productA }),
+  });
+  assert.equal(replayedExpiredToken.status, 401, 'Expired shopper credentials must not be replayable');
+
+  const replayedFromForeignOrigin = await fetch(`${baseUrl}/sdk/validate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${shopperTokenA}`,
+      Origin: 'https://replay-attacker.invalid',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ productId: productA }),
+  });
+  assert.equal(replayedFromForeignOrigin.status, 403, 'Origin-bound shopper credentials must not be replayable from another storefront');
+
+  const uploadAttack = new FormData();
+  uploadAttack.append(
+    'person_image',
+    new Blob(['<html><script>alert(1)</script></html>'], { type: 'image/jpeg' }),
+    'polyglot.jpg',
+  );
+  uploadAttack.append('productId', productA);
+  const maliciousUpload = await fetch(`${baseUrl}/sdk/tryon`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${shopperTokenA}`,
+      Origin: originA,
+    },
+    body: uploadAttack,
+  });
+  assert.equal(maliciousUpload.status, 400, 'A file with a forged image MIME type must be rejected before generation');
+  const maliciousUploadPayload = await maliciousUpload.json() as { error?: string };
+  assert.equal(maliciousUploadPayload.error, 'INVALID_IMAGE_CONTENT');
+
   const adminAttempt = await fetch(`${baseUrl}/admin/verify`, {
     headers: { Authorization: `Bearer ${serverKeyA}` },
   });
   assert.equal(adminAttempt.status, 403, 'Brand credentials must never access system administration');
 
-  console.log('Live RBAC, product-scope, and cross-tenant boundary tests passed.');
+  console.log('Live tenant-isolation, replay, file-upload, and authorization attack tests passed.');
 };
 
 main().catch((error) => {

@@ -17,14 +17,14 @@ export default function PrivacyPage() {
           heading: 'Information We Collect',
           body: [
             'DrapixAI may collect account details such as name, company name, email address, billing-related information, API usage metadata, and support communications.',
-            'When customers use try-on features, DrapixAI may process garment images, model images, generated outputs, and technical logs needed to operate, secure, and improve the service.',
+            'When shoppers use try-on features, DrapixAI transiently processes the submitted person photo and generated preview only to complete that requested try-on. Brand garment images and product mappings are processed separately as merchant-owned catalog assets.',
           ],
         },
         {
           heading: 'How We Use Information',
           body: [
             'We use collected information to provide the service, authenticate users, generate try-on results, monitor platform reliability, prevent abuse, and communicate about accounts, billing, and support.',
-            'We may also use aggregated or de-identified usage information to improve product performance, infrastructure planning, and overall user experience.',
+            'We may use metadata that does not contain shopper photos, such as latency, quality scores, warning codes, and aggregate feature usage, to improve reliability and infrastructure planning. Shopper photos and generated previews are never used to train DrapixAI or third-party AI models.',
           ],
         },
         {
@@ -39,7 +39,8 @@ export default function PrivacyPage() {
           heading: 'Storage, Security, and Retention',
           body: [
             'DrapixAI uses technical and organizational safeguards to protect data in transit and at rest. Access to production systems is restricted to authorized personnel and service providers who need it to operate the platform.',
-            'Shopper person photos and generated try-on preview images may be retained for up to 30 days for quality review, fraud prevention, abuse investigation, and support, then deleted or de-identified unless a longer period is required by law or an active dispute. Brand garment assets and confirmed product mappings are retained while the brand account uses DrapixAI so cached try-on assets can be regenerated after model or resolution upgrades. Security, billing, and audit logs may be retained for up to 12 months.',
+            'Shopper person photos and generated try-on preview images are not persistently stored in DrapixAI databases or object storage. They are held only in protected transient memory or private temporary processing space and are deleted after completion or failure, with a 15-minute failsafe cleanup window for interrupted jobs. Image bytes and base64 payloads are excluded from application logs.',
+            'DrapixAI retains metadata-only consent, security, billing, quality, and audit records without shopper image content. Brand garment assets and confirmed product mappings are retained while the brand account uses DrapixAI so approved try-on caches can operate. Shopper photos and generated previews are never used for model training.',
           ],
         },
         {

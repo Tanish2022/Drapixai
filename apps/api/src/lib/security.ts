@@ -123,6 +123,29 @@ export const removeUploadedFile = (file: Express.Multer.File | undefined | null)
   }
 };
 
+export const cleanupExpiredUploadFiles = (maxAgeMs = 15 * 60 * 1000) => {
+  const root = getResolvedUploadRoot();
+  if (!fs.existsSync(root)) return 0;
+  const cutoff = Date.now() - Math.max(60_000, maxAgeMs);
+  let removed = 0;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    // Multer request bodies are direct files. Nested directories contain
+    // merchant-owned assets and are governed by their separate lifecycle.
+    if (!entry.isFile()) continue;
+    const candidate = path.resolve(root, entry.name);
+    if (path.dirname(candidate) !== root) continue;
+    try {
+      if (fs.statSync(candidate).mtimeMs < cutoff) {
+        fs.unlinkSync(candidate);
+        removed += 1;
+      }
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  return removed;
+};
+
 export const sanitizePathSegment = (value: unknown, fallback = 'item') => {
   const sanitized = String(value || '')
     .trim()

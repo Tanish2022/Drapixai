@@ -287,7 +287,7 @@
         buttonText: options.buttonText || 'Try On',
         modalTitle: options.modalTitle || 'DrapixAI Virtual Try-On',
         modalSubtitle: options.modalSubtitle || 'Upload your front-facing image and generate a polished DrapixAI try-on preview.',
-        footerText: options.footerText || 'Privacy: your photo is used only for this try-on preview, quality review, fraud prevention, and support. It is not shown publicly.',
+        footerText: options.footerText || 'Privacy: your photo is processed only for this try-on, is not persistently saved, and is never used to train AI models.',
         timeoutMs: Number(options.timeoutMs || 20000),
         enableDownload: options.enableDownload !== false,
         adaptBrandTheme: options.adaptBrandTheme !== false,
@@ -708,6 +708,8 @@
             form.append('productId', productId || config.productId);
             form.append('quality', config.quality);
             form.append('garment_type', config.garmentType);
+            form.append('shopper_consent', 'true');
+            form.append('privacy_policy_version', '2026-08-04');
             if (config.garmentCategory) {
               form.append('garment_category', config.garmentCategory);
             }

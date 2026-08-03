@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/rules/drapixai-alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager.monitoring.internal:9093
+
+scrape_configs:
+  - job_name: drapixai-api
+    scheme: https
+    metrics_path: /internal/metrics
+    authorization:
+      credentials_file: /run/secrets/drapixai-metrics-token
+    static_configs:
+      - targets:
+          - api.monitoring.internal

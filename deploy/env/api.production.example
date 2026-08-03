@@ -1,12 +1,31 @@
 NODE_ENV=production
 PORT=8000
+DRAPIXAI_SECRETS_PROVIDER=aws-secrets-manager
+DRAPIXAI_AWS_SECRET_ID=drapixai/production/api
+# Alternative: DRAPIXAI_SECRETS_PROVIDER=mounted-file
+# DRAPIXAI_MOUNTED_SECRET_FILE=/run/secrets/drapixai-api
 DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:5432/drapixai?sslmode=verify-full
 REDIS_URL=rediss://USERNAME:PASSWORD@HOST:6379
 DRAPIXAI_REDIS_PASSWORD=replace-with-a-long-random-secret
+DRAPIXAI_SERVER_KEY_RATE_LIMIT=120
+DRAPIXAI_API_KEY_RATE_LIMIT=600
+DRAPIXAI_TENANT_RATE_LIMIT=1200
+DRAPIXAI_MAX_CONCURRENT_TRYONS=3
+DRAPIXAI_TENANT_MAX_CONCURRENT_TRYONS=1
+DRAPIXAI_TRYON_SLOT_LEASE_MS=120000
+DRAPIXAI_METRICS_TOKEN=replace-with-a-long-random-secret
+DRAPIXAI_RQ_QUEUE_KEY=rq:queue:default
+# Rotation-only key rings. Keep empty except during a controlled rotation window.
+DRAPIXAI_STOREFRONT_TOKEN_PREVIOUS_SECRETS=
+DRAPIXAI_AUDIT_LOG_PREVIOUS_SECRETS=
+DRAPIXAI_WEBHOOK_PREVIOUS_ENCRYPTION_KEYS=
 JWT_SECRET=replace-with-a-long-random-secret
 DRAPIXAI_AUTH_SYNC_TOKEN=replace-with-the-same-web-api-auth-sync-token
 DRAPIXAI_DASHBOARD_PROXY_TOKEN=replace-with-the-same-dashboard-proxy-token
-DRAPIXAI_AI_URL=https://ai.drapixai.com
+DRAPIXAI_AI_URL=https://ai.drapixai.internal
+DRAPIXAI_AI_ALLOWED_HOSTS=ai.drapixai.internal
+DRAPIXAI_AI_PRIVATE_NETWORK=1
+NODE_EXTRA_CA_CERTS=/run/secrets/drapixai-internal-ca.pem
 DRAPIXAI_AI_SERVICE_TOKEN=replace-with-a-long-random-secret
 DRAPIXAI_CORS_ORIGINS=https://drapixai.com,https://www.drapixai.com
 DRAPIXAI_CORS_CACHE_TTL_MS=30000
@@ -53,16 +72,20 @@ DRAPIXAI_SHOPIFY_STATE_SECRET=replace-with-a-long-random-secret
 DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY=replace-with-32-random-bytes-base64
 DRAPIXAI_STOREFRONT_TOKEN_SECRET=replace-with-a-different-long-random-secret
 DRAPIXAI_AUDIT_LOG_SECRET=replace-with-an-independent-long-random-secret
-DRAPIXAI_REVIEW_RETENTION_DAYS=30
+DRAPIXAI_API_ENVIRONMENT=live
+# Generate with: openssl rand -base64 32
+DRAPIXAI_WEBHOOK_ENCRYPTION_KEY=replace-with-a-base64-encoded-32-byte-key
+DRAPIXAI_REVIEW_RETENTION_DAYS=0
 DRAPIXAI_REVIEW_RETENTION_BATCH_SIZE=200
 DRAPIXAI_ENTERPRISE_QUOTA=100000
 BILLING_UPGRADE_URL=https://drapixai.com/pricing
 S3_BUCKET=drapixai-prod
 AWS_REGION=us-east-1
+DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY=1
 S3_ENDPOINT=
 S3_FORCE_PATH_STYLE=0
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
+# Do not configure long-lived AWS access keys. Grant the API workload access
+# to Secrets Manager, S3 and KMS through its runtime identity.
 DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION=aws:kms
 DRAPIXAI_S3_KMS_KEY_ID=replace-with-kms-key-id
 SMTP_HOST=

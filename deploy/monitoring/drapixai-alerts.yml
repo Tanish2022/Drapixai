@@ -1,0 +1,60 @@
+groups:
+  - name: drapixai-security
+    rules:
+      - alert: DrapixAIAuthenticationFailureSpike
+        expr: sum(rate(drapixai_auth_failures_total[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Elevated DrapixAI authentication failures
+          description: Authentication or authorization failures exceeded 30 per minute for five minutes.
+
+      - alert: DrapixAIRateLimitSpike
+        expr: sum(rate(drapixai_rate_limited_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Abnormal DrapixAI request volume
+          description: Application rate-limit rejections exceeded 60 per minute for five minutes.
+
+  - name: drapixai-capacity
+    rules:
+      - alert: DrapixAIGpuQueueGrowing
+        expr: drapixai_gpu_queue_depth > 10
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: DrapixAI GPU queue is growing
+          description: More than ten jobs have remained queued for three minutes.
+
+      - alert: DrapixAIGpuQueueCritical
+        expr: drapixai_gpu_queue_depth > 30
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: DrapixAI GPU queue is critically backed up
+          description: Protect latency by pausing intake or adding a worker.
+
+  - name: drapixai-webhooks
+    rules:
+      - alert: DrapixAIWebhookDeliveryFailures
+        expr: increase(drapixai_webhook_failures_total[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DrapixAI webhook delivery failures
+          description: More than five webhook attempts failed in fifteen minutes.
+
+      - alert: DrapixAIFailedWebhookBacklog
+        expr: drapixai_webhook_failed > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Permanently failed DrapixAI webhooks need review
+          description: At least one webhook exhausted all delivery attempts.

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -13,16 +14,19 @@ import accountRoutes from './routes/account';
 import shopifyRoutes from './routes/shopify';
 import shopifyStorefrontRoutes from './routes/shopify-storefront';
 import shopifyWebhookRoutes from './routes/shopify-webhooks';
+import v1Routes from './routes/v1';
 import cron from 'node-cron';
 import { startTrialNotifications } from './services/trial_notifier';
 import { getStorageSummary } from './lib/storage';
-import { formatLogError } from './lib/security';
+import { cleanupExpiredUploadFiles, formatLogError } from './lib/security';
 import { ensureAdminUser } from './services/admin-bootstrap';
 import { syncShopifyCatalog } from './services/shopify';
 import { processShopifyCatalogPreparationBatch } from './services/catalog-preparation';
 import { withOperationTimeout } from './lib/operation-timeout';
 import { runTryOnReviewRetention } from './services/review-retention';
 import { createVerifiedStorefrontOriginCache } from './lib/cors-origin-cache';
+import { processPendingWebhookDeliveries } from './services/webhooks';
+import { observeHttpResponse, renderOperationalMetrics } from './lib/operational-metrics';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -37,7 +41,7 @@ const aiBaseUrl = (process.env.DRAPIXAI_AI_URL || '').trim();
 const shopifyEnabled = process.env.DRAPIXAI_SHOPIFY_ENABLED === '1';
 const shopifyAutoPrepare = process.env.DRAPIXAI_SHOPIFY_AUTO_PREPARE === '1';
 const shopifyPreparationBatchSize = Number(process.env.DRAPIXAI_SHOPIFY_PREPARE_BATCH_SIZE || 3);
-const reviewRetentionDays = Number(process.env.DRAPIXAI_REVIEW_RETENTION_DAYS || 30);
+const reviewRetentionDays = Number(process.env.DRAPIXAI_REVIEW_RETENTION_DAYS || 0);
 const reviewRetentionBatchSize = Number(process.env.DRAPIXAI_REVIEW_RETENTION_BATCH_SIZE || 200);
 
 const configuredOrigins = (process.env.DRAPIXAI_CORS_ORIGINS || '*')
@@ -104,8 +108,6 @@ const requireProductionConfig = () => {
     'DRAPIXAI_WEB_BASE_URL',
     'S3_BUCKET',
     'AWS_REGION',
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
     'SMTP_HOST',
     'SMTP_PORT',
     'SMTP_USER',
@@ -124,7 +126,43 @@ const requireProductionConfig = () => {
   requireSecret('DRAPIXAI_ADMIN_TOTP_SECRET', 16);
   requireSecret('DRAPIXAI_STOREFRONT_TOKEN_SECRET', 32);
   requireSecret('DRAPIXAI_AUDIT_LOG_SECRET', 32);
+  requireSecret('DRAPIXAI_METRICS_TOKEN', 32);
+  const webhookEncryptionKey = requireValue('DRAPIXAI_WEBHOOK_ENCRYPTION_KEY');
+  if (webhookEncryptionKey) {
+    try {
+      if (Buffer.from(webhookEncryptionKey, 'base64').length !== 32) {
+        weak.push('DRAPIXAI_WEBHOOK_ENCRYPTION_KEY must decode to exactly 32 bytes');
+      }
+    } catch {
+      weak.push('DRAPIXAI_WEBHOOK_ENCRYPTION_KEY must be valid base64');
+    }
+  }
+  const apiEnvironment = requireValue('DRAPIXAI_API_ENVIRONMENT');
+  if (apiEnvironment && !['live', 'sandbox'].includes(apiEnvironment)) {
+    weak.push('DRAPIXAI_API_ENVIRONMENT must equal live or sandbox');
+  }
+  const secretsProvider = requireValue('DRAPIXAI_SECRETS_PROVIDER');
+  if (secretsProvider && !['aws-secrets-manager', 'mounted-file'].includes(secretsProvider)) {
+    weak.push('DRAPIXAI_SECRETS_PROVIDER must use aws-secrets-manager or mounted-file in production');
+  }
+  requireExact('DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY', '1');
+  if (secretsProvider === 'aws-secrets-manager' && process.env.DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY !== '1') {
+    weak.push('AWS Secrets Manager must be bootstrapped with workload identity');
+  }
   requireHttpsUrl('DRAPIXAI_AI_URL');
+  requireExact('DRAPIXAI_AI_PRIVATE_NETWORK', '1');
+  const allowedAiHosts = requireValue('DRAPIXAI_AI_ALLOWED_HOSTS')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+  try {
+    const configuredAiHost = new URL(process.env.DRAPIXAI_AI_URL || '').hostname.toLowerCase();
+    if (!allowedAiHosts.includes(configuredAiHost)) {
+      weak.push('DRAPIXAI_AI_URL hostname must be listed in DRAPIXAI_AI_ALLOWED_HOSTS');
+    }
+  } catch {
+    // The URL format failure is reported by requireHttpsUrl.
+  }
   requireHttpsUrl('DRAPIXAI_WEB_BASE_URL');
   const databaseUrl = process.env.DATABASE_URL || '';
   try {
@@ -235,12 +273,18 @@ const sdkExposedHeaders = [
   'x-drapixai-garment-source',
   'x-drapixai-garment-cache-status',
   'x-drapixai-garment-cache-version',
+  'x-drapixai-media-retention',
+  'x-drapixai-training-use',
 ];
 
 app.disable('x-powered-by');
 if (trustProxy) {
   app.set('trust proxy', trustProxy === '1' ? 1 : trustProxy);
 }
+app.use((req, res, next) => {
+  res.on('finish', () => observeHttpResponse(req.method, req.path, res.statusCode));
+  next();
+});
 app.use(helmet());
 if (shopifyEnabled) {
   app.use('/shopify', shopifyStorefrontRoutes);
@@ -273,6 +317,7 @@ app.use('/events', express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '10mb' }));
 
 app.use('/auth', authRoutes);
+app.use('/v1', v1Routes);
 app.use('/sdk', sdkRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/account', accountRoutes);
@@ -357,6 +402,21 @@ app.get('/ready', async (req, res) => {
   res.status(ready ? 200 : 503).json(payload);
 });
 
+app.get('/internal/metrics', async (req, res) => {
+  const expected = Buffer.from(process.env.DRAPIXAI_METRICS_TOKEN || '');
+  const supplied = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+  if (expected.length < 32 || supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+    return res.status(404).json({ error: 'NOT_FOUND' });
+  }
+  try {
+    const metrics = await renderOperationalMetrics(prisma, redis);
+    res.type('text/plain; version=0.0.4; charset=utf-8').send(metrics);
+  } catch (error) {
+    console.error('Operational metrics collection failed:', formatLogError(error));
+    res.status(503).json({ error: 'METRICS_UNAVAILABLE' });
+  }
+});
+
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'NOT_FOUND' });
 });
@@ -404,7 +464,7 @@ cron.schedule('0 0 * * *', async () => {
   }
 });
 
-cron.schedule('20 2 * * *', async () => {
+cron.schedule('*/15 * * * *', async () => {
   const summary = await runTryOnReviewRetention(prisma, {
     retentionDays: reviewRetentionDays,
     batchSize: reviewRetentionBatchSize,
@@ -415,6 +475,26 @@ cron.schedule('20 2 * * *', async () => {
   if (summary?.failures.length) {
     console.error('Scheduled try-on review retention completed with failures:', summary.failures.length);
   }
+});
+
+cron.schedule('*/5 * * * *', () => {
+  try {
+    cleanupExpiredUploadFiles();
+  } catch (error) {
+    console.error('Transient upload cleanup failed:', formatLogError(error));
+  }
+});
+
+cron.schedule('* * * * *', async () => {
+  await processPendingWebhookDeliveries(prisma).catch((error) => {
+    console.error('Scheduled webhook delivery failed:', formatLogError(error));
+  });
+});
+
+cron.schedule('35 2 * * *', async () => {
+  await prisma.apiIdempotencyRecord.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch((error) => {
+    console.error('Scheduled idempotency cleanup failed:', formatLogError(error));
+  });
 });
 
 if (shopifyEnabled) {

@@ -1,4 +1,6 @@
-import { PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3';
+import fs from 'fs';
+import path from 'path';
+import { GetObjectCommand, PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3';
 
 const region = process.env.AWS_REGION || 'us-east-1';
 const endpoint = (process.env.S3_ENDPOINT || '').trim();
@@ -61,3 +63,23 @@ export function getStorageSummary() {
     localFallbackAllowed: STORAGE_LOCAL_FALLBACK_ALLOWED,
   };
 }
+
+export const readStoredObject = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
+  if (!storedUrl) return null;
+  if (storedUrl.startsWith('local:')) {
+    if (!STORAGE_LOCAL_FALLBACK_ALLOWED) return null;
+    const root = path.resolve(process.env.DRAPIXAI_UPLOAD_DIR || 'uploads');
+    const target = path.resolve(storedUrl.slice('local:'.length));
+    const relative = path.relative(root, target);
+    if (relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(target)) return null;
+    return fs.readFileSync(target);
+  }
+  if (!storedUrl.startsWith('s3://')) return null;
+  const [bucket, ...keyParts] = storedUrl.slice('s3://'.length).split('/');
+  const key = keyParts.join('/');
+  if (!bucket || !key) return null;
+  const response: any = await createStorageClient().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const chunks: Buffer[] = [];
+  for await (const chunk of response.Body) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+};

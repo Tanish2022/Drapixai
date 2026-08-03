@@ -40,6 +40,8 @@ model User {
   garmentMatches                  GarmentMatch[]
   tryOnResults                    TryOnResult[]
   tryOnFeedback                   TryOnFeedback[]
+  apiIdempotencyRecords           ApiIdempotencyRecord[]
+  webhookEndpoints                WebhookEndpoint[]
   verificationCodes               VerificationCode[]
   shopifyInstallations            ShopifyInstallation[]
 }
@@ -63,8 +65,28 @@ model ApiKey {
   dailyUsages         UsageDaily[]
   tryOnResults        TryOnResult[]
   shopifyInstallation ShopifyInstallation?
+  apiIdempotencyRecords ApiIdempotencyRecord[]
 
   @@index([userId, kind, isActive])
+  @@index([expiresAt])
+}
+
+model ApiIdempotencyRecord {
+  id             String   @id @default(uuid())
+  userId         Int
+  apiKeyId       Int
+  route          String
+  keyHash        String
+  state          String   @default("processing")
+  responseStatus Int?
+  tryOnResultId  Int?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey         ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, route, keyHash])
   @@index([expiresAt])
 }
 
@@ -278,6 +300,41 @@ model ShopifyWebhookEvent {
 
   @@index([shopDomain, receivedAt])
   @@index([topic, receivedAt])
+}
+
+model WebhookEndpoint {
+  id              String            @id @default(uuid())
+  userId          Int
+  url             String
+  events          String
+  encryptedSecret String
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries      WebhookDelivery[]
+
+  @@index([userId, isActive])
+}
+
+model WebhookDelivery {
+  id            String          @id @default(uuid())
+  endpointId    String
+  eventId       String
+  eventType     String
+  payload       Json
+  status        String          @default("pending")
+  attemptCount  Int             @default(0)
+  nextAttemptAt DateTime        @default(now())
+  responseCode  Int?
+  errorCode     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  endpoint      WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, eventId])
+  @@index([status, nextAttemptAt])
 }
 
 model CatalogPreparationLease {

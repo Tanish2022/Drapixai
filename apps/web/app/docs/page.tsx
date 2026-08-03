@@ -10,16 +10,16 @@ export const metadata: Metadata = {
   description: 'Prepare one product and complete your first DrapixAI storefront try-on.',
 };
 
-const curlSnippet = `# Run this exchange on your backend; never expose SERVER_API_KEY to a shopper.
-TOKEN=$(curl -s -X POST '${PUBLIC_API_BASE_URL}/sdk/storefront-token' \\
+const curlSnippet = `# Run this exchange on your backend. Never expose SERVER_API_KEY to a browser or app.
+TOKEN=$(curl -s -X POST '${PUBLIC_API_BASE_URL}/v1/tokens' \\
   -H 'Authorization: Bearer SERVER_API_KEY' \\
   -H 'Content-Type: application/json' \\
-  -d '{"channel":"web","productIds":["YOUR_CONFIRMED_PRODUCT_ID"]}' | jq -r .token)
+  -d '{"scopes":["api:tryon"],"product_ids":["YOUR_CONFIRMED_PRODUCT_ID"]}' | jq -r .access_token)
 
-curl -X POST '${PUBLIC_API_BASE_URL}/sdk/tryon' \\
+curl -X POST '${PUBLIC_API_BASE_URL}/v1/tryons' \\
   -H "Authorization: Bearer $TOKEN" \\
-  -H 'Origin: https://your-verified-store.example' \\
-  -F 'garment_id=YOUR_CONFIRMED_PRODUCT_ID' \\
+  -H "Idempotency-Key: $(uuidgen)" \\
+  -F 'productId=YOUR_CONFIRMED_PRODUCT_ID' \\
   -F 'person_image=@./person.jpg' \\
   -F 'garment_type=upper' \\
   -F 'quality=standard' \\
@@ -47,6 +47,12 @@ const steps = [
     action: 'Open installation',
     href: '/sdk-install',
   },
+];
+
+const apiPlans = [
+  { name: 'Starter', price: '$49', quota: '1,000', effective: '$0.0490 / result' },
+  { name: 'Growth', price: '$199', quota: '7,500', effective: '$0.0265 / result' },
+  { name: 'Pro', price: '$499', quota: '25,000', effective: '$0.0200 / result' },
 ];
 
 export default function DocsPage() {
@@ -132,11 +138,37 @@ export default function DocsPage() {
         </div>
       </section>
 
+      <section className="border-y border-black/10 bg-white">
+        <div className="mx-auto max-w-[1440px] px-5 py-16 sm:px-8 lg:px-12">
+          <div className="grid gap-8 lg:grid-cols-[0.7fr_1.3fr]">
+            <div>
+              <p className="text-xs font-bold uppercase text-[#31725b]">API usage pricing</p>
+              <h2 className="mt-4 font-serif text-4xl text-[#101712]">Successful results consume quota.</h2>
+              <p className="mt-5 max-w-md leading-7 text-[#68736b]">SDK and REST API usage share the same monthly allowance. Quality-gate rejections and idempotent retries do not consume another unit.</p>
+              <Link href="/pricing" className="mt-7 inline-flex items-center gap-2 text-sm font-bold text-[#183f32] hover:text-[#31725b]">
+                Full billing rules <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid border-y border-black/10 sm:grid-cols-3 sm:divide-x sm:divide-black/10">
+              {apiPlans.map((plan) => (
+                <div key={plan.name} className="border-b border-black/10 py-7 last:border-b-0 sm:border-b-0 sm:px-7">
+                  <p className="text-sm font-bold text-[#31725b]">{plan.name}</p>
+                  <p className="mt-4 font-serif text-4xl">{plan.price}<span className="ml-1 font-sans text-xs text-[#748078]">/ month</span></p>
+                  <p className="mt-5 font-semibold">{plan.quota} successful try-ons</p>
+                  <p className="mt-1 text-sm text-[#748078]">{plan.effective}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="mt-8 border-t border-black/10 pt-5 text-sm leading-6 text-[#68736b]">No automatic overages at launch. HTTP 422 quality rejections, validation failures, token exchange, usage reads, webhook operations, and OpenAPI access are not counted.</p>
+        </div>
+      </section>
+
       <section className="mx-auto grid max-w-[1440px] gap-10 px-5 py-16 sm:px-8 lg:grid-cols-[1.35fr_0.65fr] lg:px-12">
         <div className="min-w-0 border border-black/10 bg-[#101712] text-white">
           <div className="border-b border-white/15 px-5 py-4">
-            <p className="font-semibold">REST API smoke test</p>
-            <p className="mt-1 text-sm text-[#9fac9f]">Run after the product is approved and mapped.</p>
+            <p className="font-semibold">Versioned REST API smoke test</p>
+            <p className="mt-1 text-sm text-[#9fac9f]">Uses a short-lived token, product scope, and an idempotency key.</p>
           </div>
           <pre className="overflow-x-auto p-5 text-sm leading-7 text-[#d3ddd5]"><code>{curlSnippet}</code></pre>
         </div>

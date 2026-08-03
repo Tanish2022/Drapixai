@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hmac
 import io
@@ -10,6 +11,7 @@ import uuid
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Header
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from PIL import Image
@@ -33,6 +35,20 @@ app = FastAPI(title="DrapixAI", version="1.0.0")
 service = TryOnService()
 garment_cache = GarmentCache()
 logger = get_logger("drapixai_ai.api")
+
+
+@app.exception_handler(RequestValidationError)
+async def sanitized_validation_error(_request: Request, exc: RequestValidationError):
+    errors = []
+    for error in exc.errors():
+        errors.append(
+            {
+                "type": error.get("type"),
+                "loc": error.get("loc"),
+                "msg": error.get("msg"),
+            }
+        )
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 
 class TryOnBase64Request(BaseModel):
@@ -120,18 +136,34 @@ def _model_ready() -> bool:
     engine = settings.tryon_engine.strip().lower().replace("-", "_")
     if engine not in {"catvton", "cat_vton"}:
         return False
-    return os.path.isdir(settings.catvton_model_dir) and os.path.exists(
+    upper_ready = os.path.isdir(settings.catvton_model_dir) and os.path.exists(
         os.path.join(settings.catvton_model_dir, "mix-48k-1024", "attention")
     )
+    if not upper_ready or not settings.enable_lower_body:
+        return upper_ready
+    lower_engine = settings.lower_body_engine.strip().lower().replace("-", "_")
+    if lower_engine in {"catvton", "cat_vton"}:
+        return upper_ready
+    if lower_engine in {"fashn", "fashn_vton", "fashn_vton_1_5"}:
+        required = (
+            os.path.join(settings.fashn_weights_dir, "model.safetensors"),
+            os.path.join(settings.fashn_weights_dir, "dwpose", "yolox_l.onnx"),
+            os.path.join(settings.fashn_weights_dir, "dwpose", "dw-ll_ucoco_384.onnx"),
+            os.path.join(settings.fashn_weights_dir, "model-manifest.json"),
+        )
+        return all(os.path.isfile(path) for path in required)
+    return False
 
 
 def _worker_ready(connection) -> bool:
+    required_queues = {settings.queue_name}
+    if settings.enable_lower_body:
+        required_queues.add(settings.lower_body_queue_name)
+    ready_queues: set[str] = set()
     for worker in Worker.all(connection=connection):
-        if settings.queue_name not in worker.queue_names():
-            continue
         if worker.get_state() in {"idle", "busy"}:
-            return True
-    return False
+            ready_queues.update(worker.queue_names())
+    return required_queues <= ready_queues
 
 
 def _is_admin(token: Optional[str]) -> bool:
@@ -279,11 +311,22 @@ async def ready() -> Response:
             "model_ready": model_ready,
             "worker_ready": worker_ready,
             "engine": settings.tryon_engine,
+            "lower_body_engine": settings.lower_body_engine if settings.enable_lower_body else "disabled",
+            "adaptive_batching": settings.adaptive_batching,
+            "gpu_batch_max": settings.gpu_batch_max if settings.adaptive_batching else 1,
         }
         return JSONResponse(payload, status_code=200 if model_ready and worker_ready else 503)
     except Exception:
         return JSONResponse(
-            {"status": "not_ready", "model_ready": _model_ready(), "worker_ready": False, "engine": settings.tryon_engine},
+            {
+                "status": "not_ready",
+                "model_ready": _model_ready(),
+                "worker_ready": False,
+                "engine": settings.tryon_engine,
+                "lower_body_engine": settings.lower_body_engine if settings.enable_lower_body else "disabled",
+                "adaptive_batching": settings.adaptive_batching,
+                "gpu_batch_max": settings.gpu_batch_max if settings.adaptive_batching else 1,
+            },
             status_code=503,
         )
 
@@ -336,7 +379,7 @@ async def tryon(
         raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
 
     try:
-        result = service.wait_for_result(job)
+        result = await asyncio.to_thread(service.wait_for_result, job)
     except TimeoutError:
         raise HTTPException(status_code=504, detail="TRY_ON_TIMEOUT")
     except RuntimeError:
@@ -409,6 +452,8 @@ async def tryon(
         "x-drapixai-quality-mode": quality_mode,
         "x-drapixai-quality-profile": str(metadata.get("quality_profile", "")),
         "x-drapixai-garment-source": garment_source,
+        "x-drapixai-media-retention": "transient-only",
+        "x-drapixai-training-use": "none",
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
@@ -455,7 +500,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
 
     try:
-        result = service.wait_for_result(job)
+        result = await asyncio.to_thread(service.wait_for_result, job)
     except TimeoutError:
         raise HTTPException(status_code=504, detail="TRY_ON_TIMEOUT")
     except RuntimeError:
@@ -528,6 +573,8 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         "x-drapixai-quality-mode": quality_mode,
         "x-drapixai-quality-profile": str(metadata.get("quality_profile", "")),
         "x-drapixai-garment-source": garment_source,
+        "x-drapixai-media-retention": "transient-only",
+        "x-drapixai-training-use": "none",
     }
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 

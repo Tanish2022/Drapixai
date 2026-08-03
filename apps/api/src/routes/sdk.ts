@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
+import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import multer from 'multer';
 import fs from 'fs';
@@ -51,9 +52,11 @@ import {
 } from '../lib/security';
 import { getUserMonthlyUsage, incrementApiKeyUsage } from '../lib/usage';
 import { hasPermission, ownsTenantResource } from '../lib/authorization';
+import { appendSecurityAudit } from '../lib/audit-log';
 
 const router = Router();
 const prisma = new PrismaClient();
+const SHOPPER_PRIVACY_POLICY_VERSION = '2026-08-04';
 
 router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, private');
@@ -511,6 +514,10 @@ const enforceSingleDomain = async (apiKeyId: number, current: string | null, dom
 const enforceSdkRequestDomain = async (req: any, res: any) => {
   const apiKey = req.apiKey;
   const storefront = req.storefrontContext as StorefrontCredentialContext | null;
+  if (storefront?.channel === 'api') {
+    req.sdkDomainWhitelist = 'server-to-server';
+    return true;
+  }
   if (storefront?.channel === 'mobile') {
     const requestAppId = String(req.headers['x-drapixai-app-id'] || '').trim();
     if (!requestAppId || requestAppId !== storefront.appId) {
@@ -552,6 +559,14 @@ const enforceSdkRequestDomain = async (req: any, res: any) => {
 };
 
 const requireShopperCredential = (req: any, res: any) => {
+  const storefront = req.storefrontContext as StorefrontCredentialContext | null;
+  if (storefront?.channel === 'api' && !storefront.scopes?.includes('api:tryon')) {
+    res.status(403).json({
+      error: 'API_SCOPE_DENIED',
+      message: 'This public API access token does not include api:tryon.',
+    });
+    return false;
+  }
   if (process.env.NODE_ENV === 'production' && !req.storefrontContext && !req.isDashboardPreview) {
     res.status(403).json({
       error: 'SHORT_LIVED_STOREFRONT_TOKEN_REQUIRED',
@@ -855,6 +870,19 @@ router.post('/tryon', authMiddleware, upload.fields([
       });
     }
 
+    const shopperConsent = String(req.body?.shopper_consent || '').trim().toLowerCase();
+    const privacyPolicyVersion = String(req.body?.privacy_policy_version || '').trim();
+    if (shopperConsent !== 'true' || privacyPolicyVersion !== SHOPPER_PRIVACY_POLICY_VERSION) {
+      cleanupTryOnUploadFiles();
+      return res.status(400).json({
+        error: 'SHOPPER_CONSENT_REQUIRED',
+        message: 'Explicit consent to transient try-on processing is required.',
+        privacyPolicyVersion: SHOPPER_PRIVACY_POLICY_VERSION,
+      });
+    }
+    res.setHeader('x-drapixai-media-retention', 'transient-only');
+    res.setHeader('x-drapixai-training-use', 'none');
+
     if (!(await isAllowedImageFileContent(personFile)) || (clothFile && !(await isAllowedImageFileContent(clothFile)))) {
       cleanupTryOnUploadFiles();
       return res.status(400).json({
@@ -910,6 +938,22 @@ router.post('/tryon', authMiddleware, upload.fields([
 
     const requestStartedAt = Date.now();
     const requestId = crypto.randomUUID();
+
+    await appendSecurityAudit(prisma, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      action: 'privacy.tryon_consent.accepted',
+      targetType: 'tryon_request',
+      targetId: requestId,
+      requestId,
+      ip: req.ip,
+      metadata: {
+        privacyPolicyVersion,
+        productId: requestedProductId || null,
+        mediaRetention: 'transient-only',
+        modelTrainingUse: 'none',
+      },
+    });
 
     try {
       const personBytes = fs.readFileSync(personFile.path);
@@ -1077,11 +1121,30 @@ router.post('/tryon', authMiddleware, upload.fields([
         cloth_cache_key: generationGarmentSource === 'cache' ? finalCacheKey : undefined
       };
 
-      const aiResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
-        method: 'POST',
-        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(payload)
-      });
+      const slot = await acquireTryOnSlot(user.id);
+      if (!slot.ok) {
+        const unavailable = slot.reason === 'CONCURRENCY_CONTROL_UNAVAILABLE';
+        res.setHeader('Retry-After', '2');
+        return res.status(unavailable ? 503 : 429).json({
+          error: slot.reason,
+          message: slot.reason === 'TENANT_CONCURRENCY_LIMIT'
+            ? 'This brand already has the maximum number of active try-ons. Retry shortly.'
+            : slot.reason === 'GLOBAL_CAPACITY_BUSY'
+              ? 'DrapixAI is processing the current GPU capacity. Retry shortly.'
+              : 'Try-on capacity control is temporarily unavailable.',
+        });
+      }
+
+      let aiResponse: Response;
+      try {
+        aiResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
+          method: 'POST',
+          headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload)
+        });
+      } finally {
+        await releaseTryOnSlot(slot.lease);
+      }
 
       if (!aiResponse.ok) {
         const errText = await aiResponse.text();
@@ -1116,20 +1179,6 @@ router.post('/tryon', authMiddleware, upload.fields([
         ? [...combinedWarnings, `LATENCY_OVER_${TRYON_LATENCY_TARGET_MS}MS`]
         : combinedWarnings;
       const storedWarnings = [...latencyWarnings, ...sdkOperationalWarnings];
-      const personReviewUrl = await uploadReviewImage(
-        user.id,
-        requestId,
-        'person',
-        personBytes,
-        personFile.mimetype || 'image/jpeg'
-      );
-      const resultReviewUrl = await uploadReviewImage(
-        user.id,
-        requestId,
-        'result',
-        buffer,
-        contentType
-      );
       const parsedQualityScore = parseNumberHeader(qualityScore);
       const confidenceBadge = getTryOnConfidenceBadge({
         qualityScore: parsedQualityScore,
@@ -1159,9 +1208,9 @@ router.post('/tryon', authMiddleware, upload.fields([
           requestId,
           garmentId: actualGarmentId || undefined,
           productId: requestedProductId || undefined,
-          personImageUrl: personReviewUrl,
+          personImageUrl: null,
           garmentImageUrl: garmentReviewUrl,
-          resultImageUrl: resultReviewUrl,
+          resultImageUrl: null,
           engine: engine || 'unknown',
           qualityScore: parsedQualityScore,
           candidateCount: parseNumberHeader(candidateCount) || 1,
@@ -1172,6 +1221,22 @@ router.post('/tryon', authMiddleware, upload.fields([
           status: resultStatus,
           rejectedAt: resultStatus === 'rejected' ? new Date() : undefined,
         }
+      });
+
+      await appendSecurityAudit(prisma, {
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'privacy.tryon_media.not_retained',
+        targetType: 'tryon_result',
+        targetId: String(tryOnResult.id),
+        requestId,
+        ip: req.ip,
+        metadata: {
+          personImageStored: false,
+          resultImageStored: false,
+          modelTrainingUse: 'none',
+          garmentAssetStored: Boolean(garmentReviewUrl),
+        },
       });
 
       if (resultStatus === 'rejected') {
@@ -1219,7 +1284,8 @@ router.post('/tryon', authMiddleware, upload.fields([
 
 /**
  * POST /sdk/tryon-feedback
- * Store storefront feedback for future DrapixAI-VTON training data.
+ * Store metadata-only storefront feedback for quality and reliability analytics.
+ * Shopper photos and generated previews are never attached or used for training.
  */
 router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
   try {

@@ -17,6 +17,10 @@ The AI API remains at `127.0.0.1:18080` on the GPU workstation. A private revers
 proxy exposes it only on the Tailscale or WireGuard address with an internal TLS
 certificate. Permit API-host-to-GPU TCP 443 and administrator VPN SSH; deny public
 GPU ingress and GPU access to the edge PostgreSQL, Redis, and MinIO services.
+The shopper-image spool is placed under `/dev/shm`, never the persistent model or
+runtime volume. Disable swap or use encrypted swap, and enable full-disk encryption
+for every host so crash dumps and operating-system artifacts cannot persist photos
+in plaintext.
 
 ## First deployment
 

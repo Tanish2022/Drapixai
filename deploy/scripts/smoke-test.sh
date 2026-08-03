@@ -134,6 +134,8 @@ if [[ -n "${PERSON_IMAGE:-}" && -n "${CLOTH_IMAGE:-}" ]]; then
     -F "productId=${PRODUCT_ID}" \
     -F "garment_type=upper" \
     -F "quality=standard" \
+    -F "shopper_consent=true" \
+    -F "privacy_policy_version=2026-08-04" \
     -D "$HEADERS_FILE" \
     -o "$OUTPUT_FILE" \
     -w '%{http_code}')"

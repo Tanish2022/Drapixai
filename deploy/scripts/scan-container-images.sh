@@ -13,15 +13,32 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
+scan_dir="$(mktemp -d)"
+cleanup() {
+  rm -rf "${scan_dir}"
+}
+trap cleanup EXIT
+
+index=0
 for image in "$@"; do
+  index=$((index + 1))
+  archive="${scan_dir}/image-${index}.tar"
+
+  echo "Exporting ${image} for isolated scanning"
+  docker save --output "${archive}" "${image}"
+
   echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities"
   docker run --rm \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v "${HOME}/.cache/trivy:/root/.cache/" \
+    --read-only \
+    --cap-drop ALL \
+    --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+    --mount "type=bind,src=${archive},dst=/scan/image.tar,readonly" \
+    --mount "type=volume,src=drapixai-trivy-cache,dst=/root/.cache/" \
     "${TRIVY_IMAGE}" image \
+    --input /scan/image.tar \
     --exit-code 1 \
     --severity HIGH,CRITICAL \
     --pkg-types os,library \
     --scanners vuln \
-    "${image}"
+    --skip-version-check
 done

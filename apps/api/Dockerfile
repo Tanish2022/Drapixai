@@ -18,21 +18,32 @@ RUN cd apps/api \
 
 WORKDIR /app/apps/api
 
-FROM node:20-bookworm-slim AS runtime
+FROM debian:bookworm-slim AS patched-openssl
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libssl3 \
+    && mkdir -p /var/lib/dpkg/status.d \
+    && dpkg-query --status libssl3 > /var/lib/dpkg/status.d/libssl3 \
+    && cp /var/lib/dpkg/info/libssl3:amd64.md5sums /var/lib/dpkg/status.d/libssl3.md5sums \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM gcr.io/distroless/nodejs20-debian12:nonroot AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app/apps/api
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssl \
-    && rm -rf /var/lib/apt/lists/*
-
+COPY --from=patched-openssl /usr/lib/x86_64-linux-gnu/libcrypto.so.3 /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+COPY --from=patched-openssl /usr/lib/x86_64-linux-gnu/libssl.so.3 /usr/lib/x86_64-linux-gnu/libssl.so.3
+COPY --from=patched-openssl /usr/lib/x86_64-linux-gnu/engines-3 /usr/lib/x86_64-linux-gnu/engines-3
+COPY --from=patched-openssl /usr/lib/x86_64-linux-gnu/ossl-modules /usr/lib/x86_64-linux-gnu/ossl-modules
+COPY --from=patched-openssl /var/lib/dpkg/status.d/libssl3 /var/lib/dpkg/status.d/libssl3
+COPY --from=patched-openssl /var/lib/dpkg/status.d/libssl3.md5sums /var/lib/dpkg/status.d/libssl3.md5sums
 COPY --from=build --chown=node:node /app/apps/api/package.json /app/apps/api/package-lock.json ./
 COPY --from=build --chown=node:node /app/apps/api/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/apps/api/dist ./dist
 COPY --from=build --chown=node:node /app/apps/api/prisma ./prisma
 
-USER node
+USER nonroot
 EXPOSE 8000
 
-CMD ["node", "dist/server.js"]
+CMD ["dist/bootstrap.js"]

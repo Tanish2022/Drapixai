@@ -139,11 +139,12 @@ case "$profile" in
       DRAPIXAI_ADMIN_TOTP_SECRET
       DRAPIXAI_STOREFRONT_TOKEN_SECRET
       DRAPIXAI_AUDIT_LOG_SECRET
+      DRAPIXAI_API_ENVIRONMENT
+      DRAPIXAI_WEBHOOK_ENCRYPTION_KEY
       DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION
       S3_BUCKET
       AWS_REGION
-      AWS_ACCESS_KEY_ID
-      AWS_SECRET_ACCESS_KEY
+      DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY
       SMTP_HOST
       SMTP_PORT
       SMTP_USER
@@ -224,6 +225,12 @@ if [[ "$profile" == "api" ]]; then
   require_min_length DRAPIXAI_ADMIN_TOTP_SECRET 16
   require_min_length DRAPIXAI_STOREFRONT_TOKEN_SECRET 32
   require_min_length DRAPIXAI_AUDIT_LOG_SECRET 32
+  if [[ "$DRAPIXAI_API_ENVIRONMENT" != "live" && "$DRAPIXAI_API_ENVIRONMENT" != "sandbox" ]]; then
+    echo "DRAPIXAI_API_ENVIRONMENT must be live or sandbox" >&2
+    exit 1
+  fi
+  require_base64_bytes DRAPIXAI_WEBHOOK_ENCRYPTION_KEY 32
+  require_equals DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY "1"
   require_equals DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION "aws:kms"
   require_var DRAPIXAI_S3_KMS_KEY_ID
   if [[ "$DATABASE_URL" != *"sslmode=verify-full"* ]]; then
@@ -245,10 +252,18 @@ if [[ "$profile" == "api" ]]; then
   require_equals DRAPIXAI_GARMENT_APPROVAL_REQUIRED "1"
   require_equals DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON "0"
   require_equals DRAPIXAI_SDK_GENERATION_SOURCE "original_verified"
+  require_equals DRAPIXAI_AI_PRIVATE_NETWORK "1"
+  require_var DRAPIXAI_AI_ALLOWED_HOSTS
+  ai_hostname="$(printf '%s' "$DRAPIXAI_AI_URL" | sed -E 's#^https://([^/:]+).*$#\1#' | tr '[:upper:]' '[:lower:]')"
+  if [[ ",${DRAPIXAI_AI_ALLOWED_HOSTS,,}," != *",$ai_hostname,"* ]]; then
+    echo "DRAPIXAI_AI_URL hostname must be listed in DRAPIXAI_AI_ALLOWED_HOSTS" >&2
+    exit 1
+  fi
   require_number_at_least DRAPIXAI_EXCELLENT_QUALITY_SCORE "0.95"
   require_number_at_least DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE "0.95"
   require_equals DRAPIXAI_EXCELLENT_LATENCY_MS "10000"
   require_equals DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS "12000"
+  require_equals DRAPIXAI_REVIEW_RETENTION_DAYS "0"
   require_equals DRAPIXAI_ENABLE_LOWER_BODY "0"
   if [[ "${DRAPIXAI_SHOPIFY_ENABLED:-0}" == "1" ]]; then
     for name in SHOPIFY_API_KEY SHOPIFY_API_SECRET DRAPIXAI_PUBLIC_API_BASE_URL DRAPIXAI_WEB_BASE_URL DRAPIXAI_SHOPIFY_STATE_SECRET DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY DRAPIXAI_STOREFRONT_TOKEN_SECRET; do
@@ -288,6 +303,8 @@ if [[ "$profile" == "ai" ]]; then
   require_equals DRAPIXAI_ENABLE_FINAL_OUTPUT_UPSCALE "1"
   require_equals DRAPIXAI_OUTPUT_WIDTH "1024"
   require_equals DRAPIXAI_OUTPUT_HEIGHT "1365"
+  require_equals DRAPIXAI_TRANSIENT_SPOOL_DIR "/dev/shm/drapixai-tryon-spool"
+  require_equals DRAPIXAI_TRANSIENT_SPOOL_TTL "900"
 fi
 
 echo "Environment validation passed for profile: $profile"
