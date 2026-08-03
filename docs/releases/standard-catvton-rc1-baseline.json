@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "profile": "standard-catvton-rc1",
+  "recorded_at": "2026-08-04T00:00:00+05:30",
+  "scope": "upper-body Standard CatVTON",
+  "source_commit": "859d3b4dfd8fcf0019e7e26b1a4ef78992bbaac1",
+  "status": "preserved_evidence_requires_staging_recertification",
+  "release_contract": {
+    "engine": "catvton",
+    "quality_mode": "standard",
+    "candidate_count": 1,
+    "inference_steps": 22,
+    "guidance_scale": 2.5,
+    "generation_size": "768x1024",
+    "output_size": "1024x1365",
+    "minimum_quality_score": 0.95,
+    "target_warm_latency_ms": 12000
+  },
+  "latest_preserved_comparison": {
+    "evidence_captured_at_utc": "2026-06-19T12:08:57Z",
+    "evidence_source": "runtime/runpod_results/summary_latest.json",
+    "direct": {
+      "quality_score": 0.9519088121526984,
+      "candidate_count": 1,
+      "wall_latency_ms": 147475,
+      "warnings": [
+        "GARMENT_SLEEVE_LENGTH_DRIFT"
+      ]
+    },
+    "sdk": {
+      "quality_score": 0.9593598725382931,
+      "candidate_count": 1,
+      "processing_ms": 9532,
+      "wall_latency_ms": 10315,
+      "garment_source": "original_verified_cache_gate",
+      "garment_cache_status": "verified",
+      "warnings": [
+        "GARMENT_SLEEVE_LENGTH_DRIFT"
+      ]
+    }
+  },
+  "interpretation": {
+    "quality_floor_met": true,
+    "sdk_warm_latency_target_met": true,
+    "candidate_contract_met": true,
+    "warning_free": false,
+    "notes": "This is an honest rollback baseline, not final staging certification. The preserved SDK result met the quality and latency targets but retained a sleeve-length warning. Gate 4 must replace this record with fresh warning-free direct and SDK evidence using identical inputs."
+  }
+}
