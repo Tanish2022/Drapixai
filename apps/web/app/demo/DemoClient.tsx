@@ -44,6 +44,7 @@ export default function DemoClient() {
   const [status, setStatus] = useState('');
   const [resultUrl, setResultUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasConsent, setHasConsent] = useState(false);
   const demoVideoKind = getDemoVideoKind(DEMO_VIDEO_URL);
 
   const selectImage = (
@@ -86,6 +87,10 @@ export default function DemoClient() {
       setStatus('Upload both a person image and a garment image.');
       return;
     }
+    if (!hasConsent) {
+      setStatus('Confirm transient photo processing before running the demo.');
+      return;
+    }
 
     setIsSubmitting(true);
     setStatus('Generating try-on...');
@@ -96,6 +101,8 @@ export default function DemoClient() {
       const form = new FormData();
       form.append('person_image', personImage);
       form.append('cloth_image', clothImage);
+      form.append('shopper_consent', 'true');
+      form.append('privacy_policy_version', '2026-08-04');
 
       const response = await fetch(`${PUBLIC_API_BASE_URL}/demo/tryon`, { method: 'POST', body: form });
       if (!response.ok) {
@@ -210,7 +217,19 @@ export default function DemoClient() {
                 {clothPreviewUrl ? <img src={clothPreviewUrl} alt="Garment preview" className="mt-3 h-52 w-full border border-black/10 bg-white object-contain" /> : null}
               </label>
 
-              <button type="button" onClick={runDemo} disabled={isSubmitting} className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48] disabled:cursor-not-allowed disabled:opacity-50">
+              <label className="flex items-start gap-3 border-y border-black/10 py-4 text-sm leading-6 text-[#4f5d54]">
+                <input
+                  type="checkbox"
+                  checked={hasConsent}
+                  onChange={(event) => setHasConsent(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-[#183f32]"
+                />
+                <span>
+                  I confirm I have permission to upload this person photo. It is processed transiently, is not persistently stored, and is never used to train AI models.
+                </span>
+              </label>
+
+              <button type="button" onClick={runDemo} disabled={isSubmitting || !hasConsent} className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48] disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                 {isSubmitting ? 'Running demo...' : 'Run Free Try-On'}
               </button>

@@ -1,6 +1,9 @@
 {
   "name": "drapixai-api",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "main": "dist/bootstrap.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/bootstrap.ts",
@@ -21,6 +24,7 @@
     "test:audit-immutability": "ts-node src/scripts/verify-audit-immutability.ts",
     "test:cors-origin-cache": "ts-node src/scripts/cors-origin-cache-tests.ts",
     "test:image-upload-security": "ts-node src/scripts/image-upload-security-tests.ts",
+    "test:async-errors": "ts-node src/scripts/express-async-error-tests.ts",
     "test:public-api": "ts-node src/scripts/public-api-v1-tests.ts",
     "test:distributed-security": "ts-node src/scripts/distributed-security-control-tests.ts",
     "security:audit:verify": "ts-node src/scripts/verify-security-audit.ts",
@@ -40,7 +44,7 @@
     "csv-parse": "^5.5.6",
     "dotenv": "^16.0.0",
     "drapixai": "file:../..",
-    "express": "^4.22.2",
+    "express": "5.2.1",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
     "multer": "2.2.0",
@@ -52,7 +56,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.0",
     "@types/cors": "^2.8.0",
-    "@types/express": "^4.17.0",
+    "@types/express": "5.0.6",
     "@types/jsonwebtoken": "^9.0.0",
     "@types/multer": "^1.4.0",
     "@types/node": "^20.0.0",
@@ -62,6 +66,6 @@
     "typescript": "^5.0.0"
   },
   "overrides": {
-    "brace-expansion": "5.0.8"
+    "brace-expansion": "5.0.9"
   }
 }

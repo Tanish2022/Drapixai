@@ -53,10 +53,14 @@ import {
 import { getUserMonthlyUsage, incrementApiKeyUsage } from '../lib/usage';
 import { hasPermission, ownsTenantResource } from '../lib/authorization';
 import { appendSecurityAudit } from '../lib/audit-log';
+import {
+  SHOPPER_MEDIA_RETENTION,
+  SHOPPER_PRIVACY_POLICY_VERSION,
+  SHOPPER_TRAINING_USE,
+} from '../lib/privacy';
 
 const router = Router();
 const prisma = new PrismaClient();
-const SHOPPER_PRIVACY_POLICY_VERSION = '2026-08-04';
 
 router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, private');
@@ -880,8 +884,8 @@ router.post('/tryon', authMiddleware, upload.fields([
         privacyPolicyVersion: SHOPPER_PRIVACY_POLICY_VERSION,
       });
     }
-    res.setHeader('x-drapixai-media-retention', 'transient-only');
-    res.setHeader('x-drapixai-training-use', 'none');
+    res.setHeader('x-drapixai-media-retention', SHOPPER_MEDIA_RETENTION);
+    res.setHeader('x-drapixai-training-use', SHOPPER_TRAINING_USE);
 
     if (!(await isAllowedImageFileContent(personFile)) || (clothFile && !(await isAllowedImageFileContent(clothFile)))) {
       cleanupTryOnUploadFiles();
@@ -950,8 +954,8 @@ router.post('/tryon', authMiddleware, upload.fields([
       metadata: {
         privacyPolicyVersion,
         productId: requestedProductId || null,
-        mediaRetention: 'transient-only',
-        modelTrainingUse: 'none',
+        mediaRetention: SHOPPER_MEDIA_RETENTION,
+        modelTrainingUse: SHOPPER_TRAINING_USE,
       },
     });
 

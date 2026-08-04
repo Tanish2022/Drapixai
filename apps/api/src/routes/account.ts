@@ -258,15 +258,23 @@ router.post('/email/verify-change', async (req, res) => {
     return res.status(400).json({ error: 'INVALID_NEW_EMAIL_OTP' });
   }
 
-  const user = await prisma.user.update({
-    where: { id: resolved.user.id },
-    data: {
-      email: normalizedNewEmail,
-      emailVerifiedAt: new Date(),
-    },
-  });
+  const revokedAt = new Date();
+  const [user] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: resolved.user.id },
+      data: {
+        email: normalizedNewEmail,
+        emailVerifiedAt: revokedAt,
+        authVersion: { increment: 1 },
+      },
+    }),
+    prisma.apiKey.updateMany({
+      where: { userId: resolved.user.id, isActive: true },
+      data: { isActive: false, revokedAt },
+    }),
+  ]);
 
-  return res.json({ ok: true, email: user.email });
+  return res.json({ ok: true, email: user.email, sessionsRevoked: true });
 });
 
 router.post('/store', async (req, res) => {

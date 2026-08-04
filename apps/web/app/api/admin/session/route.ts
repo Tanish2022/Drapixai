@@ -74,6 +74,14 @@ export async function DELETE(request: Request) {
   if (csrfRejection) return csrfRejection;
 
   const cookieStore = await cookies();
+  const session = await readAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
+  if (session?.apiKey) {
+    await fetch(`${SERVER_API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.apiKey}` },
+      cache: 'no-store',
+    }).catch(() => null);
+  }
   cookieStore.set({
     name: ADMIN_SESSION_COOKIE,
     value: '',

@@ -2,8 +2,15 @@ import { Router } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
+import crypto from 'crypto';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { appendSecurityAudit } from '../lib/audit-log';
 import { formatLogError, getUploadRoot, isAllowedImageFileContent, isAllowedImageUpload, removeUploadedFile, sanitizeUpstreamError } from '../lib/security';
+import {
+  SHOPPER_MEDIA_RETENTION,
+  SHOPPER_PRIVACY_POLICY_VERSION,
+  SHOPPER_TRAINING_USE,
+} from '../lib/privacy';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -15,6 +22,13 @@ const getAiHeaders = (headers: Record<string, string> = {}) => ({
   ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
 });
 const PUBLIC_WEBSITE_EVENTS = new Set(['page_view', 'cta_click', 'trial_signup', 'user_login']);
+const PUBLIC_GARMENT_VALIDATION_CODES = new Set([
+  'MODEL_WORN_GARMENT',
+  'GARMENT_TOO_LONG',
+  'LOW_RESOLUTION',
+  'IMAGE_BLURRY',
+  'GARMENT_CATEGORY_UNSUPPORTED',
+]);
 
 const sanitizeReferrer = (value: unknown) => {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -61,8 +75,11 @@ const parseJsonSafe = <T>(value: string): T | null => {
 
 const getGarmentValidationCode = (raw: string) => {
   const parsed = parseJsonSafe<{ detail?: string; error?: string }>(raw);
-  const detail = parsed?.detail || parsed?.error || raw;
-  return detail.startsWith('GARMENT_INVALID:') ? detail.replace('GARMENT_INVALID:', '') : detail;
+  const detail = parsed?.detail || parsed?.error || '';
+  const normalized = detail.startsWith('GARMENT_INVALID:')
+    ? detail.replace('GARMENT_INVALID:', '')
+    : detail;
+  return PUBLIC_GARMENT_VALIDATION_CODES.has(normalized) ? normalized : 'GARMENT_PREPROCESS_FAILED';
 };
 
 const getGarmentValidationMessage = (code: string) => {
@@ -137,12 +154,30 @@ router.post(
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     const personFile = files?.person_image?.[0];
     const clothFile = files?.cloth_image?.[0];
+    const requestId = crypto.randomUUID();
+    let transientCacheKey: string | null = null;
+    let consentRecorded = false;
+    let cacheCleanupOutcome: 'not_created' | 'deleted' | 'failed' = 'not_created';
 
     if (!personFile || !clothFile) {
       removeUploadedFile(personFile);
       removeUploadedFile(clothFile);
       return res.status(400).json({ error: 'PERSON_AND_CLOTH_REQUIRED' });
     }
+
+    const shopperConsent = String(req.body?.shopper_consent || '').trim().toLowerCase();
+    const privacyPolicyVersion = String(req.body?.privacy_policy_version || '').trim();
+    if (shopperConsent !== 'true' || privacyPolicyVersion !== SHOPPER_PRIVACY_POLICY_VERSION) {
+      removeUploadedFile(personFile);
+      removeUploadedFile(clothFile);
+      return res.status(400).json({
+        error: 'SHOPPER_CONSENT_REQUIRED',
+        message: 'Explicit consent to transient try-on processing is required.',
+        privacyPolicyVersion: SHOPPER_PRIVACY_POLICY_VERSION,
+      });
+    }
+    res.setHeader('x-drapixai-media-retention', SHOPPER_MEDIA_RETENTION);
+    res.setHeader('x-drapixai-training-use', SHOPPER_TRAINING_USE);
 
     if (!(await isAllowedImageFileContent(personFile)) || !(await isAllowedImageFileContent(clothFile))) {
       removeUploadedFile(personFile);
@@ -154,6 +189,22 @@ router.post(
     }
 
     try {
+      await appendSecurityAudit(prisma, {
+        actorUserId: null,
+        actorRole: 'public_shopper',
+        action: 'privacy.public_demo_consent.accepted',
+        targetType: 'tryon_request',
+        targetId: requestId,
+        requestId,
+        ip: req.ip,
+        metadata: {
+          privacyPolicyVersion,
+          mediaRetention: SHOPPER_MEDIA_RETENTION,
+          modelTrainingUse: SHOPPER_TRAINING_USE,
+        },
+      });
+      consentRecorded = true;
+
       await trackWebsiteEvent('demo_tryon_started', '/demo', null, req.headers.referer || null, {
         source: 'public_demo',
       });
@@ -185,6 +236,7 @@ router.post(
       if (!preprocessResult.cache_key) {
         return res.status(502).json({ error: 'GARMENT_CACHE_KEY_MISSING' });
       }
+      transientCacheKey = preprocessResult.cache_key;
 
       const tryOnResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
         method: 'POST',
@@ -238,8 +290,45 @@ router.post(
       }).catch(() => undefined);
       return res.status(500).json({ error: 'DEMO_TRY_ON_FAILED' });
     } finally {
+      if (transientCacheKey) {
+        try {
+          const cleanupResponse = await fetch(`${AI_URL}/ai/garment/cache/delete`, {
+            method: 'POST',
+            headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ cache_key: transientCacheKey }),
+          });
+          cacheCleanupOutcome = cleanupResponse.ok ? 'deleted' : 'failed';
+          if (!cleanupResponse.ok) {
+            console.error('Public demo transient garment cache cleanup failed:', `HTTP_${cleanupResponse.status}`);
+          }
+        } catch (error) {
+          cacheCleanupOutcome = 'failed';
+          console.error('Public demo transient garment cache cleanup failed:', formatLogError(error));
+        }
+      }
       removeUploadedFile(personFile);
       removeUploadedFile(clothFile);
+      if (consentRecorded) {
+        await appendSecurityAudit(prisma, {
+          actorUserId: null,
+          actorRole: 'public_shopper',
+          action: 'privacy.public_demo_media.cleanup',
+          targetType: 'tryon_request',
+          targetId: requestId,
+          outcome: cacheCleanupOutcome === 'failed' ? 'failure' : 'success',
+          requestId,
+          ip: req.ip,
+          metadata: {
+            uploadFilesDeleted: true,
+            transientGarmentCache: cacheCleanupOutcome,
+            personImageRetained: false,
+            resultImageRetained: false,
+            modelTrainingUse: SHOPPER_TRAINING_USE,
+          },
+        }).catch((error) => {
+          console.error('Public demo privacy cleanup audit failed:', formatLogError(error));
+        });
+      }
     }
   }
 );

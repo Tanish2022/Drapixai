@@ -59,14 +59,14 @@ install_node_if_needed() {
   if command -v node >/dev/null 2>&1; then
     local major
     major="$(node -p "process.versions.node.split('.')[0]")"
-    if [[ "$major" -ge 18 ]]; then
+    if [[ "$major" -ge 22 ]]; then
       log "Node $(node --version) is ready"
       return
     fi
   fi
 
-  log "Installing Node.js 20"
-  curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/drapixai-nodesource-setup.sh
+  log "Installing Node.js 22 LTS"
+  curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/drapixai-nodesource-setup.sh
   "${APT_PREFIX[@]}" bash /tmp/drapixai-nodesource-setup.sh
   "${APT_PREFIX[@]}" apt-get install -y nodejs
   node --version

@@ -26,6 +26,12 @@
       "args": ["--prefix", "apps/api", "run", "test:authorization"]
     },
     {
+      "id": "async-error-propagation",
+      "label": "Express async failures reach sanitized error middleware",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:async-errors"]
+    },
+    {
       "id": "storefront-tokens",
       "label": "Short-lived product-scoped storefront-token tests",
       "runner": "npm",

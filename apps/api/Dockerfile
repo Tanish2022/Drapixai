@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 
 ENV NODE_ENV=production
 
@@ -27,7 +27,7 @@ RUN apt-get update \
     && cp /var/lib/dpkg/info/libssl3:amd64.md5sums /var/lib/dpkg/status.d/libssl3.md5sums \
     && rm -rf /var/lib/apt/lists/*
 
-FROM gcr.io/distroless/nodejs20-debian12:nonroot AS runtime
+FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app/apps/api

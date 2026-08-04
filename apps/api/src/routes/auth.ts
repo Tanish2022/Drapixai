@@ -261,10 +261,14 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
     }
 
     if (!user.emailVerifiedAt) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerifiedAt: new Date() },
-      });
+      await appendSecurityAudit(prisma, {
+        actorUserId: user.id,
+        actorRole: user.role,
+        action: 'auth.email_unverified.denied',
+        outcome: 'denied',
+        ip: req.ip,
+      }).catch(() => undefined);
+      return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
     }
 
     const apiKey = issueNewKey ? await issueApiKeyForUser(prisma, user.id) : null;
