@@ -87,6 +87,8 @@ jobs:
           REDIS_URL: redis://127.0.0.1:6379
         run: npm --prefix apps/api run test:distributed-security
       - name: Validate Prisma schema
+        env:
+          DATABASE_URL: postgresql://drapixai_gate:ci-disposable-only@127.0.0.1:5432/drapixai_launch_gate
         run: npm --prefix apps/api exec prisma validate -- --schema apps/api/prisma/schema.prisma
       - name: Apply migrations to disposable PostgreSQL
         env:
