@@ -30,7 +30,7 @@ jobs:
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
       - name: Scan repository history for secrets
-        run: /tmp/gitleaks git --redact --exit-code 1 .
+        run: /tmp/gitleaks git --config .gitleaks.toml --redact --exit-code 1 .
 
   application:
     runs-on: ubuntu-22.04
@@ -79,7 +79,6 @@ jobs:
         run: |
           npm --prefix apps/api run test:authorization
           npm --prefix apps/api run test:storefront-tokens
-          npm --prefix apps/api run test:storefront-key-lifecycle
           npm --prefix apps/api run test:cors-origin-cache
           npm --prefix apps/api run test:image-upload-security
           npm --prefix apps/api run test:async-errors

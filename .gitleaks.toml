@@ -1,0 +1,14 @@
+title = "DrapixAI secret scanning policy"
+
+# These patterns are public model identifiers or documentation placeholders,
+# not credentials. Keep this list narrow: production secrets must never match it.
+[allowlist]
+description = "Verified non-secret model metadata, local endpoints, and generated review output"
+paths = [
+  '''^apps/web/\.next-review/''',
+]
+regexes = [
+  '''(?i)^\s*(?:DRAPIXAI_CATVTON_REPO_ID|repo_id)\s*[=:]\s*[a-z0-9_.-]+/[a-z0-9_.-]+\s*$''',
+  '''(?i)^\s*DRAPIXAI_S3_ENDPOINT\s*=\s*https?://(?:minio|localhost|127\.0\.0\.1)(?::\d+)?\s*$''',
+  '''(?i)authorization\s*:\s*bearer\s+(?:\$[A-Z_][A-Z0-9_]*|\{\{[A-Z_][A-Z0-9_]*\}\}|<[^>]+>)''',
+]
