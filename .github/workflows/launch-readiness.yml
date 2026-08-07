@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             apps/api/package-lock.json
@@ -79,8 +79,10 @@ jobs:
         run: |
           npm --prefix apps/api run test:authorization
           npm --prefix apps/api run test:storefront-tokens
+          npm --prefix apps/api run test:storefront-key-lifecycle
           npm --prefix apps/api run test:cors-origin-cache
           npm --prefix apps/api run test:image-upload-security
+          npm --prefix apps/api run test:async-errors
       - name: Distributed security controls
         env:
           REDIS_URL: redis://127.0.0.1:6379

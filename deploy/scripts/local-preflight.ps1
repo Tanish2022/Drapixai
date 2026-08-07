@@ -156,6 +156,10 @@ Push-Location $root
 try {
   Add-Check "Workspace" (Test-Path "package.json") $root
 
+  $nodeVersionOutput = & node --version 2>$null
+  $nodeVersion = if ($LASTEXITCODE -eq 0 -and $nodeVersionOutput -match '^v(\d+)\.') { [int]$Matches[1] } else { 0 }
+  Add-Check "Node.js 22-24" ($nodeVersion -ge 22 -and $nodeVersion -lt 25) ($nodeVersionOutput | Select-Object -First 1)
+
   $dockerAvailable = Test-CommandAvailable "docker"
   Add-Check "Docker CLI" $dockerAvailable "docker command available"
   if ($dockerAvailable) {
