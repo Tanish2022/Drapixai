@@ -24,25 +24,29 @@ trap cleanup EXIT
 scan_image() {
   local archive="$1"
   local image="$2"
+  local report="$3"
   local attempt
+  local parser_status
 
   for attempt in 1 2 3; do
     echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities (attempt ${attempt}/3)"
+    rm -f "${report}"
     if docker run --rm \
       --read-only \
       --cap-drop ALL \
       --tmpfs /tmp:rw,noexec,nosuid,size=512m \
-      --mount "type=bind,src=${archive},dst=/scan/image.tar,readonly" \
+      --mount "type=bind,src=${scan_dir},dst=/scan" \
       --mount "type=volume,src=${TRIVY_CACHE_VOLUME},dst=/root/.cache/" \
       "${TRIVY_IMAGE}" image \
       --input /scan/image.tar \
       --db-repository "${TRIVY_DB_REPOSITORY}" \
-      --exit-code 1 \
+      --format json \
+      --output "/scan/$(basename "${report}")" \
       --severity HIGH,CRITICAL \
       --pkg-types os,library \
       --scanners vuln \
       --skip-version-check; then
-      return 0
+      break
     fi
 
     if [[ "${attempt}" -lt 3 ]]; then
@@ -51,18 +55,75 @@ scan_image() {
     fi
   done
 
-  echo "Trivy scan failed after 3 attempts; keeping the release gate closed." >&2
-  return 1
+  if [[ ! -s "${report}" ]]; then
+    echo "Trivy could not produce a vulnerability report after 3 attempts; keeping the release gate closed." >&2
+    return 20
+  fi
+
+  if python3 -c '
+import json
+import sys
+
+report_path = sys.argv[1]
+try:
+    with open(report_path, encoding="utf-8") as report_file:
+        report = json.load(report_file)
+except (OSError, json.JSONDecodeError) as error:
+    print(f"Trivy produced an unreadable report: {error}", file=sys.stderr)
+    sys.exit(20)
+
+results = report.get("Results")
+if not isinstance(results, list):
+    print("Trivy report does not contain a valid Results list.", file=sys.stderr)
+    sys.exit(20)
+
+findings = []
+for result in results:
+    vulnerabilities = result.get("Vulnerabilities") or []
+    if not isinstance(vulnerabilities, list):
+        print("Trivy report contains an invalid Vulnerabilities field.", file=sys.stderr)
+        sys.exit(20)
+    for vulnerability in vulnerabilities:
+        findings.append(
+            "{id} {severity} {package} {installed} -> {fixed}".format(
+                id=vulnerability.get("VulnerabilityID", "UNKNOWN"),
+                severity=vulnerability.get("Severity", "UNKNOWN"),
+                package=vulnerability.get("PkgName", "UNKNOWN"),
+                installed=vulnerability.get("InstalledVersion", "UNKNOWN"),
+                fixed=vulnerability.get("FixedVersion") or "no fixed version",
+            )
+        )
+
+if findings:
+    print("HIGH/CRITICAL vulnerabilities found:", file=sys.stderr)
+    print("\n".join(findings), file=sys.stderr)
+    sys.exit(10)
+
+print("No HIGH/CRITICAL OS or library vulnerabilities found.")
+' "${report}"; then
+    return 0
+  else
+    parser_status=$?
+  fi
+
+  if [[ "${parser_status}" -eq 10 ]]; then
+    echo "Trivy found release-blocking HIGH/CRITICAL vulnerabilities." >&2
+    return 10
+  fi
+
+  echo "Trivy report validation failed; keeping the release gate closed." >&2
+  return 20
 }
 
 index=0
 for image in "$@"; do
   index=$((index + 1))
   archive="${scan_dir}/image-${index}.tar"
+  report="${scan_dir}/report-${index}.json"
 
   echo "Exporting ${image} for isolated scanning"
   docker save --output "${archive}" "${image}"
 
   echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities"
-  scan_image "${archive}" "${image}"
+  scan_image "${archive}" "${image}" "${report}"
 done
