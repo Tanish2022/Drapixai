@@ -49,17 +49,45 @@ const tail = (value, lineCount = 12) => redact(value || "")
   .slice(-lineCount)
   .join("\n");
 
+const productionEnvTemplates = [
+  ["deploy/env/api.production.example", "deploy/env/api.production.env"],
+  ["deploy/env/web.production.example", "deploy/env/web.production.env"],
+  ["deploy/env/ai.production.example", "deploy/env/ai.production.env"]
+];
+
+const prepareComposeEnvFiles = (gate) => {
+  if (gate.runner !== "docker" || gate.args[0] !== "compose") return [];
+
+  const created = [];
+  for (const [template, destination] of productionEnvTemplates) {
+    const templatePath = path.join(root, template);
+    const destinationPath = path.join(root, destination);
+    if (fs.existsSync(destinationPath)) continue;
+    fs.copyFileSync(templatePath, destinationPath, fs.constants.COPYFILE_EXCL);
+    created.push(destinationPath);
+  }
+  return created;
+};
+
 const run = (gate) => {
   const startedAt = new Date();
   const started = Date.now();
   const invocation = commandFor(gate.runner, gate.args);
-  const result = spawnSync(invocation.command, invocation.args, {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, CI: "1", NO_COLOR: "1" },
-    maxBuffer: 16 * 1024 * 1024,
-    windowsHide: true
-  });
+  const temporaryEnvFiles = prepareComposeEnvFiles(gate);
+  let result;
+  try {
+    result = spawnSync(invocation.command, invocation.args, {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, CI: "1", NO_COLOR: "1" },
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true
+    });
+  } finally {
+    for (const temporaryEnvFile of temporaryEnvFiles) {
+      fs.rmSync(temporaryEnvFile, { force: true });
+    }
+  }
   const durationMs = Date.now() - started;
   const passed = result.status === 0 && !result.error;
   const failure = passed ? null : tail(`${result.error?.message ?? ""}\n${result.stderr ?? ""}\n${result.stdout ?? ""}`);

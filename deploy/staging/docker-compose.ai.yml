@@ -27,8 +27,8 @@ services:
       dockerfile: drapixai_ai/docker/Dockerfile
     restart: unless-stopped
     env_file:
-      - ../release/standard-catvton-rc1.env
       - ../env/ai.staging.env
+      - ../release/standard-catvton-rc1.env
     command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
     depends_on:
       - redis
@@ -56,8 +56,8 @@ services:
       dockerfile: drapixai_ai/docker/Dockerfile
     restart: unless-stopped
     env_file:
-      - ../release/standard-catvton-rc1.env
       - ../env/ai.staging.env
+      - ../release/standard-catvton-rc1.env
     environment:
       DRAPIXAI_WORKER_ROLE: upper
     command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-worker.sh"]

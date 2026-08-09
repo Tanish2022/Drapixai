@@ -90,12 +90,31 @@ def main() -> int:
         if not path.exists() or marker not in path.read_text(encoding="utf-8")
     ]
 
+    profile_precedence_checks = {
+        "production_release_profile_precedence": (
+            repo_root / "deploy" / "docker-compose.ai.yml",
+            "./env/ai.production.env",
+            "./release/standard-catvton-rc1.env",
+        ),
+        "staging_release_profile_precedence": (
+            repo_root / "deploy" / "staging" / "docker-compose.ai.yml",
+            "../env/ai.staging.env",
+            "../release/standard-catvton-rc1.env",
+        ),
+    }
+    profile_precedence_failures = []
+    for name, (path, environment_file, release_profile) in profile_precedence_checks.items():
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        if text.find(environment_file) < 0 or text.find(release_profile) <= text.find(environment_file):
+            profile_precedence_failures.append(name)
+
     report = {
         "profile": str(profile),
         "expected_values": len(EXPECTED),
         "mismatches": mismatches,
         "missing_source_guards": missing_guards,
-        "passed": not mismatches and not missing_guards,
+        "profile_precedence_failures": profile_precedence_failures,
+        "passed": not mismatches and not missing_guards and not profile_precedence_failures,
     }
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["passed"] else 1

@@ -92,6 +92,12 @@
       "args": ["--prefix", "apps/web", "audit", "--omit=dev", "--audit-level=high"]
     },
     {
+      "id": "standard-release-profile",
+      "label": "Immutable Standard CatVTON release profile",
+      "runner": "python",
+      "args": ["deploy/scripts/verify-standard-release-profile.py"]
+    },
+    {
       "id": "python-compile",
       "label": "Production Python compile validation",
       "runner": "python",

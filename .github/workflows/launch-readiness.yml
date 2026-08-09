@@ -149,6 +149,8 @@ jobs:
           --ignore-vuln GHSA-55v6-g8pm-pw4c
           --ignore-vuln PYSEC-2026-3447
           --ignore-vuln GHSA-rrmf-rvhw-rf47
+      - name: Verify immutable Standard release profile
+        run: python deploy/scripts/verify-standard-release-profile.py
       - name: Compile production Python
         run: |
           python -m compileall -q drapixai_ai deploy/runpod

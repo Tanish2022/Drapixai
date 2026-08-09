@@ -23,6 +23,7 @@ services:
     restart: unless-stopped
     env_file:
       - ./env/ai.production.env
+      - ./release/standard-catvton-rc1.env
     environment:
       DRAPIXAI_REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379/0
     command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
@@ -53,6 +54,7 @@ services:
     restart: unless-stopped
     env_file:
       - ./env/ai.production.env
+      - ./release/standard-catvton-rc1.env
     environment:
       DRAPIXAI_REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379/0
       DRAPIXAI_WORKER_ROLE: upper
@@ -83,6 +85,7 @@ services:
     restart: unless-stopped
     env_file:
       - ./env/ai.production.env
+      - ./release/standard-catvton-rc1.env
     environment:
       DRAPIXAI_REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379/0
       DRAPIXAI_WORKER_ROLE: lower
