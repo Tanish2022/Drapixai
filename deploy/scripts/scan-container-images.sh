@@ -45,7 +45,7 @@ scan_image() {
       --severity HIGH,CRITICAL \
       --pkg-types os,library \
       --scanners vuln \
-      --skip-version-check; then
+      --skip-version-check > "${report}"; then
       break
     fi
 
