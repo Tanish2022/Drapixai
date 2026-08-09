@@ -68,6 +68,38 @@ in plaintext.
 8. Apply the Prisma migration with backup evidence, then run the complete staging
    smoke and security suites. Never point staging at production to save setup time.
 
+## Live security-boundary certification
+
+Run the live attack harness only against staging and only with a dedicated staging
+tenant, products, result, server key, and public API access token. It refuses the
+production hostname. It never creates a try-on result or uploads a real shopper
+photo.
+
+Before running it, temporarily set `DRAPIXAI_API_KEY_RATE_LIMIT=20` in the staging
+API environment and restart the staging API. This makes the bounded rate-limit
+check complete in 21 lightweight `GET /v1/usage` requests. Restore the normal
+staging value after saving the evidence. The public API access token needs both
+`api:usage` and `api:webhooks` scopes.
+
+Create a restricted local environment file through the staging secret store, not in
+the repository and not in shell history. It must provide the variables listed in
+`docs/security-release-gate.md`, plus `DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A`,
+`DRAPIXAI_SECURITY_TEST_RATE_LIMIT_PATH` (set to `/v1/usage`),
+`DRAPIXAI_SECURITY_TEST_RATE_LIMIT_ATTEMPTS` (set to `21`), and
+`DRAPIXAI_SECURITY_TEST_ENVIRONMENT` (set to `staging`). Then run:
+
+```bash
+set -a; . /run/secrets/drapixai-live-security-test.env; set +a
+npm --prefix apps/api run test:security:live | tee runtime/launch-evidence/live-security-boundary.json
+```
+
+The saved JSON must report every check and a `429` rate-limit response. It covers
+cross-tenant access, expired and cross-origin credential replay, forged-image
+uploads, admin authorization, webhook SSRF, hostile CORS preflight, unauthenticated
+cross-origin feedback, and API-key-level limiting. Capture the resulting audit-log
+rows and WAF events with the evidence; do not put credentials or shopper media in
+the evidence file.
+
 ## Promotion rule
 
 Passing this source check does not mean staging is deployed. Gate 2 closes only

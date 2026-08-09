@@ -51,8 +51,12 @@ CI builds and scans the API and web runtime images with the immutable Trivy imag
    - `DRAPIXAI_SECURITY_TEST_PRODUCT_B`
    - `DRAPIXAI_SECURITY_TEST_RESULT_B`
    - `DRAPIXAI_SECURITY_TEST_ORIGIN_A`
+   - `DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A`
+   - `DRAPIXAI_SECURITY_TEST_RATE_LIMIT_PATH`
+   - `DRAPIXAI_SECURITY_TEST_RATE_LIMIT_ATTEMPTS`
+   - `DRAPIXAI_SECURITY_TEST_ENVIRONMENT`
 
-   The harness exercises cross-tenant product and result access, expired-token replay, cross-origin token replay, forged image uploads, and brand-to-admin privilege escalation. Delete the test tenants afterward.
+   The staging-only harness exercises cross-tenant product and result access, expired-token replay, cross-origin token replay, forged image uploads, brand-to-admin privilege escalation, localhost webhook SSRF, hostile-origin CORS/CSRF behavior, and bounded API-key rate limiting. Use an access token scoped to `api:usage` and `api:webhooks`; configure the staging API-key rate limit to 20 for this temporary test, then restore it. Delete the test tenants afterward.
 4. Run `deploy/scripts/pentest-staging.sh https://staging.example.com` with an approved digest-pinned ZAP image.
 5. Verify `npm --prefix apps/api run security:audit:verify` reports `valid: true`.
 6. Exercise retention with a short test window, confirm object deletion, database URL clearing, failure retry, and immutable audit evidence.

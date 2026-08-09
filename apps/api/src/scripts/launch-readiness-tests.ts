@@ -306,6 +306,7 @@ const auditLog = read('apps/api/src/lib/audit-log.ts');
 const auditMigration = read('apps/api/prisma/migrations/20260719170000_immutable_security_audit_log/migration.sql');
 const authorizationLib = read('apps/api/src/lib/authorization.ts');
 const securityReleaseGate = read('docs/security-release-gate.md');
+const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
 const rootPackageJson = read('package.json');
 const gitignore = read('.gitignore');
 const gitattributes = read('.gitattributes');
@@ -1540,6 +1541,12 @@ assertIncludes(edgeCompose, 'read_only: true', 'Production edge services must us
 assertIncludes(edgeCompose, 'cap_drop:', 'Production edge services must drop Linux capabilities');
 assertIncludes(aiCompose, 'internal: true', 'AI queue and worker network must remain private');
 assertIncludes(securityReleaseGate, 'No public launch with unresolved critical or high findings.', 'Security release gate must block unresolved high-risk findings');
+assertIncludes(liveSecurityBoundaryTest, "DRAPIXAI_SECURITY_TEST_ENVIRONMENT !== 'staging'", 'Live security boundary tests must refuse non-staging environments');
+assertIncludes(liveSecurityBoundaryTest, "apiHost === 'api.drapixai.com'", 'Live security boundary tests must refuse the production API hostname');
+assertIncludes(liveSecurityBoundaryTest, "url: 'http://127.0.0.1:8080/internal-only'", 'Live security boundary tests must prove localhost webhook SSRF rejection');
+assertIncludes(liveSecurityBoundaryTest, "method: 'OPTIONS'", 'Live security boundary tests must probe hostile-origin CORS preflight');
+assertIncludes(liveSecurityBoundaryTest, "assert.ok(rateLimitStatuses.includes(429)", 'Live security boundary tests must prove rate-limit enforcement');
+assertIncludes(securityReleaseGate, 'DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A', 'Security release gate must document the public API token required for SSRF and rate-limit probes');
 
 const publicApiRoute = read('apps/api/src/routes/v1.ts');
 const publicApiSpec = read('apps/api/src/openapi/v1.ts');
