@@ -100,6 +100,11 @@ jobs:
         run: npm --prefix apps/api run test:audit-immutability
       - name: Validate hardened Compose manifests
         run: |
+          set -euo pipefail
+          cp deploy/env/api.production.example deploy/env/api.production.env
+          cp deploy/env/web.production.example deploy/env/web.production.env
+          cp deploy/env/ai.production.example deploy/env/ai.production.env
+          trap 'rm -f deploy/env/api.production.env deploy/env/web.production.env deploy/env/ai.production.env' EXIT
           docker compose --env-file deploy/env/api.production.example -f deploy/docker-compose.edge.yml config --quiet
           docker compose --env-file deploy/env/ai.production.example -f deploy/docker-compose.ai.yml config --quiet
       - name: Validate launch gate tooling and production CSP
