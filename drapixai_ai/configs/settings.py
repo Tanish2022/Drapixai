@@ -226,6 +226,8 @@ class Settings:
     garment_blur_threshold: float = float(os.getenv("DRAPIXAI_GARMENT_BLUR_THRESHOLD", "80.0"))
     garment_cache_dir: str = os.getenv("DRAPIXAI_GARMENT_CACHE_DIR", "drapixai_ai/garments")
     garment_cache_ttl_seconds: int = int(os.getenv("DRAPIXAI_GARMENT_CACHE_TTL", "7776000"))  # 90 days
+    garment_cache_purge_interval_seconds: int = int(os.getenv("DRAPIXAI_GARMENT_CACHE_PURGE_INTERVAL_SECONDS", "21600"))
+    garment_cache_purge_limit: int = int(os.getenv("DRAPIXAI_GARMENT_CACHE_PURGE_LIMIT", "1000"))
     garment_cache_version: str = os.getenv("DRAPIXAI_GARMENT_CACHE_VERSION", "v3-1024x1365")
     admin_token: str = os.getenv("DRAPIXAI_ADMIN_TOKEN", "")
     ai_service_token: str = os.getenv("DRAPIXAI_AI_SERVICE_TOKEN", "")

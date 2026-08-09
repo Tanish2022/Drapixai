@@ -53,6 +53,7 @@ import {
 import { getUserMonthlyUsage, incrementApiKeyUsage } from '../lib/usage';
 import { hasPermission, ownsTenantResource } from '../lib/authorization';
 import { appendSecurityAudit } from '../lib/audit-log';
+import { validateMultipartFields } from '../lib/input-validation';
 import {
   SHOPPER_MEDIA_RETENTION,
   SHOPPER_PRIVACY_POLICY_VERSION,
@@ -149,12 +150,23 @@ const requireLegacyAsyncRender = (_req: any, res: any, next: any) => {
 const UPLOAD_ROOT = getUploadRoot();
 const upload = multer({
   dest: UPLOAD_ROOT,
-  limits: { fileSize: MAX_UPLOAD_BYTES },
+  limits: { fileSize: MAX_UPLOAD_BYTES, fieldSize: 8 * 1024, fields: 20 },
   fileFilter: (_req, file, callback) => {
     callback(null, isAllowedImageUpload(file));
   }
 });
 if (!fs.existsSync(UPLOAD_ROOT)) fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+
+const rejectInvalidMultipartFields = (req: any, res: any) => {
+  const failure = validateMultipartFields(req.body);
+  if (!failure) return false;
+  const uploaded = Array.isArray(req.files)
+    ? req.files
+    : Object.values(req.files || {}).flat() as Express.Multer.File[];
+  for (const file of [...uploaded, ...(req.file ? [req.file] : [])]) removeUploadedFile(file);
+  res.status(400).json({ error: failure.code });
+  return true;
+};
 const AI_URL = process.env.DRAPIXAI_AI_URL || 'http://localhost:8080';
 const ADMIN_TOKEN = process.env.DRAPIXAI_ADMIN_TOKEN || '';
 const REQUIRE_GARMENT_CACHE = (process.env.DRAPIXAI_REQUIRE_GARMENT_CACHE || '1') === '1';
@@ -708,6 +720,7 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
  * Submit a new render job
  */
 router.post('/render', authMiddleware, requireLegacyAsyncRender, upload.single('image'), async (req: any, res: any) => {
+  if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const apiKey = req.apiKey;
     const user = req.user;
@@ -838,6 +851,7 @@ router.post('/tryon', authMiddleware, upload.fields([
   { name: 'person_image', maxCount: 1 },
   { name: 'cloth_image', maxCount: 1 }
 ]), async (req: any, res: any) => {
+  if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const apiKey = req.apiKey;
     const user = req.user;
@@ -1335,6 +1349,7 @@ router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
  * Upload + preprocess garment, store cache key
  */
 router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('cloth_image'), async (req: any, res: any) => {
+  if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const user = req.user;
     const requestedGarmentId = String(req.body.garment_id || req.body.productId || '').trim();
@@ -1462,6 +1477,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
  * Bulk upload garments as standalone assets
  */
 router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.array('cloth_images', 20), async (req: any, res: any) => {
+  if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const user = req.user;
     const files = req.files as Express.Multer.File[];

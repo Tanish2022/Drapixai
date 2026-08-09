@@ -27,6 +27,7 @@ import { runTryOnReviewRetention } from './services/review-retention';
 import { createVerifiedStorefrontOriginCache } from './lib/cors-origin-cache';
 import { processPendingWebhookDeliveries } from './services/webhooks';
 import { observeHttpResponse, renderOperationalMetrics } from './lib/operational-metrics';
+import { inputValidationMiddleware } from './lib/input-validation';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -316,6 +317,7 @@ app.use(cors({
 }));
 app.use('/events', express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '10mb' }));
+app.use(inputValidationMiddleware);
 
 app.use('/auth', authRoutes);
 app.use('/v1', v1Routes);

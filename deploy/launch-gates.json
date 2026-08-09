@@ -50,6 +50,12 @@
       "args": ["--prefix", "apps/api", "run", "test:image-upload-security"]
     },
     {
+      "id": "input-validation",
+      "label": "Plain-text and structured-input boundary tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:input-validation"]
+    },
+    {
       "id": "shopify-contracts",
       "label": "Shopify signature and app-proxy contract tests",
       "runner": "npm",
@@ -96,6 +102,12 @@
       "label": "AI upload and readiness hardening regression suite",
       "runner": "python",
       "args": ["-m", "drapixai_ai.scripts.validate_ai_ingress_security"]
+    },
+    {
+      "id": "garment-cache-expiry",
+      "label": "Garment cache physical-expiry regression suite",
+      "runner": "python",
+      "args": ["-m", "drapixai_ai.scripts.validate_garment_cache_expiry"]
     },
     {
       "id": "transient-spool",

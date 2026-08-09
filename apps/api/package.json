@@ -27,6 +27,7 @@
     "test:async-errors": "ts-node src/scripts/express-async-error-tests.ts",
     "test:public-api": "ts-node src/scripts/public-api-v1-tests.ts",
     "test:distributed-security": "ts-node src/scripts/distributed-security-control-tests.ts",
+    "test:input-validation": "ts-node src/scripts/input-validation-tests.ts",
     "security:audit:verify": "ts-node src/scripts/verify-security-audit.ts",
     "security:webhooks:rotate-key": "ts-node src/scripts/rotate-webhook-encryption.ts",
     "test:security:live": "ts-node src/scripts/live-security-boundary-tests.ts",

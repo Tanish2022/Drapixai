@@ -12,6 +12,7 @@ import {
   SHOPPER_TRAINING_USE,
 } from '../lib/privacy';
 import { shouldAutoRejectTryOn } from '../lib/tryon-quality';
+import { validateMultipartFields } from '../lib/input-validation';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -58,7 +59,7 @@ const sanitizeEventMetadata = (value: unknown) => {
 const UPLOAD_ROOT = getUploadRoot();
 const upload = multer({
   dest: UPLOAD_ROOT,
-  limits: { fileSize: MAX_UPLOAD_BYTES },
+  limits: { fileSize: MAX_UPLOAD_BYTES, fieldSize: 8 * 1024, fields: 12 },
   fileFilter: (_req, file, callback) => {
     callback(null, isAllowedImageUpload(file));
   },
@@ -152,6 +153,12 @@ router.post(
     { name: 'cloth_image', maxCount: 1 },
   ]),
   async (req: any, res) => {
+    const inputFailure = validateMultipartFields(req.body);
+    if (inputFailure) {
+      const uploaded = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      for (const files of Object.values(uploaded || {})) files.forEach(removeUploadedFile);
+      return res.status(400).json({ error: inputFailure.code });
+    }
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     const personFile = files?.person_image?.[0];
     const clothFile = files?.cloth_image?.[0];

@@ -37,6 +37,12 @@ Emergency rotation skips normal notice but not evidence, staging where feasible,
 4. Verify Prisma migration status, audit-chain validity, tenant counts, object references, login, product cache state, and a Standard try-on.
 5. Record recovery point objective and measured recovery time. A backup that has not passed restore testing is not launch evidence.
 
+## Cache retention
+
+1. Garment cache reads enforce `DRAPIXAI_GARMENT_CACHE_TTL` against the physical local or S3 asset, not only the Redis pointer. An expired asset is never returned.
+2. The AI API runs the bounded purge loop set by `DRAPIXAI_GARMENT_CACHE_PURGE_INTERVAL_SECONDS` and `DRAPIXAI_GARMENT_CACHE_PURGE_LIMIT`. Keep the interval at six hours or less and alert on purge failures.
+3. For S3, configure a matching bucket lifecycle expiration rule as a second independent cleanup layer. Cache data must remain private, encrypted, tenant-namespaced, and unavailable through public URLs.
+
 ## Customer deletion
 
 1. Authenticate the requester and verify tenant ownership. Freeze the tenant and revoke all API/storefront keys.

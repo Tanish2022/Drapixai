@@ -36,8 +36,38 @@ app = FastAPI(title="DrapixAI", version="1.0.0")
 service = TryOnService()
 garment_cache = GarmentCache()
 logger = get_logger("drapixai_ai.api")
+cache_purge_task: asyncio.Task | None = None
 
 _UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
+
+
+async def _purge_expired_garment_cache_loop() -> None:
+    interval_seconds = max(300, settings.garment_cache_purge_interval_seconds)
+    while True:
+        try:
+            result = await asyncio.to_thread(garment_cache.purge_expired, settings.garment_cache_purge_limit)
+            logger.info("garment_cache_purge_complete", extra=result)
+        except Exception as exc:
+            logger.error("garment_cache_purge_failed", extra={"error": str(exc)})
+        await asyncio.sleep(interval_seconds)
+
+
+@app.on_event("startup")
+async def start_garment_cache_purge() -> None:
+    global cache_purge_task
+    cache_purge_task = asyncio.create_task(_purge_expired_garment_cache_loop())
+
+
+@app.on_event("shutdown")
+async def stop_garment_cache_purge() -> None:
+    global cache_purge_task
+    if cache_purge_task:
+        cache_purge_task.cancel()
+        try:
+            await cache_purge_task
+        except asyncio.CancelledError:
+            pass
+        cache_purge_task = None
 
 
 @app.exception_handler(RequestValidationError)
