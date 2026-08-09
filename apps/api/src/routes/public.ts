@@ -11,6 +11,7 @@ import {
   SHOPPER_PRIVACY_POLICY_VERSION,
   SHOPPER_TRAINING_USE,
 } from '../lib/privacy';
+import { shouldAutoRejectTryOn } from '../lib/tryon-quality';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -259,13 +260,33 @@ router.post(
         });
       }
 
-      const buffer = Buffer.from(await tryOnResponse.arrayBuffer());
       const engine = tryOnResponse.headers.get('x-drapixai-engine') || '';
       const qualityScore = tryOnResponse.headers.get('x-drapixai-quality-score') || '';
       const candidateCount = tryOnResponse.headers.get('x-drapixai-candidate-count') || '';
       const warnings = tryOnResponse.headers.get('x-drapixai-warnings') || '';
       const processingMs = tryOnResponse.headers.get('x-drapixai-processing-ms') || '';
       const timingJson = tryOnResponse.headers.get('x-drapixai-timing-json') || '';
+      const parsedQualityScore = Number(qualityScore);
+      const parsedWarnings = warnings.split(',').map((warning) => warning.trim()).filter(Boolean);
+      const parsedTimingJson = timingJson ? parseJsonSafe<Record<string, unknown>>(timingJson) : null;
+      if (shouldAutoRejectTryOn({
+        qualityScore: Number.isFinite(parsedQualityScore) ? parsedQualityScore : null,
+        warnings: parsedWarnings,
+        timingJson: parsedTimingJson,
+      })) {
+        await trackWebsiteEvent('demo_tryon_rejected', '/demo', null, req.headers.referer || null, {
+          source: 'public_demo',
+          qualityScore,
+          candidateCount,
+          warnings,
+        });
+        return res.status(422).json({
+          error: 'TRYON_RESULT_NOT_PUBLISHABLE',
+          message: 'DrapixAI could not produce a storefront-safe try-on for these inputs. Please retry with a clearer front-facing photo.',
+        });
+      }
+
+      const buffer = Buffer.from(await tryOnResponse.arrayBuffer());
       await trackWebsiteEvent('demo_tryon_succeeded', '/demo', null, req.headers.referer || null, {
         source: 'public_demo',
         engine,

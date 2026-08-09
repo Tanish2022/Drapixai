@@ -186,6 +186,7 @@ const requireProductionConfig = () => {
   requireExact('DRAPIXAI_SDK_GENERATION_SOURCE', 'original_verified');
   requireExact('DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER', '0');
   requireExact('DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK', '0');
+  requireExact('DRAPIXAI_AUTO_REJECT_BAD_RESULTS', '1');
   requireExact('DRAPIXAI_ENABLE_LOWER_BODY', '0');
   requireExact('DRAPIXAI_EXCELLENT_LATENCY_MS', '10000');
   requireExact('DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS', '12000');

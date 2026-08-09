@@ -261,6 +261,7 @@ if [[ "$profile" == "api" ]]; then
   fi
   require_number_at_least DRAPIXAI_EXCELLENT_QUALITY_SCORE "0.95"
   require_number_at_least DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE "0.95"
+  require_equals DRAPIXAI_AUTO_REJECT_BAD_RESULTS "1"
   require_equals DRAPIXAI_EXCELLENT_LATENCY_MS "10000"
   require_equals DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS "12000"
   require_equals DRAPIXAI_REVIEW_RETENTION_DAYS "0"

@@ -26,6 +26,7 @@ from drapixai_ai.services.garment_preprocessor import (
     preprocess_garment,
 )
 from drapixai_ai.services.garment_rules import resolve_garment_rule
+from drapixai_ai.services.ai_ingress import normalize_request_id, read_limited_chunks
 from drapixai_ai.services.logger import get_logger
 from drapixai_ai.services.lower_body_validator import validate_lower_body_person
 from drapixai_ai.services.tryon_service import TryOnService
@@ -35,6 +36,8 @@ app = FastAPI(title="DrapixAI", version="1.0.0")
 service = TryOnService()
 garment_cache = GarmentCache()
 logger = get_logger("drapixai_ai.api")
+
+_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
 
 
 @app.exception_handler(RequestValidationError)
@@ -81,9 +84,50 @@ def _decode_base64_image(value: Optional[str], field_name: str) -> bytes:
         raise HTTPException(status_code=400, detail=f"{field_name.upper()}_REQUIRED")
 
     try:
-        return base64.b64decode(value, validate=True)
+        decoded = base64.b64decode(value, validate=True)
     except Exception:
         raise HTTPException(status_code=400, detail=f"INVALID_{field_name.upper()}")
+    if len(decoded) > settings.request_max_bytes:
+        raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
+    return decoded
+
+
+async def _read_upload_limited(upload: UploadFile, field_name: str) -> bytes:
+    try:
+        return await read_limited_chunks(
+            upload.read,
+            max_bytes=settings.request_max_bytes,
+            chunk_bytes=_UPLOAD_READ_CHUNK_BYTES,
+        )
+    except ValueError as exc:
+        if str(exc) == "UPLOAD_TOO_LARGE":
+            raise HTTPException(status_code=413, detail=f"{field_name.upper()}_TOO_LARGE") from exc
+        raise
+    finally:
+        await upload.close()
+
+
+def _request_id(value: Optional[str]) -> str:
+    return normalize_request_id(value, lambda: str(uuid.uuid4()))
+
+
+def _is_production() -> bool:
+    return (os.getenv("DRAPIXAI_ENV") or os.getenv("NODE_ENV") or "").strip().lower() == "production"
+
+
+def _ready_payload(model_ready: bool, worker_ready: bool, include_details: bool) -> dict:
+    payload = {"status": "ready" if model_ready and worker_ready else "not_ready"}
+    if not include_details:
+        return payload
+    return {
+        **payload,
+        "model_ready": model_ready,
+        "worker_ready": worker_ready,
+        "engine": settings.tryon_engine,
+        "lower_body_engine": settings.lower_body_engine if settings.enable_lower_body else "disabled",
+        "adaptive_batching": settings.adaptive_batching,
+        "gpu_batch_max": settings.gpu_batch_max if settings.adaptive_batching else 1,
+    }
 
 
 def _require_production_config() -> None:
@@ -256,8 +300,27 @@ _require_production_config()
 
 @app.middleware("http")
 async def request_logger(request, call_next):
-    request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
+    request_id = _request_id(request.headers.get("x-request-id"))
     request.state.request_id = request_id
+    if request.url.path.startswith("/ai/"):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                declared_length = int(content_length)
+                if declared_length < 0:
+                    raise ValueError
+                if declared_length > settings.request_max_bytes * 2 + _UPLOAD_READ_CHUNK_BYTES:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "REQUEST_BODY_TOO_LARGE"},
+                        headers={"x-request-id": request_id},
+                    )
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "INVALID_CONTENT_LENGTH"},
+                    headers={"x-request-id": request_id},
+                )
     if request.url.path.startswith("/ai/") and settings.ai_service_token:
         token = request.headers.get("x-drapixai-service-token", "")
         if not hmac.compare_digest(token, settings.ai_service_token):
@@ -300,33 +363,21 @@ async def health() -> dict:
 
 
 @app.get("/ready")
-async def ready() -> Response:
+async def ready(x_drapixai_service_token: Optional[str] = Header(default=None)) -> Response:
+    include_details = not _is_production() or (
+        bool(settings.ai_service_token)
+        and hmac.compare_digest(x_drapixai_service_token or "", settings.ai_service_token)
+    )
     try:
         connection = get_redis()
         connection.ping()
         model_ready = _model_ready()
         worker_ready = _worker_ready(connection)
-        payload = {
-            "status": "ready" if model_ready and worker_ready else "not_ready",
-            "model_ready": model_ready,
-            "worker_ready": worker_ready,
-            "engine": settings.tryon_engine,
-            "lower_body_engine": settings.lower_body_engine if settings.enable_lower_body else "disabled",
-            "adaptive_batching": settings.adaptive_batching,
-            "gpu_batch_max": settings.gpu_batch_max if settings.adaptive_batching else 1,
-        }
+        payload = _ready_payload(model_ready, worker_ready, include_details)
         return JSONResponse(payload, status_code=200 if model_ready and worker_ready else 503)
     except Exception:
         return JSONResponse(
-            {
-                "status": "not_ready",
-                "model_ready": _model_ready(),
-                "worker_ready": False,
-                "engine": settings.tryon_engine,
-                "lower_body_engine": settings.lower_body_engine if settings.enable_lower_body else "disabled",
-                "adaptive_batching": settings.adaptive_batching,
-                "gpu_batch_max": settings.gpu_batch_max if settings.adaptive_batching else 1,
-            },
+            _ready_payload(_model_ready(), False, include_details),
             status_code=503,
         )
 
@@ -343,7 +394,7 @@ async def tryon(
     cloth_cache_key: Optional[str] = Form(default=None),
 ):
     quality_mode = _quality_mode(quality)
-    person_bytes = await person_image.read()
+    person_bytes = await _read_upload_limited(person_image, "person_image")
     cloth_bytes = b""
     garment_source = "direct_upload"
     if cloth_cache_key:
@@ -353,7 +404,7 @@ async def tryon(
         cloth_bytes = hit.image_bytes
         garment_source = "cache"
     elif cloth_image is not None:
-        cloth_bytes = await cloth_image.read()
+        cloth_bytes = await _read_upload_limited(cloth_image, "cloth_image")
     else:
         raise HTTPException(status_code=400, detail="CLOTH_IMAGE_REQUIRED")
 
@@ -591,7 +642,7 @@ async def garment_preprocess(
     admin_bypass: Optional[bool] = Form(default=False),
     x_admin_token: Optional[str] = Header(default=None),
 ):
-    cloth_bytes = await cloth_image.read()
+    cloth_bytes = await _read_upload_limited(cloth_image, "cloth_image")
     _validate_image_bytes(cloth_bytes, "cloth_image")
     if len(cloth_bytes) > settings.request_max_bytes:
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")

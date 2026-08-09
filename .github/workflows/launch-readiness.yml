@@ -151,6 +151,8 @@ jobs:
       - name: Compile production Python
         run: |
           python -m compileall -q drapixai_ai deploy/runpod
+      - name: AI ingress security regression
+        run: python -m drapixai_ai.scripts.validate_ai_ingress_security
       - name: Validate transient image spool
         run: python -m drapixai_ai.scripts.validate_transient_spool
       - name: CPU quality regressions

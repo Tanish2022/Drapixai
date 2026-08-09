@@ -225,6 +225,7 @@ const nextAuthRoute = read('apps/web/app/api/auth/[...nextauth]/route.ts');
 const plans = read('apps/api/src/lib/plans.ts');
 const pipeline = read('drapixai_ai/pipeline/tryon_pipeline.py');
 const aiServer = read('drapixai_ai/api/ai_server.py');
+const launchGates = read('deploy/launch-gates.json');
 const aiSettings = read('drapixai_ai/configs/settings.py');
 const tryonService = read('drapixai_ai/services/tryon_service.py');
 const gpuWorker = read('drapixai_ai/worker/gpu_worker.py');
@@ -410,6 +411,10 @@ assertIncludes(sdkRoute, "res.setHeader('x-drapixai-warnings', latencyWarnings.j
 assertIncludes(aiSettings, 'ai_service_token', 'AI settings must include internal service token');
 assertIncludes(aiServer, 'x-drapixai-service-token', 'AI server must read internal service token header');
 assertIncludes(aiServer, 'AI_SERVICE_TOKEN_REQUIRED', 'AI server must reject protected calls without token');
+assertIncludes(aiServer, '_read_upload_limited', 'AI server must enforce upload limits while streaming multipart data');
+assertIncludes(aiServer, 'REQUEST_BODY_TOO_LARGE', 'AI server must reject oversized declared request bodies before parsing');
+assertIncludes(aiServer, 'normalize_request_id', 'AI server must constrain client-supplied request IDs before logging them');
+assertIncludes(launchGates, 'ai-ingress-security', 'Launch gates must execute AI ingress hardening regressions');
 assertIncludes(aiServer, 'PRODUCTION_CONFIG_INVALID', 'AI server must fail closed when production secrets are missing');
 assertIncludes(aiServer, '_validate_image_bytes', 'AI server must validate image payloads before queueing work');
 assertIncludes(aiServer, 'hmac.compare_digest(token, settings.ai_service_token)', 'AI service-token checks must be timing safe');
@@ -511,6 +516,9 @@ assertIncludes(apiServer, "requireExact('DRAPIXAI_GARMENT_APPROVAL_REQUIRED', '1
 assertIncludes(apiServer, "requireExact('DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK', '0')", 'API server must reject local storage fallback in production');
 assertIncludes(apiServer, "requireExact('DRAPIXAI_ENABLE_LOWER_BODY', '0')", 'API server must keep unverified lower-body support disabled for launch');
 assertIncludes(apiServer, "requireNumberAtLeast('DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE', 0.95)", 'API server must enforce the launch quality floor');
+assertIncludes(apiServer, "requireExact('DRAPIXAI_AUTO_REJECT_BAD_RESULTS', '1')", 'API server must require public low-quality result rejection');
+assertIncludes(publicRoute, 'shouldAutoRejectTryOn', 'Public demo must apply the publishability quality gate');
+assertIncludes(publicRoute, "error: 'TRYON_RESULT_NOT_PUBLISHABLE'", 'Public demo must reject sub-threshold results');
 assertIncludes(apiServer, '/replace-with|RUNPOD_POD_IP|USERNAME:PASSWORD/i', 'API server must reject placeholder production configuration');
 assertIncludes(apiServer, "error.type === 'entity.parse.failed'", 'API server must return sanitized JSON for malformed JSON requests');
 assertIncludes(apiServer, "error.message === 'CORS_ORIGIN_NOT_ALLOWED'", 'API server must return sanitized JSON for blocked CORS origins');
@@ -1013,6 +1021,7 @@ assertIncludes(validateProductionEnvSetPowerShell, 'Assert-RequiredKeys $webEnv'
 assertIncludes(validateProductionEnvSetPowerShell, 'Assert-RequiredKeys $aiEnv', 'PowerShell env set validation must validate the complete AI profile');
 assertIncludes(validateProductionEnvSetPowerShell, 'DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK = "0"', 'PowerShell env validation must reject production local-storage fallback');
 assertIncludes(validateProductionEnvSetPowerShell, 'Assert-NumberAtLeast $apiEnv "DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE" 0.95', 'PowerShell env validation must enforce the API launch quality floor');
+assertIncludes(validateProductionEnvSetPowerShell, 'DRAPIXAI_AUTO_REJECT_BAD_RESULTS = "1"', 'PowerShell production validation must require low-quality result rejection');
 assertIncludes(validateProductionEnvSetPowerShell, 'Assert-NumberAtLeast $aiEnv "DRAPIXAI_MIN_QUALITY_SCORE" 0.95', 'PowerShell env validation must enforce the AI launch quality floor');
 assertIncludes(validateProductionEnvSetPowerShell, 'git -C $repoRoot check-ignore -q $envFile', 'PowerShell env set validation must verify every real env file is ignored by Git');
 assertIncludes(validateEnv, 'require_min_length DRAPIXAI_ADMIN_TOKEN 32', 'Env validation must require a strong admin token');
@@ -1450,6 +1459,18 @@ assertIncludes(apiServer, "process.env.DRAPIXAI_SHOPIFY_AUTO_PREPARE === '1'", '
 assertIncludes(apiProductionExample, 'DRAPIXAI_GARMENT_APPROVAL_REQUIRED=1', 'Production must require garment approval');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_GARMENT_APPROVAL_REQUIRED "1"', 'Production validation must reject disabled garment approval');
 assertIncludes(apiProductionExample, 'DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE=0.95', 'API production defaults must reject sub-0.95 visual results');
+assertIncludes(apiProductionExample, 'DRAPIXAI_AUTO_REJECT_BAD_RESULTS=1', 'API production defaults must reject low-quality results');
+
+assert.equal(
+  shouldAutoRejectTryOn({ qualityScore: 0.949, warnings: [] }),
+  true,
+  'Scores below 0.95 must never be publishable',
+);
+assert.equal(
+  shouldAutoRejectTryOn({ qualityScore: 0.95, warnings: [] }),
+  false,
+  'A clean score at the 0.95 floor should be publishable',
+);
 assertIncludes(validateEnv, 'require_number_at_least DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE "0.95"', 'API env validation must enforce the public visual-quality floor');
 assertIncludes(shopifyLaunchDoc, 'Keep `DRAPIXAI_SHOPIFY_AUTO_PREPARE=0` while the AI worker is offline.', 'Shopify launch docs must support safe catalog sync while GPU preparation is offline');
 assertIncludes(shopifyThemeBlock, 'data-drapixai-shopify', 'Theme App Extension must expose a stable SDK mount point');

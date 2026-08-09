@@ -92,6 +92,12 @@
       "args": ["-m", "compileall", "-q", "drapixai_ai", "deploy/runpod"]
     },
     {
+      "id": "ai-ingress-security",
+      "label": "AI upload and readiness hardening regression suite",
+      "runner": "python",
+      "args": ["-m", "drapixai_ai.scripts.validate_ai_ingress_security"]
+    },
+    {
       "id": "transient-spool",
       "label": "Transient shopper-image spool validation",
       "runner": "python",
