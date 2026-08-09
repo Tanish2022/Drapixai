@@ -21,34 +21,49 @@ cleanup() {
 }
 trap cleanup EXIT
 
+emit_error() {
+  local message="$1"
+
+  echo "${message}" >&2
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    message="${message//%/%25}"
+    message="${message//$'\r'/}"
+    message="${message//$'\n'/%0A}"
+    printf '::error title=DrapixAI container scan::%s\n' "${message}"
+  fi
+}
+
 scan_image() {
   local archive="$1"
   local image="$2"
   local report="$3"
   local attempt
   local parser_status
+  local trivy_log
+  local last_failure="no command error captured"
 
   for attempt in 1 2 3; do
     echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities (attempt ${attempt}/3)"
-    rm -f "${report}"
+    trivy_log="${report}.attempt-${attempt}.log"
+    rm -f "${report}" "${trivy_log}"
     if docker run --rm \
       --read-only \
       --cap-drop ALL \
       --tmpfs /tmp:rw,noexec,nosuid,size=512m \
-      --mount "type=bind,src=${scan_dir},dst=/scan" \
+      --mount "type=bind,src=${archive},dst=/scan/image.tar,readonly" \
       --mount "type=volume,src=${TRIVY_CACHE_VOLUME},dst=/root/.cache/" \
       "${TRIVY_IMAGE}" image \
       --input /scan/image.tar \
       --db-repository "${TRIVY_DB_REPOSITORY}" \
       --format json \
-      --output "/scan/$(basename "${report}")" \
       --severity HIGH,CRITICAL \
       --pkg-types os,library \
       --scanners vuln \
-      --skip-version-check > "${report}"; then
+      --skip-version-check > "${report}" 2>"${trivy_log}"; then
       break
     fi
 
+    last_failure="$(tail -n 4 "${trivy_log}" 2>/dev/null | tr '\n' ' ')"
     if [[ "${attempt}" -lt 3 ]]; then
       echo "Trivy scan failed; retrying once its vulnerability database or registry is available." >&2
       sleep "$((attempt * 10))"
@@ -56,7 +71,7 @@ scan_image() {
   done
 
   if [[ ! -s "${report}" ]]; then
-    echo "Trivy could not produce a vulnerability report after 3 attempts; keeping the release gate closed." >&2
+    emit_error "Trivy could not produce a vulnerability report after 3 attempts; keeping the release gate closed. Last scanner error: ${last_failure}"
     return 20
   fi
 
@@ -111,7 +126,7 @@ print("No HIGH/CRITICAL OS or library vulnerabilities found.")
     return 10
   fi
 
-  echo "Trivy report validation failed; keeping the release gate closed." >&2
+  emit_error "Trivy report validation failed; keeping the release gate closed."
   return 20
 }
 
