@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436 AS build
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -16,7 +16,7 @@ RUN cd apps/web \
 
 WORKDIR /app/apps/web
 
-FROM debian:bookworm-slim AS patched-openssl
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241 AS patched-openssl
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libssl3 \
@@ -25,7 +25,7 @@ RUN apt-get update \
     && cp /var/lib/dpkg/info/libssl3:amd64.md5sums /var/lib/dpkg/status.d/libssl3.md5sums \
     && rm -rf /var/lib/apt/lists/*
 
-FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
+FROM gcr.io/distroless/nodejs22-debian12:nonroot@sha256:13593b7570658e8477de39e2f4a1dd25db2f836d68a0ba771251572d23bb4f8e AS runtime
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

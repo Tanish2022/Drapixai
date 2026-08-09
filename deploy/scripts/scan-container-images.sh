@@ -2,6 +2,8 @@
 set -euo pipefail
 
 TRIVY_IMAGE="aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e"
+TRIVY_DB_REPOSITORY="${DRAPIXAI_TRIVY_DB_REPOSITORY:-ghcr.io/aquasecurity/trivy-db:2}"
+TRIVY_CACHE_VOLUME="${DRAPIXAI_TRIVY_CACHE_VOLUME:-drapixai-trivy-cache}"
 
 if [[ "$#" -eq 0 ]]; then
   echo "Usage: $0 <image-ref> [image-ref ...]" >&2
@@ -31,9 +33,10 @@ scan_image() {
       --cap-drop ALL \
       --tmpfs /tmp:rw,noexec,nosuid,size=512m \
       --mount "type=bind,src=${archive},dst=/scan/image.tar,readonly" \
-      --mount "type=volume,src=drapixai-trivy-cache,dst=/root/.cache/" \
+      --mount "type=volume,src=${TRIVY_CACHE_VOLUME},dst=/root/.cache/" \
       "${TRIVY_IMAGE}" image \
       --input /scan/image.tar \
+      --db-repository "${TRIVY_DB_REPOSITORY}" \
       --exit-code 1 \
       --severity HIGH,CRITICAL \
       --pkg-types os,library \
