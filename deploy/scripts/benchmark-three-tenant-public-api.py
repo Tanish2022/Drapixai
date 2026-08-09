@@ -24,7 +24,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--quality-threshold", type=float, default=0.95)
     parser.add_argument("--latency-target-ms", type=int, default=12000)
-    return parser.parse_args()
+    parser.add_argument("--required-worker-batch-size", type=int, default=3)
+    parser.add_argument("--minimum-headroom-ratio", type=float, default=0.20)
+    args = parser.parse_args()
+    if args.required_worker_batch_size < 1 or args.required_worker_batch_size > 3:
+        parser.error("--required-worker-batch-size must be between 1 and 3")
+    if args.minimum_headroom_ratio < 0 or args.minimum_headroom_ratio >= 1:
+        parser.error("--minimum-headroom-ratio must be at least 0 and below 1")
+    return args
 
 
 def load_manifest(path: Path) -> list[dict[str, Any]]:
@@ -44,6 +51,17 @@ def load_manifest(path: Path) -> list[dict[str, Any]]:
         if not os.getenv(token_env):
             raise ValueError(f"Required token environment variable is unset: {token_env}")
     return cases
+
+
+def parse_timing_header(response: requests.Response) -> dict[str, Any]:
+    value = response.headers.get("x-drapixai-timing-json", "")
+    if not value:
+        return {}
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def percentile(values: list[int], value: float) -> int:
@@ -88,6 +106,7 @@ def run_case(
     output_path = output_dir / f"{case_id}.png"
     output_path.write_bytes(response.content)
     warnings = [item for item in response.headers.get("x-drapixai-warnings", "").split(",") if item]
+    timing = parse_timing_header(response)
     return {
         "id": case_id,
         "token_env": str(case["token_env"]),
@@ -102,6 +121,12 @@ def run_case(
         "reported_latency_ms": int(response.headers.get("x-drapixai-latency-ms") or 0),
         "media_retention": response.headers.get("x-drapixai-media-retention", ""),
         "training_use": response.headers.get("x-drapixai-training-use", ""),
+        "worker_batch_size": int(timing.get("worker_batch_size") or 0),
+        "gpu_peak_allocated_mb": int(timing.get("gpu_peak_allocated_mb") or 0),
+        "gpu_peak_reserved_mb": int(timing.get("gpu_peak_reserved_mb") or 0),
+        "gpu_total_mb": int(timing.get("gpu_total_mb") or 0),
+        "gpu_headroom_ratio": float(timing.get("gpu_headroom_ratio") or 0),
+        "timings": timing,
     }
 
 
@@ -178,6 +203,16 @@ def main() -> int:
             failures.append(f"{result['id']}: media retention contract missing")
         if result["training_use"] != "none":
             failures.append(f"{result['id']}: no-training contract missing")
+        if result["worker_batch_size"] != args.required_worker_batch_size:
+            failures.append(
+                f"{result['id']}: worker batch was {result['worker_batch_size']}, "
+                f"expected {args.required_worker_batch_size}"
+            )
+        if result["gpu_headroom_ratio"] < args.minimum_headroom_ratio:
+            failures.append(
+                f"{result['id']}: GPU headroom {result['gpu_headroom_ratio']:.4f} below "
+                f"{args.minimum_headroom_ratio:.4f}"
+            )
 
     p95_wall_ms = percentile([result["wall_ms"] for result in results], 0.95)
     if p95_wall_ms > args.latency_target_ms:
@@ -191,6 +226,8 @@ def main() -> int:
         "p95_wall_ms": p95_wall_ms,
         "quality_threshold": args.quality_threshold,
         "latency_target_ms": args.latency_target_ms,
+        "required_worker_batch_size": args.required_worker_batch_size,
+        "minimum_headroom_ratio": args.minimum_headroom_ratio,
         "cross_tenant_probes": 6,
         "results": results,
         "failures": failures,

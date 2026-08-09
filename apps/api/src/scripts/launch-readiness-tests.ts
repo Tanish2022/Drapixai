@@ -307,6 +307,7 @@ const auditMigration = read('apps/api/prisma/migrations/20260719170000_immutable
 const authorizationLib = read('apps/api/src/lib/authorization.ts');
 const securityReleaseGate = read('docs/security-release-gate.md');
 const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
+const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const rootPackageJson = read('package.json');
 const gitignore = read('.gitignore');
 const gitattributes = read('.gitattributes');
@@ -1547,6 +1548,9 @@ assertIncludes(liveSecurityBoundaryTest, "url: 'http://127.0.0.1:8080/internal-o
 assertIncludes(liveSecurityBoundaryTest, "method: 'OPTIONS'", 'Live security boundary tests must probe hostile-origin CORS preflight');
 assertIncludes(liveSecurityBoundaryTest, "assert.ok(rateLimitStatuses.includes(429)", 'Live security boundary tests must prove rate-limit enforcement');
 assertIncludes(securityReleaseGate, 'DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A', 'Security release gate must document the public API token required for SSRF and rate-limit probes');
+assertIncludes(publicThreeTenantBenchmark, 'x-drapixai-timing-json', 'Public three-tenant benchmark must collect GPU timing evidence');
+assertIncludes(publicThreeTenantBenchmark, 'worker batch was', 'Public three-tenant benchmark must reject a worker that does not form the target batch');
+assertIncludes(publicThreeTenantBenchmark, 'GPU headroom', 'Public three-tenant benchmark must reject unsafe GPU VRAM headroom');
 
 const publicApiRoute = read('apps/api/src/routes/v1.ts');
 const publicApiSpec = read('apps/api/src/openapi/v1.ts');
