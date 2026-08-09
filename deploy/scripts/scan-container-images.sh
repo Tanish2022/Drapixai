@@ -138,6 +138,7 @@ for image in "$@"; do
 
   echo "Exporting ${image} for isolated scanning"
   docker save --output "${archive}" "${image}"
+  chmod 0644 "${archive}"
 
   echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities"
   scan_image "${archive}" "${image}" "${report}"
