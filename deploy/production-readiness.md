@@ -14,20 +14,17 @@ The hard public-launch security decision is defined in `docs/security-release-ga
 - Python compile validation for `drapixai_ai` passes
 - Local Windows output is not a CatVTON quality gate.
 
-## 1A. RunPod Source Of Truth
+## 1A. Linux GPU Source Of Truth
 
-DrapixAI CatVTON quality is validated on RunPod Linux Ubuntu GPU.
+DrapixAI public quality and reliability are validated on the same Linux GPU runtime that serves shoppers. The primary launch target is the on-premises RTX PRO 6000 Blackwell Workstation Edition with 96 GB VRAM. RunPod A100 remains a useful reference and rollback benchmark, but it is not the production source of truth.
 
-- OS: `Ubuntu 22.04`
-- Base image: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
-- Python: `3.11`
-- CUDA: `12.4.1`
-- GPU target: `A100` preferred, `A10` acceptable, `T4` only for low-cost testing
-- Quality-proven rollback stack: `drapixai_ai/requirements.txt` (not approved for public production because its resolved dependency audit is not clean)
-- Public-launch candidate: `drapixai_ai/requirements.security-candidate.txt`, promoted only after the A100 direct/SDK quality gate
-- Required system packages: `curl`, `ffmpeg`, `git`, `libgl1`, `libglib2.0-0`, `libgomp1`, `libsm6`, `libxext6`, `libxrender1`, `redis-server`
+- Host OS: Ubuntu Linux with the NVIDIA driver and Docker NVIDIA runtime verified.
+- GPU preset: rtx-pro-6000-blackwell.
+- Runtime: Blackwell-native Linux image and the audited security-candidate Python stack, promoted only after direct, SDK, quality, latency, and three-tenant tests.
+- Mode: Standard-only CatVTON, one candidate, 22 steps, 2.5 guidance scale.
+- Caches and model locks are immutable for a release; shopper images remain transient under /dev/shm.
 
-Do not approve production quality from Windows/local smoke images. Production quality gates must run on the RunPod stack above with AutoMasker, normal resolution, normal inference steps, and the expanded matrix.
+Do not approve public quality from Windows/local smoke images or from a different GPU class. The rights-cleared matrix, direct/SDK parity, and three-tenant test must run on the exact RTX workstation image and release commit that will serve traffic.
 
 ## 2. Production Env Checklist
 
@@ -165,7 +162,7 @@ Optional for the marketing/demo experience:
 
 Required:
 
-- `DRAPIXAI_GPU_PRESET=runpod-a100`
+- `DRAPIXAI_GPU_PRESET=rtx-pro-6000-blackwell`
 - `DRAPIXAI_ENV=production`
 - `DRAPIXAI_DEVICE=cuda`
 - `DRAPIXAI_CUDA_DEVICE=0`
@@ -184,7 +181,7 @@ Required only when `DRAPIXAI_GARMENT_CACHE_BACKEND=s3`:
 - `DRAPIXAI_S3_ACCESS_KEY_ID`
 - `DRAPIXAI_S3_SECRET_ACCESS_KEY`
 
-Recommended defaults already match the A100 path:
+Recommended defaults match the RTX PRO 6000 Standard path:
 
 - `DRAPIXAI_ENABLE_XFORMERS=1`
 - `DRAPIXAI_ENABLE_TF32=1`
@@ -200,14 +197,14 @@ These are hard launch gates, not recommendations:
 - `DRAPIXAI_CORS_ORIGINS` must list exact production origins. Never use `*` in production.
 - The API and AI services must both enforce a minimum publishable quality score of `0.95`; latency above 12 seconds is a performance-review condition, not permission to use a lower-quality generation path.
 - `JWT_SECRET`, `NEXTAUTH_SECRET`, `ADMIN_SESSION_SECRET`, `DASHBOARD_SESSION_SECRET`, `DRAPIXAI_ADMIN_TOKEN`, and `DRAPIXAI_AI_SERVICE_TOKEN` must be long random secrets.
-- RunPod setup scripts must generate admin/API/database/object-storage secrets at setup time and must not write fixed credentials into generated env files.
+- GPU-host setup scripts must generate admin/API/database/object-storage secrets at setup time and must not write fixed credentials into generated env files.
 - `npm --prefix apps/api run test:launch` must pass before release; it includes tracked env-file, generated-artifact, source-secret, and operator-log redaction checks so provider tokens and credential-bearing service URLs cannot be committed or printed accidentally.
 - The full resolved graph in `drapixai_ai/requirements.security-candidate.txt` must pass `pip-audit` with only the four documented deployment-inapplicable exceptions in `docs/ai-runtime-security.md`. A top-level-only `--no-deps` audit is not a launch gate.
 - `DRAPIXAI_AUTH_SYNC_TOKEN` must be the same long random secret on the web and API services so Google login sync is server-to-server only.
 - The same `DRAPIXAI_AI_SERVICE_TOKEN` must be configured on the API and AI service.
 - Run `bash deploy/scripts/validate-production-env-set.sh` after editing production env files to verify shared secrets match across API, web, and AI.
-- The AI service must run with `DRAPIXAI_ENV=production` on RunPod so missing service/admin tokens fail startup.
-- CatVTON output safety must remain enabled with `DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK=0`; RunPod preflight verifies its safety checker, feature extractor, and replacement image before startup.
+- The AI service must run with `DRAPIXAI_ENV=production` on the GPU host so missing service/admin tokens fail startup.
+- CatVTON output safety must remain enabled with `DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK=0`; GPU preflight verifies its safety checker, feature extractor, and replacement image before startup.
 - API and Shopify catalog image writes must fail closed when object storage is unavailable. Keep `DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK=0` in production so temporary node disks never become an accidental data store.
 - Public upload paths only accept `jpg`, `jpeg`, `png`, and `webp` images.
 - `/ready` must not expose detailed internal errors in production unless `DRAPIXAI_EXPOSE_READY_DETAILS=1` is intentionally set for staging.
@@ -346,36 +343,30 @@ Minimum verification before launch:
 3. One real login completed against production or staging URLs
 4. OAuth redirect URI matches the deployed domain exactly
 
-## 6. A100 Runtime Assumptions
+## 6. RTX PRO 6000 Production Runtime
 
-These are the current recommended assumptions for Runpod A100:
+The on-premises RTX PRO 6000 Blackwell workstation is the primary production GPU. It runs the AI API and CUDA worker behind private TLS, reachable only from the API host over the company VPN or site-to-site private network. Public traffic never reaches the workstation directly.
 
-- Provider: Runpod Pod
-- GPU: `A100 PCIe 80GB`
-- OS base: Runpod PyTorch `2.4.0`
-- Linux only
-- AI process runs directly on the Pod
-- Redis can be local on the Pod for first staging, but managed Redis is better for production
-- Hugging Face, Torch, and U2NET caches live under `/workspace/drapixai/runtime/cache`
-- the worker preloads the model on startup so first-request latency is not inflated by cold boot
+- GPU: RTX PRO 6000 Blackwell Workstation Edition, 96 GB VRAM.
+- OS: supported Ubuntu Linux with a validated NVIDIA driver and Docker NVIDIA Container Toolkit.
+- GPU preset: rtx-pro-6000-blackwell.
+- Runtime storage: immutable models and a persistent garment cache; transient shopper image spool in /dev/shm only.
+- Queue: private Redis credentials and network segment distinct from public API and database services.
+- Worker: preload CatVTON before opening traffic; begin with adaptive batching disabled, then enable three-user batching only after its acceptance test passes.
 
 ### Assumptions that still need live confirmation
 
-- the secure CUDA 12.6 candidate passes its full dependency audit and xFormers kernel check on the selected A100 driver
-- the enabled CatVTON safety checker stays inside the 12-second warm SDK target without changing accepted-result realism
-- one complete `/sdk/tryon` request returns an image successfully
-- model path is valid and complete on Runpod
-- worker remains stable under actual diffusion workload
-- garment preprocessing succeeds on the live Linux GPU path
+- the audited Blackwell-native runtime passes its dependency audit and xFormers CUDA kernel check on this exact driver;
+- the enabled CatVTON safety checker stays inside the 12-second warm SDK target without changing accepted-result realism;
+- direct and SDK requests return equivalent, warning-free Standard outputs;
+- the three-tenant batch leaves at least 20% VRAM headroom and has no cross-tenant result mix-up;
+- private TLS, workstation firewall, VPN routing, and fail-closed AI service authentication work together on the deployed hosts.
 
-### What is already favorable for A100
+### Reference RunPod use
 
-- AI preset `runpod-a100` is present
-- timeouts are increased for the stronger GPU path
-- local Windows-only workarounds do not block Linux deployment
-- deployment scripts target `/workspace/drapixai`
+RunPod A100 can still be used for a temporary benchmark or incident rollback comparison. It must use a separately recorded release evidence set and must not silently replace or override the RTX production baseline.
 
-## 7. Runpod Day 1 Command Sequence
+## 7. Reference RunPod Day 1 Command Sequence
 
 After the Pod is created and SSH works:
 

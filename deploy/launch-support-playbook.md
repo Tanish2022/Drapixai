@@ -6,7 +6,7 @@
 - Treat the first launch as monitored rollout, not a "fully hands-off" SaaS release.
 
 ## Go-Live Preconditions
-- A100 deployment passes `/health` and `/ready`.
+- RTX PRO 6000 production runtime passes `/health` and `/ready` through the private API path.
 - One real staging try-on completes end to end.
 - Signup, OTP, login, dashboard, settings, subscription, garment sync, upload, and SDK flow are verified.
 - Support inboxes are reachable:
@@ -53,7 +53,7 @@
 
 ## Rollback / Pause Criteria
 - Pause public launch traffic if:
-  - A100 health is unstable
+  - primary GPU runtime health is unstable
   - more than one end-to-end try-on path is broken
   - signup or login is unreliable
   - garment caching fails for new uploads
