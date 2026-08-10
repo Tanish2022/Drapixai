@@ -44,8 +44,8 @@ Evidence:
 - [ ] Tag the approved release.
 - [ ] Copy `deploy/launch-evidence.example.json` to
       `runtime/launch-evidence/approved-evidence.json`.
-- [ ] Put the release SHA, verifier, timestamp, and evidence location on every
-      external gate.
+- [ ] Put the release SHA, verifier, timestamp, artifact path, and SHA-256 digest on every
+      external gate. Store redacted artifacts only beneath `runtime/launch-evidence/`.
 
 Required command:
 

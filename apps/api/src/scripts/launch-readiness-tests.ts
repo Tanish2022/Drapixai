@@ -308,6 +308,10 @@ const authorizationLib = read('apps/api/src/lib/authorization.ts');
 const securityReleaseGate = read('docs/security-release-gate.md');
 const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
 const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
+const launchGateReport = read('scripts/launch-gate-report.mjs');
+const launchEvidenceTemplate = JSON.parse(read('deploy/launch-evidence.example.json')) as {
+  gates: Record<string, { evidence?: string; sha256?: string }>;
+};
 const rootPackageJson = read('package.json');
 const gitignore = read('.gitignore');
 const gitattributes = read('.gitattributes');
@@ -1551,6 +1555,14 @@ assertIncludes(securityReleaseGate, 'DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A',
 assertIncludes(publicThreeTenantBenchmark, 'x-drapixai-timing-json', 'Public three-tenant benchmark must collect GPU timing evidence');
 assertIncludes(publicThreeTenantBenchmark, 'worker batch was', 'Public three-tenant benchmark must reject a worker that does not form the target batch');
 assertIncludes(publicThreeTenantBenchmark, 'GPU headroom', 'Public three-tenant benchmark must reject unsafe GPU VRAM headroom');
+assertIncludes(launchGateReport, 'validateEvidenceArtifact', 'Complete launch reports must validate external evidence artifacts');
+assertIncludes(launchGateReport, 'evidence artifact sha256 does not match', 'Complete launch reports must reject altered evidence artifacts');
+assertIncludes(launchGateReport, 'runtime/launch-evidence', 'Complete launch reports must keep evidence inside the ignored local evidence root');
+assertIncludes(launchGateReport, 'isStrictDescendant', 'Complete launch reports must block traversal or symlink escapes from the evidence root');
+assert.ok(
+  Object.values(launchEvidenceTemplate.gates).every((gate) => gate.evidence?.startsWith('runtime/launch-evidence/') && gate.sha256 === 'REPLACE_WITH_ARTIFACT_SHA256'),
+  'Launch-evidence template must require a local artifact path and SHA-256 placeholder for every external gate',
+);
 
 const publicApiRoute = read('apps/api/src/routes/v1.ts');
 const publicApiSpec = read('apps/api/src/openapi/v1.ts');

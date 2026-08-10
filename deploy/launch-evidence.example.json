@@ -4,75 +4,87 @@
   "gates": {
     "disposable-db-migration": {
       "status": "PENDING",
-      "evidence": "release-record/migrations.md",
+      "evidence": "runtime/launch-evidence/release-record/migrations.md",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "container-image-scan": {
       "status": "PENDING",
-      "evidence": "release-record/container-scan.json",
+      "evidence": "runtime/launch-evidence/release-record/container-scan.json",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "two-tenant-staging": {
       "status": "PENDING",
-      "evidence": "release-record/live-security-boundaries.json",
+      "evidence": "runtime/launch-evidence/release-record/live-security-boundaries.json",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "audit-chain-staging": {
       "status": "PENDING",
-      "evidence": "release-record/audit-chain.json",
+      "evidence": "runtime/launch-evidence/release-record/audit-chain.json",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "retention-staging": {
       "status": "PENDING",
-      "evidence": "release-record/retention.md",
+      "evidence": "runtime/launch-evidence/release-record/retention.md",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "private-services": {
       "status": "PENDING",
-      "evidence": "release-record/network-exposure.md",
+      "evidence": "runtime/launch-evidence/release-record/network-exposure.md",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "backup-restore": {
       "status": "PENDING",
-      "evidence": "release-record/backup-restore.md",
+      "evidence": "runtime/launch-evidence/release-record/backup-restore.md",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "secret-rotation": {
       "status": "PENDING",
-      "evidence": "release-record/secret-rotation.md",
+      "evidence": "runtime/launch-evidence/release-record/secret-rotation.md",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "alerts": {
       "status": "PENDING",
-      "evidence": "release-record/alert-delivery.md",
+      "evidence": "runtime/launch-evidence/release-record/alert-delivery.md",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "sdk-quality-parity": {
       "status": "PENDING",
-      "evidence": "release-record/sdk-quality-parity.json",
+      "evidence": "runtime/launch-evidence/release-record/sdk-quality-parity.json",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "quality-matrix": {
       "status": "PENDING",
-      "evidence": "release-record/upper-body-50-summary.json",
+      "evidence": "runtime/launch-evidence/release-record/upper-body-50-summary.json",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "release-owner@example.com"
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
     "authorized-pentest": {
       "status": "PENDING",
-      "evidence": "release-record/pentest-final-report.pdf",
+      "evidence": "runtime/launch-evidence/release-record/pentest-final-report.pdf",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
-      "verifiedBy": "independent-tester@example.com"
+      "verifiedBy": "independent-tester@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     }
   }
 }

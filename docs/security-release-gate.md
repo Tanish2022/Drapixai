@@ -18,7 +18,7 @@ Run the complete launch report, including the external release evidence that mus
 npm run launch:report
 ```
 
-Copy `deploy/launch-evidence.example.json` to the ignored `runtime/launch-evidence/approved-evidence.json`, set the exact 40-character release commit, and attach a verifier, timestamp, and evidence location for each completed external gate. `PASS` entries are accepted only when the evidence file targets the current commit and contains all three metadata fields.
+Copy `deploy/launch-evidence.example.json` to the ignored `runtime/launch-evidence/approved-evidence.json`, set the exact 40-character release commit, and place each redacted evidence artifact beneath `runtime/launch-evidence/`. For every completed external gate, record the verifier, timestamp, artifact path, and SHA-256 digest. `PASS` entries are accepted only when the evidence file targets the current commit and the referenced artifact exists under that directory with the recorded hash.
 
 The complete command intentionally exits nonzero while any release evidence is `PENDING` or any gate is `FAIL`. A report is evidence for the exact commit and working-tree state it records; it must not be reused for a different release. Never put credentials, shopper images, or customer data in the evidence metadata.
 

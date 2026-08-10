@@ -9,6 +9,7 @@ const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 const requestedScope = process.argv.find((arg) => arg.startsWith("--scope="))?.split("=")[1] ?? "all";
 const requestedEvidencePath = process.argv.find((arg) => arg.startsWith("--evidence="))?.slice("--evidence=".length);
 const evidencePath = path.resolve(root, requestedEvidencePath || path.join("runtime", "launch-evidence", "approved-evidence.json"));
+const evidenceRoot = path.join(root, "runtime", "launch-evidence");
 const validScopes = new Set(["repository", "all"]);
 
 if (!validScopes.has(requestedScope)) {
@@ -49,6 +50,42 @@ const tail = (value, lineCount = 12) => redact(value || "")
   .slice(-lineCount)
   .join("\n");
 
+const isStrictDescendant = (parent, candidate) => {
+  const relative = path.relative(parent, candidate);
+  return relative.length > 0 && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative);
+};
+
+const validateEvidenceArtifact = (reference, expectedSha256) => {
+  if (typeof reference !== "string" || !reference.trim()) {
+    return { error: "evidence artifact path is missing" };
+  }
+  if (typeof expectedSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(expectedSha256.trim())) {
+    return { error: "evidence artifact sha256 is missing or invalid" };
+  }
+  if (!fs.existsSync(evidenceRoot)) {
+    return { error: "launch evidence directory does not exist" };
+  }
+
+  const candidate = path.resolve(root, reference);
+  if (!fs.existsSync(candidate)) {
+    return { error: "evidence artifact does not exist" };
+  }
+
+  const rootRealPath = fs.realpathSync(evidenceRoot);
+  const artifactRealPath = fs.realpathSync(candidate);
+  if (!isStrictDescendant(rootRealPath, artifactRealPath)) {
+    return { error: "evidence artifact must remain under runtime/launch-evidence" };
+  }
+  if (!fs.statSync(artifactRealPath).isFile()) {
+    return { error: "evidence artifact must be a file" };
+  }
+
+  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(artifactRealPath)).digest("hex");
+  if (sha256 !== expectedSha256.trim().toLowerCase()) {
+    return { error: "evidence artifact sha256 does not match" };
+  }
+  return { evidence: path.relative(root, artifactRealPath), sha256 };
+};
 const productionEnvTemplates = [
   ["deploy/env/api.production.example", "deploy/env/api.production.env"],
   ["deploy/env/web.production.example", "deploy/env/web.production.env"],
@@ -134,16 +171,19 @@ if (requestedScope === "all" && fs.existsSync(evidencePath)) {
       if (gate.id === "clean-release-commit") continue;
       const evidence = suppliedEvidence.gates?.[gate.id];
       if (!evidence || !["PASS", "FAIL"].includes(evidence.status)) continue;
-      const complete = typeof evidence.evidence === "string" && evidence.evidence.trim().length > 0
-        && typeof evidence.verifiedBy === "string" && evidence.verifiedBy.trim().length > 0
-        && !Number.isNaN(Date.parse(evidence.verifiedAt));
-      if (!complete) {
-        console.log(`PENDING ${gate.id} has incomplete evidence metadata`);
+      const verifiedAtMs = Date.parse(evidence.verifiedAt);
+      const complete = typeof evidence.verifiedBy === "string" && evidence.verifiedBy.trim().length > 0
+        && !Number.isNaN(verifiedAtMs)
+        && verifiedAtMs <= Date.now() + 5 * 60 * 1000;
+      const artifact = validateEvidenceArtifact(evidence.evidence, evidence.sha256);
+      if (!complete || artifact.error) {
+        console.log(`PENDING ${gate.id} has incomplete evidence metadata${artifact.error ? `: ${artifact.error}` : ""}`);
         continue;
       }
       gate.status = evidence.status;
-      gate.evidence = evidence.evidence.trim();
-      gate.verifiedAt = new Date(evidence.verifiedAt).toISOString();
+      gate.evidence = artifact.evidence;
+      gate.sha256 = artifact.sha256;
+      gate.verifiedAt = new Date(verifiedAtMs).toISOString();
       gate.verifiedBy = evidence.verifiedBy.trim();
     }
   }
@@ -180,7 +220,7 @@ const report = {
   releaseEvidence
 };
 
-const evidenceDir = path.join(root, "runtime", "launch-evidence");
+const evidenceDir = evidenceRoot;
 fs.mkdirSync(evidenceDir, { recursive: true });
 const jsonPath = path.join(evidenceDir, `${runId}.json`);
 const markdownPath = path.join(evidenceDir, `${runId}.md`);
