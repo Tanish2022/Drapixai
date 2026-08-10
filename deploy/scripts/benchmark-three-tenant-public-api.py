@@ -74,6 +74,45 @@ def percentile(values: list[int], value: float) -> int:
     return ordered[min(len(ordered) - 1, math.ceil(value * len(ordered)) - 1)]
 
 
+def _int_header(response: requests.Response, name: str) -> int:
+    try:
+        return int(response.headers.get(name) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float_header(response: requests.Response, name: str) -> float:
+    try:
+        return float(response.headers.get(name) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def failure_result(case: dict[str, Any], *, wall_ms: int, error: str, status: int = 0) -> dict[str, Any]:
+    return {
+        "id": str(case["id"]),
+        "token_env": str(case["token_env"]),
+        "product_id": str(case["product_id"]),
+        "tryon_id": "",
+        "status": status,
+        "output": None,
+        "quality_score": 0.0,
+        "candidate_count": 0,
+        "warnings": [],
+        "wall_ms": wall_ms,
+        "reported_latency_ms": 0,
+        "media_retention": "",
+        "training_use": "",
+        "worker_batch_size": 0,
+        "gpu_peak_allocated_mb": 0,
+        "gpu_peak_reserved_mb": 0,
+        "gpu_total_mb": 0,
+        "gpu_headroom_ratio": 0.0,
+        "timings": {},
+        "error": error,
+    }
+
+
 def run_case(
     case: dict[str, Any],
     *,
@@ -99,16 +138,32 @@ def run_case(
         "privacy_policy_version": "2026-08-04",
     }
     started = time.perf_counter()
-    with person_path.open("rb") as person_file:
-        response = requests.post(
-            f"{base_url.rstrip('/')}/tryons",
-            headers=headers,
-            data=form,
-            files={"person_image": (person_path.name, person_file, "image/jpeg")},
-            timeout=timeout,
+    try:
+        with person_path.open("rb") as person_file:
+            response = requests.post(
+                f"{base_url.rstrip('/')}/tryons",
+                headers=headers,
+                data=form,
+                files={"person_image": (person_path.name, person_file, "image/jpeg")},
+                timeout=timeout,
+            )
+    except requests.RequestException:
+        return failure_result(
+            case,
+            wall_ms=int((time.perf_counter() - started) * 1000),
+            error="TRYON_REQUEST_FAILED",
         )
+    except OSError:
+        return failure_result(
+            case,
+            wall_ms=int((time.perf_counter() - started) * 1000),
+            error="PERSON_IMAGE_READ_FAILED",
+        )
+
     wall_ms = int((time.perf_counter() - started) * 1000)
-    response.raise_for_status()
+    if response.status_code < 200 or response.status_code >= 300:
+        return failure_result(case, wall_ms=wall_ms, status=response.status_code, error=f"TRYON_HTTP_{response.status_code}")
+
     output_path = output_dir / f"{case_id}.png"
     if retain_output_images:
         output_path.write_bytes(response.content)
@@ -121,55 +176,83 @@ def run_case(
         "tryon_id": response.headers.get("x-drapixai-tryon-result-id", ""),
         "status": response.status_code,
         "output": str(output_path) if retain_output_images else None,
-        "quality_score": float(response.headers.get("x-drapixai-quality-score") or 0),
-        "candidate_count": int(response.headers.get("x-drapixai-candidate-count") or 0),
+        "quality_score": _float_header(response, "x-drapixai-quality-score"),
+        "candidate_count": _int_header(response, "x-drapixai-candidate-count"),
         "warnings": warnings,
         "wall_ms": wall_ms,
-        "reported_latency_ms": int(response.headers.get("x-drapixai-latency-ms") or 0),
+        "reported_latency_ms": _int_header(response, "x-drapixai-latency-ms"),
         "media_retention": response.headers.get("x-drapixai-media-retention", ""),
         "training_use": response.headers.get("x-drapixai-training-use", ""),
-        "worker_batch_size": int(timing.get("worker_batch_size") or 0),
-        "gpu_peak_allocated_mb": int(timing.get("gpu_peak_allocated_mb") or 0),
-        "gpu_peak_reserved_mb": int(timing.get("gpu_peak_reserved_mb") or 0),
-        "gpu_total_mb": int(timing.get("gpu_total_mb") or 0),
-        "gpu_headroom_ratio": float(timing.get("gpu_headroom_ratio") or 0),
+        "worker_batch_size": _int_header_from_timing(timing, "worker_batch_size"),
+        "gpu_peak_allocated_mb": _int_header_from_timing(timing, "gpu_peak_allocated_mb"),
+        "gpu_peak_reserved_mb": _int_header_from_timing(timing, "gpu_peak_reserved_mb"),
+        "gpu_total_mb": _int_header_from_timing(timing, "gpu_total_mb"),
+        "gpu_headroom_ratio": _float_header_from_timing(timing, "gpu_headroom_ratio"),
         "timings": timing,
+        "error": None,
     }
 
+
+def _int_header_from_timing(timing: dict[str, Any], name: str) -> int:
+    try:
+        return int(timing.get(name) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float_header_from_timing(timing: dict[str, Any], name: str) -> float:
+    try:
+        return float(timing.get(name) or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str, Any]], base_url: str, timeout: int) -> list[str]:
     failures: list[str] = []
     by_id = {str(case["id"]): case for case in cases}
     for result in results:
+        if not result["tryon_id"]:
+            failures.append(f"{result['id']}: metadata boundary checks skipped because try-on did not complete")
+            continue
         owner_case = by_id[result["id"]]
         owner_token = os.environ[str(owner_case["token_env"])]
-        own_response = requests.get(
-            f"{base_url.rstrip('/')}/tryons/{result['tryon_id']}",
-            headers={"Authorization": f"Bearer {owner_token}"},
-            timeout=timeout,
-        )
+        try:
+            own_response = requests.get(
+                f"{base_url.rstrip('/')}/tryons/{result['tryon_id']}",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                timeout=timeout,
+            )
+        except requests.RequestException:
+            failures.append(f"{result['id']}: owner metadata lookup failed")
+            continue
         if own_response.status_code != 200:
             failures.append(f"{result['id']}: owner metadata lookup returned {own_response.status_code}")
         else:
-            metadata = own_response.json()
-            if str(metadata.get("product_id")) != result["product_id"]:
-                failures.append(f"{result['id']}: result/product association changed")
+            try:
+                metadata = own_response.json()
+            except ValueError:
+                failures.append(f"{result['id']}: owner metadata lookup was not valid JSON")
+            else:
+                if str(metadata.get("product_id")) != result["product_id"]:
+                    failures.append(f"{result['id']}: result/product association changed")
 
         for other_case in cases:
             if other_case["id"] == result["id"]:
                 continue
             other_token = os.environ[str(other_case["token_env"])]
-            cross_response = requests.get(
-                f"{base_url.rstrip('/')}/tryons/{result['tryon_id']}",
-                headers={"Authorization": f"Bearer {other_token}"},
-                timeout=timeout,
-            )
+            try:
+                cross_response = requests.get(
+                    f"{base_url.rstrip('/')}/tryons/{result['tryon_id']}",
+                    headers={"Authorization": f"Bearer {other_token}"},
+                    timeout=timeout,
+                )
+            except requests.RequestException:
+                failures.append(f"{other_case['id']}: cross-tenant metadata probe failed")
+                continue
             if cross_response.status_code != 404:
                 failures.append(
                     f"{other_case['id']} could probe {result['id']} result: {cross_response.status_code}"
                 )
     return failures
-
 
 def main() -> int:
     args = parse_args()
@@ -191,8 +274,13 @@ def main() -> int:
             )
             for case in cases
         ]
+        future_cases = {future: case for future, case in zip(futures, cases)}
         for future in as_completed(futures):
-            results.append(future.result())
+            case = future_cases[future]
+            try:
+                results.append(future.result())
+            except Exception:
+                results.append(failure_result(case, wall_ms=0, error="BENCHMARK_WORKER_FAILED"))
     wall_total_ms = int((time.perf_counter() - wall_started) * 1000)
     results.sort(key=lambda item: item["id"])
 
@@ -201,6 +289,8 @@ def main() -> int:
     if any(not item for item in result_ids) or len(set(result_ids)) != 3:
         failures.append("Three unique try-on result IDs were not returned")
     for result in results:
+        if result.get("error"):
+            failures.append(f"{result['id']}: {result['error']}")
         if result["candidate_count"] != 1:
             failures.append(f"{result['id']}: candidate_count is not 1")
         if result["quality_score"] < args.quality_threshold:
