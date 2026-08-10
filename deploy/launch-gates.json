@@ -2,6 +2,12 @@
   "version": 1,
   "repository": [
     {
+      "id": "node-runtime",
+      "label": "Supported Node.js release runtime",
+      "runner": "node",
+      "args": ["scripts/verify-node-runtime.mjs"]
+    },
+    {
       "id": "api-build",
       "label": "API production build",
       "runner": "npm",

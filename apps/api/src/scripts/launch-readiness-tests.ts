@@ -226,6 +226,7 @@ const plans = read('apps/api/src/lib/plans.ts');
 const pipeline = read('drapixai_ai/pipeline/tryon_pipeline.py');
 const aiServer = read('drapixai_ai/api/ai_server.py');
 const launchGates = read('deploy/launch-gates.json');
+const nodeRuntimeVerifier = read('scripts/verify-node-runtime.mjs');
 const aiSettings = read('drapixai_ai/configs/settings.py');
 const tryonService = read('drapixai_ai/services/tryon_service.py');
 const gpuWorker = read('drapixai_ai/worker/gpu_worker.py');
@@ -440,6 +441,9 @@ assertIncludes(aiServer, '_read_upload_limited', 'AI server must enforce upload 
 assertIncludes(aiServer, 'REQUEST_BODY_TOO_LARGE', 'AI server must reject oversized declared request bodies before parsing');
 assertIncludes(aiServer, 'normalize_request_id', 'AI server must constrain client-supplied request IDs before logging them');
 assertIncludes(launchGates, 'ai-ingress-security', 'Launch gates must execute AI ingress hardening regressions');
+assertIncludes(launchGates, 'node-runtime', 'Launch gates must reject unsupported Node.js runtimes.');
+assertIncludes(nodeRuntimeVerifier, 'UNSUPPORTED_NODE_RUNTIME', 'Node runtime verifier must fail closed on unsupported Node.js versions.');
+assertIncludes(nodeRuntimeVerifier, 'NODE_ENGINE_RANGE_MISMATCH', 'Node runtime verifier must require one consistent engine range.');
 assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
 assert.ok('three-tenant-gpu' in launchEvidenceTemplate.gates, 'Launch-evidence template must include the three-tenant GPU certification artifact.');
 assertIncludes(aiServer, 'PRODUCTION_CONFIG_INVALID', 'AI server must fail closed when production secrets are missing');
