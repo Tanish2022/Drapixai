@@ -4,7 +4,7 @@ set -Eeuo pipefail
 APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 API_PORT="${PORT:-8000}"
 API_ENV_FILE="${DRAPIXAI_API_ENV_FILE:-$APP_ROOT/apps/api/.env}"
-AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.production.env}"
+AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.runpod.env}"
 LOG_DIR="$APP_ROOT/runtime/logs"
 MINIO_DATA_DIR="${DRAPIXAI_MINIO_DATA_DIR:-$APP_ROOT/runtime/minio}"
 MINIO_BUCKET="${S3_BUCKET:-drapixai-local}"

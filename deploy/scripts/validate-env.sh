@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  bash deploy/scripts/validate-env.sh <api|web|ai>
+  bash deploy/scripts/validate-env.sh <api|web|ai|ai-reference>
 
 This script validates the currently exported environment variables.
 Source the relevant env file first, then run this script.
@@ -184,7 +184,7 @@ case "$profile" in
       DRAPIXAI_WEB_RELEASE_IMAGE
     )
     ;;
-  ai)
+  ai|ai-reference)
     required_vars=(
       DRAPIXAI_ENV
       DRAPIXAI_GPU_PRESET
@@ -198,8 +198,10 @@ case "$profile" in
       DRAPIXAI_GARMENT_CACHE_DIR
       DRAPIXAI_ADMIN_TOKEN
       DRAPIXAI_AI_SERVICE_TOKEN
-      DRAPIXAI_AI_RELEASE_IMAGE
     )
+    if [[ "$profile" == "ai" ]]; then
+      required_vars+=(DRAPIXAI_AI_RELEASE_IMAGE)
+    fi
     if [[ "${DRAPIXAI_GARMENT_CACHE_BACKEND:-local}" == "s3" ]]; then
       required_vars+=(
         DRAPIXAI_S3_BUCKET
@@ -313,14 +315,19 @@ if [[ "$profile" == "api" ]]; then
   fi
 fi
 
-if [[ "$profile" == "ai" ]]; then
+if [[ "$profile" == "ai" || "$profile" == "ai-reference" ]]; then
   require_min_length DRAPIXAI_REDIS_PASSWORD 32
-  require_equals DRAPIXAI_ENV "production"
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_equals DRAPIXAI_TRYON_ENGINE "catvton"
-  require_digest_pinned_release_image DRAPIXAI_AI_RELEASE_IMAGE
-  if [[ "${DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell" ]]; then
+  if [[ "$profile" == "ai" ]]; then
+    require_equals DRAPIXAI_ENV "production"
+    require_digest_pinned_release_image DRAPIXAI_AI_RELEASE_IMAGE
+  else
+    require_equals DRAPIXAI_ENV "staging"
+    require_equals DRAPIXAI_GPU_PRESET "runpod-a100"
+  fi
+  if [[ "$profile" == "ai" && "${DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell" ]]; then
     require_pinned_pytorch_runtime_image
     require_equals DRAPIXAI_ENABLE_XFORMERS "0"
   fi

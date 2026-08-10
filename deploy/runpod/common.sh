@@ -2,6 +2,15 @@
 set -euo pipefail
 
 export DRAPIXAI_APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
+
+DRAPIXAI_AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$DRAPIXAI_APP_ROOT/deploy/env/ai.runpod.env}"
+if [[ -f "$DRAPIXAI_AI_ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$DRAPIXAI_AI_ENV_FILE"
+  set +a
+fi
+
 export DRAPIXAI_VENV="${DRAPIXAI_VENV:-$DRAPIXAI_APP_ROOT/.venv}"
 
 if ! python - <<'PY' >/dev/null 2>&1
@@ -21,14 +30,7 @@ if [[ -x "$DRAPIXAI_VENV/bin/python" ]]; then
   export VIRTUAL_ENV="$DRAPIXAI_VENV"
   export PATH="$DRAPIXAI_VENV/bin:$PATH"
 fi
-
-DRAPIXAI_AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$DRAPIXAI_APP_ROOT/deploy/env/ai.production.env}"
-if [[ -f "$DRAPIXAI_AI_ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$DRAPIXAI_AI_ENV_FILE"
-  set +a
-fi
+export DRAPIXAI_AI_VALIDATION_PROFILE="${DRAPIXAI_AI_VALIDATION_PROFILE:-ai}"
 
 export DRAPIXAI_TRYON_ENGINE="${DRAPIXAI_TRYON_ENGINE:-catvton}"
 export DRAPIXAI_CATVTON_MODEL_DIR="${DRAPIXAI_CATVTON_MODEL_DIR:-$DRAPIXAI_APP_ROOT/models/catvton}"
@@ -37,7 +39,7 @@ export DRAPIXAI_FASHN_WEIGHTS_DIR="${DRAPIXAI_FASHN_WEIGHTS_DIR:-$DRAPIXAI_APP_R
 export DRAPIXAI_CATVTON_BASE_MODEL="${DRAPIXAI_CATVTON_BASE_MODEL:-$DRAPIXAI_APP_ROOT/models/stable-diffusion-inpainting}"
 export DRAPIXAI_CATVTON_VAE_MODEL="${DRAPIXAI_CATVTON_VAE_MODEL:-$DRAPIXAI_APP_ROOT/models/sd-vae-ft-mse}"
 export DRAPIXAI_GARMENT_CACHE_DIR="${DRAPIXAI_GARMENT_CACHE_DIR:-$DRAPIXAI_APP_ROOT/runtime/garments}"
-export DRAPIXAI_TRANSIENT_SPOOL_DIR="${DRAPIXAI_TRANSIENT_SPOOL_DIR:-$DRAPIXAI_APP_ROOT/runtime/tryon-spool}"
+export DRAPIXAI_TRANSIENT_SPOOL_DIR="${DRAPIXAI_TRANSIENT_SPOOL_DIR:-/dev/shm/drapixai-tryon-spool}"
 export DRAPIXAI_GPU_PRESET="${DRAPIXAI_GPU_PRESET:-runpod-a100}"
 export DRAPIXAI_RUNTIME_CACHE_ROOT="${DRAPIXAI_RUNTIME_CACHE_ROOT:-$DRAPIXAI_APP_ROOT/runtime/cache}"
 export HF_HOME="${HF_HOME:-$DRAPIXAI_RUNTIME_CACHE_ROOT/huggingface}"

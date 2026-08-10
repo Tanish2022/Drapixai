@@ -20,6 +20,12 @@ const assertNotIncludes = (source: string, unexpected: string, label: string) =>
   assert.ok(!source.includes(unexpected), label);
 };
 
+const assertBefore = (source: string, first: string, second: string, label: string) => {
+  const firstIndex = source.indexOf(first);
+  const secondIndex = source.indexOf(second);
+  assert.ok(firstIndex >= 0 && secondIndex >= 0 && firstIndex < secondIndex, label);
+};
+
 const gitLsFiles = () => {
   return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
     cwd: repoRoot,
@@ -271,6 +277,7 @@ const smokeAccountPrepare = read('apps/api/src/scripts/prepare-smoke-account.ts'
 const smokeTestPowerShell = read('deploy/scripts/smoke-test.ps1');
 const smokeHeaderAssert = read('deploy/scripts/assert-smoke-headers.py');
 const validateEnv = read('deploy/scripts/validate-env.sh');
+const aiEnvProfileTests = read('deploy/scripts/test-ai-env-profiles.sh');
 const containerScanScript = read('deploy/scripts/scan-container-images.sh');
 const publishReleaseImages = read('deploy/scripts/publish-release-images.sh');
 const startProductionRelease = read('deploy/scripts/start-production-release.sh');
@@ -289,6 +296,7 @@ const localPreflight = read('deploy/scripts/local-preflight.ps1');
 const localStart = read('deploy/scripts/start-local-stack.ps1');
 const launchWorkflow = read('.github/workflows/launch-readiness.yml');
 const runpodPreflight = read('deploy/runpod/preflight.sh');
+const runpodCommon = read('deploy/runpod/common.sh');
 const runpodRedisStart = read('deploy/runpod/start-redis.sh');
 const runpodStartAll = read('deploy/runpod/start-all.sh');
 const runpodSecurityCandidate = read('deploy/runpod/prepare-security-candidate.sh');
@@ -1084,6 +1092,10 @@ assertIncludes(validateEnv, 'require_min_length DRAPIXAI_ADMIN_TOKEN 32', 'Env v
 assertIncludes(validateEnv, 'require_min_length NEXTAUTH_SECRET 32', 'Web env validation must require a strong NextAuth secret');
 assertIncludes(validateEnv, 'require_min_length DASHBOARD_SESSION_SECRET 32', 'Web env validation must require a strong dashboard session secret');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_ENV "production"', 'AI env validation must enable production fail-closed checks');
+assertIncludes(validateEnv, 'ai|ai-reference)', 'AI env validation must expose a separate direct-process reference profile');
+assertIncludes(validateEnv, 'require_equals DRAPIXAI_ENV "staging"', 'Reference AI validation must reject production classification');
+assertIncludes(validateEnv, 'require_equals DRAPIXAI_GPU_PRESET "runpod-a100"', 'Reference AI validation must require the A100 reference preset');
+assertIncludes(validateEnv, 'if [[ "$profile" == "ai" ]]', 'Only production AI validation may require release-container evidence');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_TRYON_ENGINE "catvton"', 'AI env validation must enforce CatVTON');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK "0"', 'AI env validation must keep CatVTON output safety enabled');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_CANDIDATE_COUNT "1"', 'AI env validation must enforce Standard-only candidate count');
@@ -1091,6 +1103,10 @@ assertIncludes(validateEnv, 'require_equals DRAPIXAI_REVIEW_RETENTION_DAYS "0"',
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_TRANSIENT_SPOOL_DIR "/dev/shm/drapixai-tryon-spool"', 'AI env validation must keep shopper media on volatile memory storage');
 assertIncludes(validateProductionEnvSetPowerShell, 'DRAPIXAI_REVIEW_RETENTION_DAYS = "0"', 'Windows production env validation must prohibit persistent shopper review media');
 assertIncludes(validateEnv, 'require_number_at_least DRAPIXAI_MIN_QUALITY_SCORE "0.95"', 'AI env validation must enforce launch quality threshold');
+assertIncludes(aiEnvProfileTests, 'production_without_release_image', 'AI environment regression must reject unpinned production deployment');
+assertIncludes(aiEnvProfileTests, 'reference_claiming_production', 'AI environment regression must reject false production classification');
+assertIncludes(aiEnvProfileTests, 'reference_with_persistent_spool', 'AI environment regression must reject persistent shopper image spooling');
+assertIncludes(launchWorkflow, 'bash deploy/scripts/test-ai-env-profiles.sh', 'Launch CI must execute AI environment boundary regressions on Linux');
 assertIncludes(apiProductionExample, 'DRAPIXAI_REQUIRE_GARMENT_CACHE=1', 'API production example must require cached garments');
 assertIncludes(apiProductionExample, 'DRAPIXAI_AUTH_SYNC_TOKEN=replace-with-the-same-web-api-auth-sync-token', 'API production example must include auth sync token');
 assertIncludes(apiProductionExample, 'DRAPIXAI_DASHBOARD_PROXY_TOKEN=replace-with-the-same-dashboard-proxy-token', 'API production example must include dashboard proxy token');
@@ -1345,6 +1361,18 @@ assertIncludes(runpodPreflight, 'deploy/runpod/run-launch-tryon-test.sh', 'RunPo
 assertIncludes(runpodPreflight, 'deploy/runpod/start-redis.sh', 'RunPod preflight must syntax-check the hardened Redis launcher');
 assertIncludes(runpodPreflight, 'deploy/runpod/prepare-security-candidate.sh', 'RunPod preflight must syntax-check the isolated security candidate installer');
 assertIncludes(runpodPreflight, 'validate_upper_body_50_tooling.py', 'RunPod preflight must validate strict matrix manifest and catalog tooling');
+assertIncludes(runpodPreflight, 'deploy/env/ai.runpod.env', 'RunPod preflight must use the isolated reference environment by default');
+assertIncludes(runpodPreflight, '"$DRAPIXAI_AI_VALIDATION_PROFILE"', 'RunPod preflight must select the explicit reference validator');
+assertIncludes(runpodCommon, 'deploy/env/ai.runpod.env', 'RunPod services must not reuse the production AI env file');
+assertBefore(runpodCommon, 'source "$DRAPIXAI_AI_ENV_FILE"', 'export DRAPIXAI_VENV="${DRAPIXAI_VENV:-$DRAPIXAI_APP_ROOT/.venv}"', 'RunPod services must load the persisted venv path before selecting Python');
+assertIncludes(runpodCommon, '/dev/shm/drapixai-tryon-spool', 'RunPod shopper images must spool only in volatile shared memory');
+assertIncludes(runpodFreshSetup, 'deploy/env/ai.runpod.env', 'Fresh RunPod setup must create a separate reference env file');
+assertIncludes(runpodFreshSetup, 'deploy/env/ai.staging.example', 'Fresh RunPod setup must start from staging-safe defaults');
+assertIncludes(runpodFreshSetup, 'upsert_env "DRAPIXAI_AI_VALIDATION_PROFILE" "ai-reference"', 'Fresh RunPod setup must persist reference validation scope');
+assertIncludes(runpodFreshSetup, 'upsert_env "DRAPIXAI_VENV" "$VENV_DIR"', 'Fresh RunPod setup must persist a non-default local venv path');
+assertIncludes(runpodFreshSetup, 'upsert_env "DRAPIXAI_ENV" "staging"', 'Fresh RunPod setup must not classify direct processes as production containers');
+assertIncludes(runpodFreshSetup, 'upsert_env "DRAPIXAI_TRANSIENT_SPOOL_DIR" "/dev/shm/drapixai-tryon-spool"', 'Fresh RunPod setup must keep shopper media off persistent storage');
+assertNotIncludes(runpodFreshSetup, 'upsert_env "DRAPIXAI_TRANSIENT_SPOOL_DIR" "$APP_ROOT/runtime/tryon-spool"', 'Fresh RunPod setup must not persist shopper inputs under the repository');
 assertIncludes(runpodRedisStart, '--bind 127.0.0.1', 'RunPod Redis must listen only on localhost');
 assertIncludes(runpodRedisStart, '--protected-mode yes', 'RunPod Redis must keep protected mode enabled');
 assertIncludes(runpodRedisStart, '--save ""', 'RunPod Redis must not persist queued image payloads to snapshots');
@@ -1384,6 +1412,7 @@ assertIncludes(catvtonEngine, 'vae_ckpt=settings.catvton_vae_model', 'CatVTON mu
 assertIncludes(catvtonProductionPatch, 'AutoencoderKL.from_pretrained(vae_ckpt)', 'Tracked CatVTON patch must replace the unpinned remote VAE before runtime');
 assertIncludes(runpodPreflight, 'Immutable model revisions verified.', 'RunPod preflight must verify the model lock');
 assertIncludes(runpodStartAll, 'flock -n 9', 'RunPod AI supervisor must reject duplicate service sets');
+assertIncludes(runpodStartAll, '"$DRAPIXAI_AI_VALIDATION_PROFILE"', 'RunPod AI supervisor must use the selected fail-closed validation profile');
 assertIncludes(runpodStartAll, 'trap cleanup EXIT', 'RunPod AI supervisor must clean up child processes on exit');
 assertIncludes(runpodStartAll, 'bash "$SCRIPT_DIR/start-ai-worker.sh" &', 'RunPod AI supervisor must own the worker process');
 assertIncludes(runpodStartAll, 'wait -n "$API_PID" "$WORKER_PID"', 'RunPod AI supervisor must detect either child exiting');
@@ -1393,6 +1422,8 @@ assertIncludes(runpodSecurityCandidate, 'xops.memory_efficient_attention', 'Secu
 assertIncludes(runpodSecurityCandidate, '"production_environment_changed": False', 'Secure AI candidate report must state that production was not modified');
 assertIncludes(gitignore, '*.rdb', 'Redis snapshots must never be exported from the source tree');
 assertIncludes(runLaunchTryon, 'API_ENV_FILE=', 'RunPod launch try-on test must know where the API env file lives');
+assertIncludes(runLaunchTryon, 'AI_ENV_FILE=', 'RunPod launch try-on test must use the isolated reference AI env file');
+assertIncludes(runLaunchTryon, 'read_env_value DRAPIXAI_AI_SERVICE_TOKEN "$AI_ENV_FILE"', 'RunPod direct proof must load its service token from the reference env');
 assertIncludes(runLaunchTryon, 'read_env_value DRAPIXAI_DASHBOARD_PROXY_TOKEN "$API_ENV_FILE"', 'RunPod launch try-on test must load dashboard proxy token from API env');
 assertIncludes(runLaunchTryon, 'DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token"', 'RunPod launch try-on test must pass dashboard proxy token to SDK smoke flow');
 assertIncludes(runLaunchTryon, '"${AI_URL%/}/ai/tryon"', 'RunPod direct proof must use the warm authenticated AI service');

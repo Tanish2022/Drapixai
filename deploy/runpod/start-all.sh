@@ -22,7 +22,7 @@ if ! flock -n 9; then
   exit 1
 fi
 
-bash "$SCRIPT_DIR/../scripts/validate-env.sh" ai
+bash "$SCRIPT_DIR/../scripts/validate-env.sh" "$DRAPIXAI_AI_VALIDATION_PROFILE"
 
 if [[ ! -d "$DRAPIXAI_MODEL_DIR" ]]; then
   echo "Model directory does not exist: $DRAPIXAI_MODEL_DIR" >&2

@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-ENV_FILE="${1:-$DRAPIXAI_APP_ROOT/deploy/env/ai.production.env}"
+ENV_FILE="${1:-$DRAPIXAI_APP_ROOT/deploy/env/ai.runpod.env}"
 
 redact_url_credentials() {
   printf '%s' "$1" | sed -E 's#(://)([^/@]+@)#\1[redacted]@#'
@@ -17,7 +17,7 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
-bash "$SCRIPT_DIR/../scripts/validate-env.sh" ai
+bash "$SCRIPT_DIR/../scripts/validate-env.sh" "$DRAPIXAI_AI_VALIDATION_PROFILE"
 
 echo "== Repo Version =="
 if [[ -d "$DRAPIXAI_APP_ROOT/.git" ]]; then

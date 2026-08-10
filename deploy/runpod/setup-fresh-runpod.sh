@@ -4,7 +4,7 @@ set -Eeuo pipefail
 APP_ROOT="${DRAPIXAI_APP_ROOT:-/workspace/drapixai}"
 REPO_URL="${DRAPIXAI_REPO_URL:-https://github.com/Tanish2022/Drapixai.git}"
 REPO_BRANCH="${DRAPIXAI_REPO_BRANCH:-codex/catvton-runpod-clean}"
-ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.production.env}"
+ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.runpod.env}"
 PORT="${PORT:-8080}"
 RUN_START="${DRAPIXAI_SETUP_START_SERVICES:-1}"
 RUN_SMOKE="${DRAPIXAI_SETUP_RUN_SMOKE:-0}"
@@ -191,9 +191,11 @@ ensure_env_file() {
   cd "$APP_ROOT"
   mkdir -p "$(dirname "$ENV_FILE")"
   if [[ ! -f "$ENV_FILE" ]]; then
-    cp "$APP_ROOT/deploy/env/ai.production.example" "$ENV_FILE"
+    cp "$APP_ROOT/deploy/env/ai.staging.example" "$ENV_FILE"
   fi
 
+  upsert_env "DRAPIXAI_AI_VALIDATION_PROFILE" "ai-reference"
+  upsert_env "DRAPIXAI_VENV" "$VENV_DIR"
   upsert_env "DRAPIXAI_GPU_PRESET" "runpod-a100"
   upsert_env "DRAPIXAI_DEVICE" "cuda"
   upsert_env "DRAPIXAI_CUDA_DEVICE" "0"
@@ -205,9 +207,9 @@ ensure_env_file() {
   upsert_env "DRAPIXAI_QUEUE_TTL" "180"
   upsert_env "DRAPIXAI_RESULT_TTL" "60"
   upsert_env "DRAPIXAI_FAILURE_TTL" "60"
-  upsert_env "DRAPIXAI_TRANSIENT_SPOOL_DIR" "$APP_ROOT/runtime/tryon-spool"
+  upsert_env "DRAPIXAI_TRANSIENT_SPOOL_DIR" "/dev/shm/drapixai-tryon-spool"
   upsert_env "DRAPIXAI_TRANSIENT_SPOOL_TTL" "900"
-  upsert_env "DRAPIXAI_ENV" "production"
+  upsert_env "DRAPIXAI_ENV" "staging"
   upsert_env "DRAPIXAI_TRYON_ENGINE" "catvton"
   upsert_env "DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK" "0"
   upsert_env "DRAPIXAI_MODEL_DIR" "$APP_ROOT/models/catvton"

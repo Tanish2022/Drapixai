@@ -29,6 +29,10 @@ This prepares:
 - MinIO S3-compatible local storage
 - Node API/SDK backend on `http://127.0.0.1:8000`
 
+The direct-process reference runtime uses `deploy/env/ai.runpod.env` with the
+strict `ai-reference` validator. It is deliberately separate from the
+digest-pinned production container environment.
+
 ## Reusing A Pod With Existing Models
 
 ```bash

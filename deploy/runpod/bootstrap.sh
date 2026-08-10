@@ -45,8 +45,8 @@ mkdir -p \
   "$APP_ROOT/runtime/cache/u2net"
 
 echo "Bootstrap complete. Next:"
-echo "1. Copy deploy/env/ai.production.example to deploy/env/ai.production.env"
-echo "2. Fill the secrets and model paths"
-echo "3. Run: set -a && source deploy/env/ai.production.env && set +a"
+echo "1. Review the generated deploy/env/ai.runpod.env"
+echo "2. Keep generated secrets private and confirm model paths"
+echo "3. Run: set -a && source deploy/env/ai.runpod.env && set +a"
 echo "4. Run: bash deploy/runpod/preflight.sh"
 echo "5. Run: bash deploy/runpod/start-all.sh"

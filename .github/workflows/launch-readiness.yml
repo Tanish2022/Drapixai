@@ -151,6 +151,8 @@ jobs:
           --ignore-vuln GHSA-rrmf-rvhw-rf47
       - name: Verify immutable Standard release profile
         run: python deploy/scripts/verify-standard-release-profile.py
+      - name: Verify production and reference AI environment boundaries
+        run: bash deploy/scripts/test-ai-env-profiles.sh
       - name: Compile production Python
         run: |
           python -m compileall -q drapixai_ai deploy/runpod

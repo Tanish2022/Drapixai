@@ -13,6 +13,7 @@ API_URL="${API_URL:-http://127.0.0.1:8000}"
 AI_URL="${AI_URL:-http://127.0.0.1:8080}"
 PYTHON_BIN="${DRAPIXAI_PYTHON_BIN:-python}"
 API_ENV_FILE="${DRAPIXAI_API_ENV_FILE:-$APP_ROOT/apps/api/.env}"
+AI_ENV_FILE="${DRAPIXAI_AI_ENV_FILE:-$APP_ROOT/deploy/env/ai.runpod.env}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -75,7 +76,7 @@ run_direct_tryon() {
   local started ended ai_service_token headers_file
   ai_service_token="${DRAPIXAI_AI_SERVICE_TOKEN:-}"
   if [[ -z "$ai_service_token" ]]; then
-    ai_service_token="$(read_env_value DRAPIXAI_AI_SERVICE_TOKEN "$APP_ROOT/deploy/env/ai.production.env")"
+    ai_service_token="$(read_env_value DRAPIXAI_AI_SERVICE_TOKEN "$AI_ENV_FILE")"
   fi
   if [[ -z "$ai_service_token" ]]; then
     echo "Missing DRAPIXAI_AI_SERVICE_TOKEN for authenticated direct AI smoke." >&2
