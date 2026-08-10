@@ -1581,6 +1581,7 @@ assertIncludes(stagingCertification, 'test:security:live', 'Staging certificatio
 assertIncludes(stagingCertification, 'privacy:verify-shopper-media', 'Staging certification runner must execute the shopper-media privacy check');
 assertIncludes(stagingCertification, 'benchmark-three-tenant-public-api.py', 'Staging certification runner must execute the three-tenant public certification');
 assertIncludes(stagingCertification, 'runtime/launch-evidence', 'Staging certification runner must keep evidence in the ignored evidence directory');
+assertIncludes(stagingCertification, 'write_summary "FAIL"', 'Staging certification runner must retain a redacted failure summary');
 assertIncludes(publicThreeTenantBenchmark, 'x-drapixai-timing-json', 'Public three-tenant benchmark must collect GPU timing evidence');
 assertIncludes(publicThreeTenantBenchmark, 'worker batch was', 'Public three-tenant benchmark must reject a worker that does not form the target batch');
 assertIncludes(publicThreeTenantBenchmark, 'GPU headroom', 'Public three-tenant benchmark must reject unsafe GPU VRAM headroom');

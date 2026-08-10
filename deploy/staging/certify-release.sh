@@ -110,6 +110,31 @@ case "$evidence_root/" in
 esac
 chmod 700 "$evidence_root"
 
+write_summary() {
+  local status="$1"
+  cat >"$evidence_root/summary.json" <<EOF
+{
+  "status": "$status",
+  "release_commit": "$current_commit",
+  "environment": "staging",
+  "api_origin": "$api_url",
+  "output_images_retained": false,
+  "evidence_directory": "$evidence_root",
+  "completed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+}
+
+on_exit() {
+  local exit_code=$?
+  trap - EXIT
+  if (( exit_code != 0 )); then
+    write_summary "FAIL"
+  fi
+  exit "$exit_code"
+}
+trap on_exit EXIT
+
 run_and_record() {
   local label="$1"
   shift
@@ -127,17 +152,7 @@ run_and_record three-tenant-public-api python3 "$repo_root/deploy/scripts/benchm
   --base-url "$api_url/v1" \
   --output-dir "$evidence_root/three-tenant-public-api"
 
-cat >"$evidence_root/summary.json" <<EOF
-{
-  "status": "PASS",
-  "release_commit": "$current_commit",
-  "environment": "staging",
-  "api_origin": "$api_url",
-  "output_images_retained": false,
-  "evidence_directory": "$evidence_root",
-  "completed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-}
-EOF
+write_summary "PASS"
 
 echo "Staging certification passed. Review redacted artifacts in: $evidence_root"
 echo "Record each reviewed artifact using scripts/record-launch-evidence.mjs; do not copy credentials, raw request bodies, or images into the release record."
