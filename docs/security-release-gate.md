@@ -22,6 +22,22 @@ Copy `deploy/launch-evidence.example.json` to the ignored `runtime/launch-eviden
 
 The complete command intentionally exits nonzero while any release evidence is `PENDING` or any gate is `FAIL`. A report is evidence for the exact commit and working-tree state it records; it must not be reused for a different release. Never put credentials, shopper images, or customer data in the evidence metadata.
 
+Use the recorder after reviewing a redacted artifact. It verifies that the artifact
+is inside the evidence directory, hashes it, and atomically updates only the
+specified gate in the current-commit release record:
+
+```bash
+node scripts/record-launch-evidence.mjs \
+  --gate container-image-scan \
+  --status PASS \
+  --verified-by release-owner@example.com \
+  --artifact runtime/launch-evidence/release-record/container-scan.json
+```
+
+The command does not decide that a gate passed; the operator remains accountable
+for the evidence. It makes the recorded artifact, hash, timestamp, gate identity,
+and release commit mechanically consistent.
+
 ## Repository gates
 
 - API and web production builds pass.

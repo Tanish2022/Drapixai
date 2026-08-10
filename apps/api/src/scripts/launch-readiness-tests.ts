@@ -309,6 +309,7 @@ const securityReleaseGate = read('docs/security-release-gate.md');
 const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
 const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const launchGateReport = read('scripts/launch-gate-report.mjs');
+const launchEvidenceRecorder = read('scripts/record-launch-evidence.mjs');
 const launchEvidenceTemplate = JSON.parse(read('deploy/launch-evidence.example.json')) as {
   gates: Record<string, { evidence?: string; sha256?: string }>;
 };
@@ -1559,6 +1560,10 @@ assertIncludes(launchGateReport, 'validateEvidenceArtifact', 'Complete launch re
 assertIncludes(launchGateReport, 'evidence artifact sha256 does not match', 'Complete launch reports must reject altered evidence artifacts');
 assertIncludes(launchGateReport, 'runtime/launch-evidence', 'Complete launch reports must keep evidence inside the ignored local evidence root');
 assertIncludes(launchGateReport, 'isStrictDescendant', 'Complete launch reports must block traversal or symlink escapes from the evidence root');
+assertIncludes(launchEvidenceRecorder, 'EVIDENCE_RECORD_COMMIT_MISMATCH', 'Evidence recorder must refuse a release record for another commit');
+assertIncludes(launchEvidenceRecorder, 'MUST_REMAIN_UNDER_RUNTIME_LAUNCH_EVIDENCE', 'Evidence recorder must reject artifact paths outside the private evidence root');
+assertIncludes(launchEvidenceRecorder, 'UNKNOWN_RELEASE_EVIDENCE_GATE', 'Evidence recorder must reject unknown or non-launch gates');
+assertIncludes(launchEvidenceRecorder, 'fs.renameSync', 'Evidence recorder must replace release evidence atomically');
 assert.ok(
   Object.values(launchEvidenceTemplate.gates).every((gate) => gate.evidence?.startsWith('runtime/launch-evidence/') && gate.sha256 === 'REPLACE_WITH_ARTIFACT_SHA256'),
   'Launch-evidence template must require a local artifact path and SHA-256 placeholder for every external gate',
