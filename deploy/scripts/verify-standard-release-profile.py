@@ -90,6 +90,10 @@ def main() -> int:
         if not path.exists() or marker not in path.read_text(encoding="utf-8")
     ]
 
+    production_compose = (repo_root / "deploy" / "docker-compose.ai.yml").read_text(encoding="utf-8")
+    if any(marker in production_compose for marker in ("ai-lower-worker:", "Dockerfile.lower-body", "build:")):
+        missing_guards.append("production_compose_standard_only")
+
     profile_precedence_checks = {
         "production_release_profile_precedence": (
             repo_root / "deploy" / "docker-compose.ai.yml",

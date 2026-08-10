@@ -54,7 +54,7 @@ DRAPIXAI_EXPECTED_GIT_REF=<release-commit> \
 bash deploy/scripts/start-production-release.sh ai deploy/env
 ```
 
-The start script runs `docker compose pull` and `up -d --no-build`; it refuses mutable tags, an unexpected commit, or a dirty checkout. The experimental lower-body Compose profile is intentionally excluded from the Standard public-launch deployment.
+The start script runs `docker compose pull` and `up -d --no-build`; it refuses mutable tags, an unexpected commit, or a dirty checkout. The production AI manifest contains no lower-body service or source build path; lower-body work remains confined to its internal test tooling until separately certified.
 ## 2. Production Env Checklist
 
 Use these three files as the source of truth:

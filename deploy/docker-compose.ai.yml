@@ -73,40 +73,6 @@ services:
       - ai-private
     gpus: all
 
-  ai-lower-worker:
-    profiles: ["lower-body"]
-    build:
-      context: ..
-      dockerfile: drapixai_ai/docker/Dockerfile.lower-body
-      args:
-        DRAPIXAI_AI_BASE_IMAGE: ${DRAPIXAI_AI_RUNTIME_IMAGE:?set DRAPIXAI_AI_RUNTIME_IMAGE}
-    restart: unless-stopped
-    env_file:
-      - ./env/ai.production.env
-      - ./release/standard-catvton-rc1.env
-    environment:
-      DRAPIXAI_REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379/0
-      DRAPIXAI_WORKER_ROLE: lower
-      DRAPIXAI_LOWER_BODY_ENGINE: fashn_vton
-    command: ["bash", "/workspace/drapixai/deploy/runpod/start-ai-worker.sh"]
-    depends_on:
-      - redis
-    volumes:
-      - ../models:/workspace/drapixai/models:ro
-      - ai_runtime:/workspace/drapixai/runtime
-      - ai_hf_cache:/workspace/.cache/huggingface
-    read_only: true
-    tmpfs:
-      - /tmp:size=2g,mode=1777
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    shm_size: 8gb
-    networks:
-      - ai-private
-    gpus: all
-
 volumes:
   ai_runtime:
   ai_hf_cache:

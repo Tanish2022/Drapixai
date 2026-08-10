@@ -1581,10 +1581,13 @@ assertIncludes(aiDockerfile, 'sys.version_info[:2] != (3, 12)', 'AI image must a
 assertIncludes(aiDockerfile, 'import sys', 'AI image must import sys before enforcing its Python runtime contract');
 assertNotIncludes(validateEnv, 'fi  require_equals', 'AI environment validation must keep the RTX guard as valid Bash syntax');
 assertIncludes(validateEnv, 'DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell', 'Digest pinning must apply to the RTX production preset without breaking the legacy reference runtime');
-assertIncludes(aiCompose, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Production AI Compose must receive the digest-pinned runtime image from its private environment');
+assertIncludes(publishReleaseImages, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Release publishing must use the digest-pinned Blackwell AI base image.');
 assertIncludes(edgeCompose, 'DRAPIXAI_API_RELEASE_IMAGE', 'Production edge Compose must deploy the immutable API release image.');
 assertIncludes(edgeCompose, 'DRAPIXAI_WEB_RELEASE_IMAGE', 'Production edge Compose must deploy the immutable web release image.');
 assertIncludes(aiCompose, 'DRAPIXAI_AI_RELEASE_IMAGE', 'Production AI Compose must deploy the immutable Standard CatVTON release image.');
+assertNotIncludes(aiCompose, 'ai-lower-worker:', 'Production AI Compose must exclude uncertified lower-body services.');
+assertNotIncludes(aiCompose, 'Dockerfile.lower-body', 'Production AI Compose must not retain an uncertified lower-body build path.');
+assertNotIncludes(aiCompose, 'build:', 'Production AI Compose must never rebuild application images during deployment.');
 assertNotIncludes(edgeCompose, 'dockerfile: apps/api/Dockerfile', 'Production edge Compose must not rebuild the API during deployment.');
 assertNotIncludes(edgeCompose, 'dockerfile: apps/web/Dockerfile', 'Production edge Compose must not rebuild the web app during deployment.');
 assertIncludes(publishReleaseImages, 'scan-container-images.sh', 'Release publishing must block unscanned images.');
