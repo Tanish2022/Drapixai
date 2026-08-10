@@ -907,6 +907,17 @@ assertIncludes(sdkComponent, 'enableDownload?: boolean', 'React SDK component mu
 assertIncludes(sdkComponent, 'enableDownload,', 'React SDK component must forward the shopper download toggle to the browser SDK.');
 assertIncludes(sdkReactDoc, 'short-lived, product-scoped storefront token', 'React SDK docs must require short-lived shopper credentials.');
 assertIncludes(sdkReactDoc, 'POST /sdk/storefront-token', 'React SDK docs must explain server-side storefront token exchange.');
+assertIncludes(sdkReactDoc, 'DRAPIXAI_SERVER_KEY', 'React SDK docs must keep the permanent server key in a server-only variable.');
+assertIncludes(sdkReactDoc, "'Cache-Control': 'no-store, private'", 'React SDK docs must prevent shopper-token responses from being cached.');
+assertIncludes(sdkReactDoc, 'findPublicProductById', 'React SDK docs must require a brand-side product lookup before minting shopper tokens.');
+assertIncludes(sdkReactDoc, "method: 'POST'", 'React SDK docs must request shopper tokens with POST.');
+assertIncludes(sdkReactDoc, 'ORIGIN_FORBIDDEN', 'React SDK docs must reject cross-origin shopper-token requests.');
+assertIncludes(sdkReactDoc, 'STOREFRONT_ORIGIN', 'React SDK docs must verify the configured storefront origin.');
+assertNotIncludes(sdkReactDoc, 'storefront-token?productId=', 'React SDK docs must not teach a cacheable shopper-token GET endpoint.');
+assertIncludes(sdkInstallPage, "method: 'POST'", 'SDK install snippets must request shopper tokens with POST.');
+assertNotIncludes(sdkInstallPage, 'drapixai-token?productId=', 'SDK install snippets must not teach a cacheable shopper-token GET endpoint.');
+assertIncludes(helpPage, "method: 'POST'", 'Help SDK examples must request shopper tokens with POST.');
+assertNotIncludes(helpPage, 'drapixai-token?productId=', 'Help SDK examples must not teach a cacheable shopper-token GET endpoint.');
 assertIncludes(sdkReactDoc, 'confirmed DrapixAI product mapping', 'React SDK docs must require confirmed product mappings.');
 assertIncludes(sdkReactDoc, 'approved cached garment asset', 'React SDK docs must describe cached garment try-on usage.');
 assertIncludes(sdkReactDoc, 'Never place a DrapixAI server API key', 'React SDK docs must forbid permanent browser API-key exposure.');

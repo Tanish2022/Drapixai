@@ -128,7 +128,7 @@ const quickStartEmbed = `<script src="${getSdkScriptUrl()}"></script>
 <script>
   DrapixAI.init({
     tokenProvider: async function (productId) {
-      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const response = await fetch('/api/drapixai-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }), credentials: 'same-origin', cache: 'no-store' });
       const payload = await response.json();
       if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
       return payload.token;
@@ -149,7 +149,7 @@ const autoAttachSnippet = `<script src="${getSdkScriptUrl()}"></script>
 <script>
   DrapixAI.init({
     tokenProvider: async function (productId) {
-      const response = await fetch('/api/drapixai-token?productId=' + encodeURIComponent(productId));
+      const response = await fetch('/api/drapixai-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId }), credentials: 'same-origin', cache: 'no-store' });
       const payload = await response.json();
       if (!response.ok || !payload.token) throw new Error('TOKEN_UNAVAILABLE');
       return payload.token;

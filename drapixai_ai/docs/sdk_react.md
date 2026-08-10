@@ -10,7 +10,10 @@ repository.
 import DrapixAITryOn from '@/app/components/DrapixAITryOn';
 
 async function getStorefrontToken(productId: string) {
-  const response = await fetch(`/api/drapixai/storefront-token?productId=${encodeURIComponent(productId)}`, {
+  const response = await fetch('/api/drapixai/storefront-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ productId }),
     credentials: 'same-origin',
     cache: 'no-store',
   });
@@ -50,6 +53,54 @@ Your `/api/drapixai/storefront-token` endpoint runs on the brand server. It
 holds the permanent DrapixAI server key and exchanges it through
 `POST /sdk/storefront-token` for a five-minute, domain-bound and product-scoped
 shopper token. Return only `{ "token": "dpxsf_..." }` to the browser.
+
+For Next.js App Router, a secure server-only route has this shape:
+
+```ts
+// app/api/drapixai/storefront-token/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { findPublicProductById } from '@/lib/catalog'; // implement in the brand app
+
+const apiBase = process.env.DRAPIXAI_API_BASE_URL!;
+const serverKey = process.env.DRAPIXAI_SERVER_KEY!; // never NEXT_PUBLIC_*
+const storefrontOrigin = new URL(process.env.STOREFRONT_ORIGIN!).origin;
+
+export async function POST(request: NextRequest) {
+  if (request.headers.get('origin') !== storefrontOrigin) {
+    return NextResponse.json({ error: 'ORIGIN_FORBIDDEN' }, { status: 403 });
+  }
+  const body = await request.json().catch(() => null);
+  const productId = typeof body?.productId === 'string' ? body.productId.trim() : '';
+  if (!productId) return NextResponse.json({ error: 'PRODUCT_REQUIRED' }, { status: 400 });
+
+  // Reject drafts, unknown products, and IDs that are not valid for the
+  // current public product page before minting a token.
+  const product = await findPublicProductById(productId);
+  if (!product) return NextResponse.json({ error: 'PRODUCT_NOT_FOUND' }, { status: 404 });
+
+  const upstream = await fetch(`${apiBase}/sdk/storefront-token`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serverKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel: 'web', productIds: [productId] }),
+    cache: 'no-store',
+  });
+  const payload = await upstream.json().catch(() => ({}));
+  if (!upstream.ok || typeof payload.token !== 'string') {
+    return NextResponse.json({ error: 'TOKEN_UNAVAILABLE' }, { status: upstream.status || 502 });
+  }
+  return NextResponse.json(
+    { token: payload.token },
+    { headers: { 'Cache-Control': 'no-store, private' } },
+  );
+}
+```
+
+Do not pass an arbitrary client-supplied product ID through a token route. Check
+that it belongs to the currently public product in the brand catalog before the
+server calls DrapixAI.
 
 ## Props
 
