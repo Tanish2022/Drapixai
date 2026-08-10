@@ -309,6 +309,7 @@ const auditMigration = read('apps/api/prisma/migrations/20260719170000_immutable
 const authorizationLib = read('apps/api/src/lib/authorization.ts');
 const securityReleaseGate = read('docs/security-release-gate.md');
 const stagingPentest = read('deploy/scripts/pentest-staging.sh');
+const stagingCertification = read('deploy/staging/certify-release.sh');
 const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
 const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const launchGateReport = read('scripts/launch-gate-report.mjs');
@@ -1573,6 +1574,13 @@ assertIncludes(stagingPentest, 'DRAPIXAI_PENTEST_ENVIRONMENT', 'Staging pentest 
 assertIncludes(stagingPentest, 'DRAPIXAI_PENTEST_AUTHORIZATION_ID', 'Staging pentest helper must require a written authorization reference');
 assertIncludes(stagingPentest, '--pids-limit 512', 'Staging pentest helper must limit scanner process creation');
 assertIncludes(stagingPentest, '--memory 4g', 'Staging pentest helper must cap scanner memory use');
+assertIncludes(stagingCertification, 'DRAPIXAI_STAGING_CERTIFICATION_ENVIRONMENT', 'Staging certification runner must require a staging environment guard');
+assertIncludes(stagingCertification, 'Refusing certification against a non-staging API host', 'Staging certification runner must refuse production targets');
+assertIncludes(stagingCertification, 'status --porcelain', 'Staging certification runner must require a clean release checkout');
+assertIncludes(stagingCertification, 'test:security:live', 'Staging certification runner must execute live tenant-security checks');
+assertIncludes(stagingCertification, 'privacy:verify-shopper-media', 'Staging certification runner must execute the shopper-media privacy check');
+assertIncludes(stagingCertification, 'benchmark-three-tenant-public-api.py', 'Staging certification runner must execute the three-tenant public certification');
+assertIncludes(stagingCertification, 'runtime/launch-evidence', 'Staging certification runner must keep evidence in the ignored evidence directory');
 assertIncludes(publicThreeTenantBenchmark, 'x-drapixai-timing-json', 'Public three-tenant benchmark must collect GPU timing evidence');
 assertIncludes(publicThreeTenantBenchmark, 'worker batch was', 'Public three-tenant benchmark must reject a worker that does not form the target batch');
 assertIncludes(publicThreeTenantBenchmark, 'GPU headroom', 'Public three-tenant benchmark must reject unsafe GPU VRAM headroom');

@@ -100,6 +100,22 @@ cross-origin feedback, and API-key-level limiting. Capture the resulting audit-l
 rows and WAF events with the evidence; do not put credentials or shopper media in
 the evidence file.
 
+## Repeatable staging certification
+
+After saving the restricted environment file and a token-free three-tenant manifest,
+run the guarded certification runner from the exact clean release checkout:
+
+```bash
+bash deploy/staging/certify-release.sh /run/secrets/drapixai-staging-certification.env
+```
+
+It refuses non-staging URLs, a dirty checkout, a commit mismatch, output outside
+`runtime/launch-evidence`, and a live-security URL that differs from the staging
+origin. It collects the local topology, listener, live security, audit-chain,
+shopper-media privacy, and three-tenant API reports. It retains no output images;
+run the private-listener check separately on the GPU host and attach that redacted
+output to the same release record.
+
 ## Promotion rule
 
 Passing this source check does not mean staging is deployed. Gate 2 closes only
