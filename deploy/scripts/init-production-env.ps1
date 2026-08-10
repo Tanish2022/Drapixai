@@ -169,7 +169,7 @@ Write-Host "- Confirm DRAPIXAI_AUTH_SYNC_TOKEN matches between API and web env f
 Write-Host "- Confirm DRAPIXAI_DASHBOARD_PROXY_TOKEN matches between API and web env files"
 Write-Host "- Confirm DRAPIXAI_AI_SERVICE_TOKEN matches between API and AI env files"
 Write-Host "- Attach an AWS workload identity with Secrets Manager, S3, and KMS access; do not create long-lived access keys"
-Write-Host "- DRAPIXAI_S3_ACCESS_KEY_ID / DRAPIXAI_S3_SECRET_ACCESS_KEY"
+Write-Host "- DRAPIXAI_API_RELEASE_IMAGE / DRAPIXAI_WEB_RELEASE_IMAGE / DRAPIXAI_AI_RELEASE_IMAGE from the scanned release artifact record"
 Write-Host "- SMTP_HOST / SMTP_USER / SMTP_PASS"
 Write-Host "- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET if Google login is enabled"
 Write-Host "- SHOPIFY_API_KEY / SHOPIFY_API_SECRET and set DRAPIXAI_SHOPIFY_ENABLED=1 when the Shopify app is created"

@@ -58,6 +58,16 @@ function Assert-RequiredKeys {
     }
 }
 
+function Assert-OptionalEmpty {
+    param([string]$Path, [string]$Key)
+    $line = Get-Content -LiteralPath $Path | Where-Object { $_ -match "^$([regex]::Escape($Key))=" } | Select-Object -Last 1
+    if (-not $line) { return }
+    $value = $line.Substring($Key.Length + 1).Trim().Trim('"').Trim("'")
+    if ($value) {
+        throw "Value for $Key in $Path must be empty; production uses workload identity"
+    }
+}
+
 function Assert-ExactValue {
     param([string]$Path, [string]$Key, [string]$Expected)
     $actual = Get-EnvValue -Path $Path -Key $Key
@@ -162,6 +172,8 @@ Assert-MinLength $apiEnv "DRAPIXAI_AUDIT_LOG_SECRET" 32
 Assert-ExactValue $apiEnv "DRAPIXAI_API_ENVIRONMENT" "live"
 Assert-Base64Bytes $apiEnv "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY" 32
 Assert-ExactValue $apiEnv "DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY" "1"
+Assert-OptionalEmpty $apiEnv "AWS_ACCESS_KEY_ID"
+Assert-OptionalEmpty $apiEnv "AWS_SECRET_ACCESS_KEY"
 Assert-ExactValue $apiEnv "DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION" "aws:kms"
 Assert-DigestPinnedImage $apiEnv "DRAPIXAI_API_RELEASE_IMAGE"
 Assert-DigestPinnedImage $apiEnv "DRAPIXAI_WEB_RELEASE_IMAGE"

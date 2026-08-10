@@ -151,6 +151,9 @@ const requireProductionConfig = () => {
   if (secretsProvider === 'aws-secrets-manager' && process.env.DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY !== '1') {
     weak.push('AWS Secrets Manager must be bootstrapped with workload identity');
   }
+  if (apiEnvironment === 'live' && ((process.env.AWS_ACCESS_KEY_ID || '').trim() || (process.env.AWS_SECRET_ACCESS_KEY || '').trim())) {
+    weak.push('Production live API must not configure AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY; use workload identity');
+  }
   requireHttpsUrl('DRAPIXAI_AI_URL');
   requireExact('DRAPIXAI_AI_PRIVATE_NETWORK', '1');
   requireExact('DRAPIXAI_AI_MTLS_ENABLED', '1');

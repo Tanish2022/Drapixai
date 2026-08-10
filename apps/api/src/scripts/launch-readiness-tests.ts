@@ -1707,6 +1707,9 @@ assertIncludes(developerDocsPage, 'API usage pricing', 'Developer quickstart mus
 assertIncludes(developerDocsPage, 'No automatic overages at launch.', 'Developer quickstart must disclose the hard quota policy');
 assertIncludes(validateEnv, 'require_base64_bytes DRAPIXAI_WEBHOOK_ENCRYPTION_KEY 32', 'Linux production validation must enforce a 256-bit webhook encryption key');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY "1"', 'Linux production validation must require AWS workload identity');
+assertIncludes(apiServer, 'Production live API must not configure AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY', 'Live API startup must reject static AWS credentials.');
+assertIncludes(validateEnv, 'Production API must use AWS workload identity instead of static AWS access keys', 'Linux production validation must reject static AWS credentials.');
+assertIncludes(validateProductionEnvSetPowerShell, 'Assert-OptionalEmpty $apiEnv "AWS_ACCESS_KEY_ID"', 'Windows production validation must reject static AWS credentials.');
 assertIncludes(validateProductionEnvSetPowerShell, 'Assert-Base64Bytes $apiEnv "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY" 32', 'Windows production validation must enforce a 256-bit webhook encryption key');
 assertIncludes(validateProductionEnvSet, 'require_digest_image', 'Linux production env-set validation must enforce immutable application image references.');
 assertIncludes(validateProductionEnvSetPowerShell, 'Assert-DigestPinnedImage', 'Windows production validation must enforce immutable application image references.');

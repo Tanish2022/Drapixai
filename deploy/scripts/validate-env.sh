@@ -253,6 +253,10 @@ if [[ "$profile" == "api" ]]; then
   fi
   require_base64_bytes DRAPIXAI_WEBHOOK_ENCRYPTION_KEY 32
   require_equals DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY "1"
+  if [[ -n "${AWS_ACCESS_KEY_ID:-}" || -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+    echo "Production API must use AWS workload identity instead of static AWS access keys" >&2
+    exit 1
+  fi
   require_equals DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION "aws:kms"
   require_var DRAPIXAI_S3_KMS_KEY_ID
   if [[ "$DATABASE_URL" != *"sslmode=verify-full"* ]]; then

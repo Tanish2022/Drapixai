@@ -151,13 +151,11 @@ Required for storage:
 
 - `S3_BUCKET`
 - `AWS_REGION`
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
+- `DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY=1`
+- `DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION=aws:kms`
+- `DRAPIXAI_S3_KMS_KEY_ID`
 
-Only for S3-compatible custom endpoints:
-
-- `S3_ENDPOINT`
-- `S3_FORCE_PATH_STYLE=1`
+The live API must not receive `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`. Grant its runtime identity only the required Secrets Manager, S3, and KMS permissions. Custom S3/MinIO endpoints and static credentials are staging-only.
 
 Required for email:
 
