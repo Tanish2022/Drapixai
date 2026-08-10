@@ -1288,6 +1288,11 @@ assertIncludes(smokeHeaderAssert, 'SDK warnings must be empty for launch proof',
 assertIncludes(runLaunchTryon, 'Launch try-on gates failed', 'RunPod launch try-on test must enforce final direct and SDK launch gates');
 assertIncludes(runLaunchTryon, 'direct quality', 'RunPod launch try-on test must enforce direct quality threshold');
 assertIncludes(runLaunchTryon, 'SDK latency', 'RunPod launch try-on test must enforce SDK latency threshold');
+assertIncludes(runLaunchTryon, '"runtime_profile": "runpod-reference"', 'RunPod evidence must identify itself as reference quality evidence');
+assertIncludes(runLaunchTryon, '"production_runtime_equivalent": False', 'RunPod evidence must not claim Blackwell production-runtime equivalence');
+assertIncludes(runLaunchTryon, '"quality_evidence_scope": "reference-quality-and-sdk-parity"', 'RunPod evidence must state its permitted launch-evidence scope');
+assertIncludes(runLaunchTryon, '"--query-gpu=name,memory.total,driver_version"', 'RunPod evidence must record GPU and driver provenance');
+assertIncludes(runLaunchTryon, '["git", "rev-parse", "HEAD"]', 'RunPod evidence must record the exact release commit');
 assertIncludes(proveLiveShell, '"checks.database.ready" \'true\'', 'Live proof shell must verify DB through API readiness');
 assertIncludes(proveLiveShell, '"checks.redis" \'true\'', 'Live proof shell must verify Redis through API readiness');
 assertIncludes(proveLiveShell, '"checks.ai.status" \'"ready"\'', 'Live proof shell must verify AI through API readiness');

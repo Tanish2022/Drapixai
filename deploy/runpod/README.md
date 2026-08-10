@@ -62,6 +62,8 @@ Outputs are saved to:
 
 The summary compares:
 
+- exact Git commit and non-secret GPU/runtime provenance
+- an explicit `runpod-reference` evidence profile that cannot be mistaken for RTX Pro 6000 production-runtime certification
 - direct quality score
 - SDK quality score
 - direct latency

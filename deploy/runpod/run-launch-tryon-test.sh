@@ -174,14 +174,17 @@ run_sdk_tryon() {
 
 write_summary() {
   log "Writing summary"
-  "$PYTHON_BIN" - "$RESULT_DIR" <<'PY'
+  "$PYTHON_BIN" - "$RESULT_DIR" "$APP_ROOT" <<'PY'
 import json
 import os
+import platform
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 result_dir = Path(sys.argv[1])
+app_root = Path(sys.argv[2])
 direct = {}
 direct_path = result_dir / "direct_standard.json"
 if direct_path.exists():
@@ -195,7 +198,60 @@ if headers_path.exists():
         key, value = line.split(":", 1)
         headers[key.strip().lower()] = value.strip()
 
+def run_text(args, cwd=None):
+    try:
+        completed = subprocess.run(
+            args,
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return completed.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+gpu_name = None
+gpu_memory_mib = None
+driver_version = None
+gpu_row = run_text([
+    "nvidia-smi",
+    "--query-gpu=name,memory.total,driver_version",
+    "--format=csv,noheader,nounits",
+])
+if gpu_row:
+    parts = [part.strip() for part in gpu_row.splitlines()[0].split(",", 2)]
+    if len(parts) == 3:
+        gpu_name, memory_raw, driver_version = parts
+        try:
+            gpu_memory_mib = int(memory_raw)
+        except ValueError:
+            gpu_memory_mib = None
+
+try:
+    import torch
+    torch_version = torch.__version__
+    torch_cuda_runtime = torch.version.cuda
+except (ImportError, RuntimeError):
+    torch_version = None
+    torch_cuda_runtime = None
+
 summary = {
+    "evidence": {
+        "runtime_profile": "runpod-reference",
+        "production_runtime_equivalent": False,
+        "quality_evidence_scope": "reference-quality-and-sdk-parity",
+        "git_commit": run_text(["git", "rev-parse", "HEAD"], cwd=app_root),
+        "platform": platform.platform(),
+        "python_version": platform.python_version(),
+        "torch_version": torch_version,
+        "torch_cuda_runtime": torch_cuda_runtime,
+        "gpu_name": gpu_name,
+        "gpu_memory_mib": gpu_memory_mib,
+        "driver_version": driver_version,
+    },
     "direct": {
         "image": str(result_dir / "direct_standard.png"),
         "quality_score": direct.get("quality_score"),
