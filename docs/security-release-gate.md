@@ -73,7 +73,14 @@ CI builds and scans the API and web runtime images with the immutable Trivy imag
    - `DRAPIXAI_SECURITY_TEST_ENVIRONMENT`
 
    The staging-only harness exercises cross-tenant product and result access, expired-token replay, cross-origin token replay, forged image uploads, brand-to-admin privilege escalation, localhost webhook SSRF, hostile-origin CORS/CSRF behavior, and bounded API-key rate limiting. Use an access token scoped to `api:usage` and `api:webhooks`; configure the staging API-key rate limit to 20 for this temporary test, then restore it. Delete the test tenants afterward.
-4. Run `deploy/scripts/pentest-staging.sh https://staging.example.com` with an approved digest-pinned ZAP image.
+4. Run the authorized staging-only scanner with an approved digest-pinned ZAP image. The helper refuses any host whose name does not include `staging`, requires `DRAPIXAI_PENTEST_ENVIRONMENT=staging`, and requires a written authorization reference:
+
+   ```bash
+   export DRAPIXAI_PENTEST_ENVIRONMENT=staging
+   export DRAPIXAI_PENTEST_AUTHORIZATION_ID=SEC-YYYY-NNNN
+   export DRAPIXAI_ZAP_IMAGE=approved-zap-image@sha256:replace-with-64-hex-digest
+   bash deploy/scripts/pentest-staging.sh https://staging.example.com
+   ```
 5. Verify `npm --prefix apps/api run security:audit:verify` reports `valid: true`.
 6. Exercise retention with a short test window, confirm object deletion, database URL clearing, failure retry, and immutable audit evidence.
 7. Verify Redis, PostgreSQL, MinIO/S3 management, and the GPU worker have no public listener. Only HTTPS edge ports may be public.
