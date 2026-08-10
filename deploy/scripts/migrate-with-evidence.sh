@@ -4,6 +4,8 @@ umask 077
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 environment="${DRAPIXAI_DEPLOY_ENV:-}"
+expected_database="${DRAPIXAI_EXPECTED_DATABASE_NAME:-}"
+change_approval="${DRAPIXAI_CHANGE_APPROVAL_ID:-}"
 backup_root="${DRAPIXAI_BACKUP_DIR:-/var/backups/drapixai}"
 evidence_root="${DRAPIXAI_MIGRATION_EVIDENCE_DIR:-$repo_root/runtime/launch-evidence/migrations}"
 
@@ -15,16 +17,30 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL is required." >&2
   exit 2
 fi
+if [[ ! "$expected_database" =~ ^[A-Za-z0-9_]{1,63}$ ]]; then
+  echo "Set DRAPIXAI_EXPECTED_DATABASE_NAME to the exact target database name." >&2
+  exit 2
+fi
+if [[ ! "$change_approval" =~ ^[A-Za-z0-9._:-]{8,128}$ ]]; then
+  echo "Set DRAPIXAI_CHANGE_APPROVAL_ID to the approved change reference." >&2
+  exit 2
+fi
 if [[ "$environment" == "production" && "${DRAPIXAI_MIGRATION_APPROVAL:-}" != "I_APPROVE_PRODUCTION_MIGRATION" ]]; then
   echo "Production requires DRAPIXAI_MIGRATION_APPROVAL=I_APPROVE_PRODUCTION_MIGRATION." >&2
   exit 2
 fi
-for command in pg_dump pg_restore sha256sum git npm; do
+for command in pg_dump pg_restore psql sha256sum git npm; do
   command -v "$command" >/dev/null || {
     echo "Missing required command: $command" >&2
     exit 2
   }
 done
+
+actual_database="$(psql --dbname="$DATABASE_URL" --tuples-only --no-align --command "SELECT current_database();" | tr -d "[:space:]")"
+if [[ "$actual_database" != "$expected_database" ]]; then
+  echo "Connected database does not match DRAPIXAI_EXPECTED_DATABASE_NAME." >&2
+  exit 1
+fi
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 release_commit="$(git -C "$repo_root" rev-parse HEAD)"
@@ -59,6 +75,8 @@ backup_sha="$(cut -d ' ' -f1 "$run_dir/backup.sha256")"
 cat > "$run_dir/evidence.json" <<EOF
 {
   "environment": "$environment",
+  "database_name": "$actual_database",
+  "change_approval": "$change_approval",
   "release_commit": "$release_commit",
   "started_at": "$timestamp",
   "completed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",

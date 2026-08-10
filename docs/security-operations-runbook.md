@@ -32,8 +32,12 @@ Emergency rotation skips normal notice but not evidence, staging where feasible,
 ## Backup and restore
 
 1. Production migrations must use `deploy/scripts/migrate-with-evidence.sh`. The script creates a custom-format PostgreSQL backup, verifies its catalog, hashes it, records migration status, and points to the guarded restore command.
+
+   Before a migration, the release operator must set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the exact database name returned by `SELECT current_database()` and set `DRAPIXAI_CHANGE_APPROVAL_ID` to the approved change record. The script connects first and stops before a backup or schema change if the identity differs.
 2. Store backups encrypted outside the application host and production account failure domain. Restrict restore permission more tightly than backup creation.
 3. Quarterly, restore the newest backup into an isolated recovery environment with `deploy/scripts/restore-postgres-backup.sh`.
+
+   Set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the isolated recovery database, `DRAPIXAI_RESTORE_APPROVAL_ID` to the incident/recovery approval record, and the environment-specific destructive confirmation. The restore tool checks the live database identity before issuing `pg_restore --clean`.
 4. Verify Prisma migration status, audit-chain validity, tenant counts, object references, login, product cache state, and a Standard try-on.
 5. Record recovery point objective and measured recovery time. A backup that has not passed restore testing is not launch evidence.
 
