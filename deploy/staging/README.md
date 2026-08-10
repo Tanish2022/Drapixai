@@ -30,22 +30,25 @@ in plaintext.
    cp deploy/env/api.staging.example deploy/env/api.staging.env
    cp deploy/env/web.staging.example deploy/env/web.staging.env
    cp deploy/env/ai.staging.example deploy/env/ai.staging.env
+   cp deploy/staging/.images.env.example deploy/staging/.images.env
    ```
 
-2. Generate staging-only mounted secrets:
+2. Keep the non-secret Compose image inputs beside the staging files. `DRAPIXAI_AI_RUNTIME_IMAGE` must stay at the digest supplied in `.images.env.example`; Compose reads this file before service `env_file` values exist.
+
+3. Generate staging-only mounted secrets:
 
    ```bash
    python deploy/scripts/generate-staging-secrets.py
    ```
 
-3. Install the private CA certificate at
+4. Install the private CA certificate at
    `/run/secrets/drapixai-internal-ca.pem` in the API container. Configure the GPU
    reverse proxy with a certificate for `drapixai-ai.staging.internal`.
 
-4. Put the generated AI Redis password and service token on the GPU host through
+5. Put the generated AI Redis password and service token on the GPU host through
    the VPN. Replace the matching placeholders in `ai.staging.env` locally.
 
-5. Verify source topology and environment separation:
+6. Verify source topology and environment separation:
 
    ```bash
    python deploy/scripts/verify-staging-topology.py
@@ -53,7 +56,7 @@ in plaintext.
      deploy/env/api.staging.env deploy/env/api.production.env
    ```
 
-6. Start the edge and GPU projects with different Compose project names:
+7. Start the edge and GPU projects with different Compose project names:
 
    ```bash
    docker compose --env-file deploy/staging/.images.env \
@@ -62,10 +65,10 @@ in plaintext.
      -f deploy/staging/docker-compose.ai.yml up -d --build
    ```
 
-7. Run `deploy/scripts/verify-private-listeners.sh` on both hosts and confirm the
+8. Run `deploy/scripts/verify-private-listeners.sh` on both hosts and confirm the
    router or cloud firewall rules separately.
 
-8. Apply the Prisma migration with backup evidence, then run the complete staging
+9. Apply the Prisma migration with backup evidence, then run the complete staging
    smoke and security suites. Never point staging at production to save setup time.
 
 ## Live security-boundary certification

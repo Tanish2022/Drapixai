@@ -234,6 +234,7 @@ const securitySchema = read('apps/api/prisma/schema.prisma');
 const adminMfa = read('apps/api/src/lib/admin-mfa.ts');
 const aiCompose = read('deploy/docker-compose.ai.yml');
 const stagingAiCompose = read('deploy/staging/docker-compose.ai.yml');
+const stagingImagesEnvExample = read('deploy/staging/.images.env.example');
 const garmentCacheService = read('drapixai_ai/services/garment_cache.py');
 const garmentCacheDeleteValidation = read('drapixai_ai/scripts/validate_garment_cache_delete.py');
 const garmentCacheExpiryValidation = read('drapixai_ai/scripts/validate_garment_cache_expiry.py');
@@ -1580,6 +1581,8 @@ assertNotIncludes(validateEnv, 'fi  require_equals', 'AI environment validation 
 assertIncludes(validateEnv, 'DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell', 'Digest pinning must apply to the RTX production preset without breaking the legacy reference runtime');
 assertIncludes(aiCompose, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Production AI Compose must receive the digest-pinned runtime image from its private environment');
 assertIncludes(stagingAiCompose, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Staging AI Compose must use the same runtime-image contract as production');
+assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:', 'Staging Compose interpolation must supply the digest-pinned AI runtime image before service env files load');
+assertIncludes(gitignore, 'deploy/staging/.images.env', 'The real staging Compose input file must remain out of Git');
 assertIncludes(aiProductionExample, 'DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:', 'Production AI environment must pin an official PyTorch runtime image');
 assertIncludes(validateEnv, 'require_pinned_pytorch_runtime_image', 'AI production validation must reject unpinned runtime images');
 assertIncludes(workstationPreflight, 'driver_version', 'RTX workstation preflight must check the host NVIDIA driver version');

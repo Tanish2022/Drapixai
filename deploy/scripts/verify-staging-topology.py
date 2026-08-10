@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -19,11 +20,13 @@ def main() -> int:
     edge_path = repo_root / "deploy" / "staging" / "docker-compose.edge.yml"
     ai_path = repo_root / "deploy" / "staging" / "docker-compose.ai.yml"
     api_env_path = repo_root / "deploy" / "env" / "api.staging.example"
+    images_env_path = repo_root / "deploy" / "staging" / ".images.env.example"
     failures: list[str] = []
 
     edge = edge_path.read_text(encoding="utf-8")
     ai = ai_path.read_text(encoding="utf-8")
     api_env = api_env_path.read_text(encoding="utf-8")
+    images_env = images_env_path.read_text(encoding="utf-8")
 
     for service in ("postgres", "redis", "minio"):
         block = edge.split(f"  {service}:\n", 1)[1].split("\n  ", 1)[0]
@@ -36,6 +39,7 @@ def main() -> int:
     require(ai, "127.0.0.1:${DRAPIXAI_STAGING_AI_PORT", failures, "AI API")
     require(ai, "standard-catvton-rc1.env", failures, "AI release profile")
     require(ai, "internal: true", failures, "AI network")
+    require(ai, "DRAPIXAI_AI_RUNTIME_IMAGE", failures, "AI runtime image build argument")
 
     env_requirements = {
         "DRAPIXAI_API_ENVIRONMENT": "sandbox",
@@ -55,6 +59,15 @@ def main() -> int:
         if parsed.get(key) != expected:
             failures.append(f"api staging env: {key} must equal {expected!r}")
 
+    image_values = {}
+    for raw in images_env.splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            image_values[key] = value
+    runtime_image = image_values.get("DRAPIXAI_AI_RUNTIME_IMAGE", "")
+    if not re.fullmatch(r"pytorch/pytorch:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}", runtime_image):
+        failures.append("staging images env must pin DRAPIXAI_AI_RUNTIME_IMAGE to an official image digest")
     profile_check = subprocess.run(
         [sys.executable, str(repo_root / "deploy" / "scripts" / "verify-standard-release-profile.py")],
         cwd=repo_root,
@@ -74,6 +87,7 @@ def main() -> int:
             "gpu_origin_is_loopback_only": True,
             "secrets_are_mounted_and_git_ignored": True,
             "standard_release_profile_is_loaded": profile_check.returncode == 0,
+            "ai_runtime_image_is_digest_pinned": not any("runtime_image" in failure or "images env" in failure for failure in failures),
         },
     }
     print(json.dumps(report, indent=2, sort_keys=True))
