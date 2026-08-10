@@ -145,6 +145,16 @@
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
+  function normalizeStorefrontCredential(value, productId, reportStartupError) {
+    if (!value || typeof value !== 'string') throw reportStartupError('TOKEN_UNAVAILABLE', productId);
+    var credential = value.trim();
+    if (!credential) throw reportStartupError('TOKEN_UNAVAILABLE', productId);
+    if (/^dpx_/i.test(credential) || /^dpxapi_/i.test(credential) || /^[a-f0-9]{32}$/i.test(credential)) {
+      throw reportStartupError('PERMANENT_API_KEY_FORBIDDEN', productId);
+    }
+    return credential;
+  }
+
   function parseJsonObject(value) {
     if (!value) {
       return undefined;
@@ -270,7 +280,7 @@
     init: async function (options) {
       options = options || {};
       var config = {
-        apiKey: options.apiKey,
+        storefrontToken: options.storefrontToken || options.apiKey,
         tokenProvider: typeof options.tokenProvider === 'function' ? options.tokenProvider : null,
         appId: options.appId ? String(options.appId) : '',
         productId: options.productId || 'default',
@@ -307,11 +317,9 @@
       async function resolveCredential(productId) {
         if (config.tokenProvider) {
           var issuedToken = await config.tokenProvider(String(productId || config.productId));
-          if (!issuedToken || typeof issuedToken !== 'string') throw reportStartupError('TOKEN_UNAVAILABLE', productId);
-          return issuedToken.trim();
+          return normalizeStorefrontCredential(issuedToken, productId, reportStartupError);
         }
-        if (!config.apiKey || typeof config.apiKey !== 'string') throw reportStartupError('TOKEN_UNAVAILABLE', productId);
-        return config.apiKey.trim();
+        return normalizeStorefrontCredential(config.storefrontToken, productId, reportStartupError);
       }
 
       function buildAuthorizationHeaders(credential, includeJson) {

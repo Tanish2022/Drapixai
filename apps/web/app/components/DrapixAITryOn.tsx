@@ -4,8 +4,7 @@ import { useEffect } from 'react';
 import { PUBLIC_API_BASE_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 
 type DrapixAITryOnProps = {
-  apiKey?: string;
-  tokenProvider?: (productId: string) => Promise<string>;
+  tokenProvider: (productId: string) => Promise<string>;
   appId?: string;
   productId: string;
   containerId?: string;
@@ -28,7 +27,6 @@ type DrapixAITryOnProps = {
 
 export default function DrapixAITryOn(props: DrapixAITryOnProps) {
   const {
-    apiKey,
     tokenProvider,
     appId,
     productId,
@@ -56,7 +54,6 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
     const loadAndInit = () => {
       if (window.DrapixAI) {
         window.DrapixAI.init({
-          apiKey,
           tokenProvider,
           appId,
           productId,
@@ -96,7 +93,6 @@ export default function DrapixAITryOn(props: DrapixAITryOnProps) {
       // leave SDK loaded for other instances
     };
   }, [
-    apiKey,
     tokenProvider,
     appId,
     productId,

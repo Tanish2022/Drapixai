@@ -374,7 +374,7 @@ export default function Dashboard() {
       await loadSdk();
       if (cancelled || !window.DrapixAI) return;
       await Promise.resolve(window.DrapixAI.init({
-        apiKey: previewPayload.token,
+        storefrontToken: previewPayload.token,
         productId: previewProductId,
         containerId: 'drapixai-dashboard-demo',
         baseUrl: PUBLIC_API_BASE_URL,

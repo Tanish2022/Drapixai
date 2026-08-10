@@ -2,7 +2,7 @@ export {};
 
 declare global {
   interface DrapixAIInitOptions {
-    apiKey?: string;
+    storefrontToken?: string;
     tokenProvider?: (productId: string) => Promise<string>;
     appId?: string;
     productId: string;

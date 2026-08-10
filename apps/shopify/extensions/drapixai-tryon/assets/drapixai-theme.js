@@ -53,7 +53,7 @@
       if (!response.ok || !config.token || !config.sdkUrl) throw new Error(config.error || 'CONFIG_UNAVAILABLE');
       await loadScript(config.sdkUrl);
       await window.DrapixAI.init({
-        apiKey: config.token,
+        storefrontToken: config.token,
         tokenProvider: async function (requestedProductId) {
           var tokenResponse = await fetch('/apps/drapixai?product_id=' + encodeURIComponent(requestedProductId), {
             credentials: 'same-origin',
