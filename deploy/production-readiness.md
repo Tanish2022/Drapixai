@@ -506,11 +506,11 @@ Before calling anything launch-ready, complete this list:
 ## 12. Remaining Launch Evidence
 
 - replace the remaining `DRAPIXAI_AI_URL` placeholder with the next private/restricted live GPU endpoint
-- promote the secure runtime only after A100 direct/SDK parity, output-safety, quality, and latency validation
+- promote the primary RTX PRO 6000 Blackwell runtime only after direct/SDK parity, output-safety, quality, latency, and three-tenant validation on that exact release image
 - pass the rights-cleared 50-case upper-body matrix with one candidate, score at least `0.95`, no warnings, and recorded latency
 - deploy migrations to the production PostgreSQL database and prove API/Redis/AI readiness through the public HTTPS edge
 - confirm production object-storage write/read/delete behavior with local fallback disabled
 - confirm one real SMTP delivery and its `EmailLog` audit row
 - complete real Google OAuth verification only if Google login remains enabled at launch
 - supply Shopify Partner credentials, complete a development-store Theme App Extension test, and satisfy Shopify review requirements before advertising one-click Shopify installation
-- run one successful public SDK try-on from a verified storefront domain and record its image, headers, latency, and quality decision
+- run one successful public SDK try-on from a verified storefront domain and record redacted headers, latency, and quality decision; retain an image only with documented internal consent and delete it after approval

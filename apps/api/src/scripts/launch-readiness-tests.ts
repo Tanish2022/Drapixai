@@ -1063,6 +1063,9 @@ assertIncludes(aiProductionExample, 'DRAPIXAI_GPU_PRESET=rtx-pro-6000-blackwell'
 assertIncludes(productionReadiness, 'RTX PRO 6000 Production Runtime', 'Production readiness guide must identify the primary RTX GPU runtime');
 assertIncludes(productionReadiness, 'not the production source of truth', 'Production readiness guide must keep reference RunPod validation separate from production');
 assertIncludes(productionReadiness, 'three-tenant batch leaves at least 20% VRAM headroom', 'Production readiness guide must retain the three-tenant GPU safety acceptance condition');
+assertIncludes(productionReadiness, 'primary RTX PRO 6000 Blackwell runtime', 'Remaining launch evidence must target the primary production GPU');
+assertNotIncludes(productionReadiness, 'after A100 direct/SDK parity', 'Production evidence must not retain the retired A100 promotion condition');
+assertNotIncludes(productionReadiness, 'record its image, headers', 'Production evidence must not retain shopper output images by default');
 assertIncludes(launchSupportPlaybook, 'RTX PRO 6000 production runtime passes', 'Launch support playbook must use the primary production GPU in its go-live criteria');
 assertIncludes(workstationPreflight, 'rtx-pro-6000-blackwell', 'Workstation preflight must require the primary RTX GPU preset');
 assertIncludes(workstationPreflight, 'DRAPIXAI_EXPECTED_GIT_REF', 'Workstation preflight must pin the exact release commit');
