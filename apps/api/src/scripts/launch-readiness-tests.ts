@@ -1165,6 +1165,8 @@ assertIncludes(securityHelpers, 'removeLocalStoredFile', 'Security helper must s
 assertIncludes(securityHelpers, 'cleanupExpiredUploadFiles', 'Interrupted Multer uploads must have a bounded failsafe cleanup');
 assertIncludes(apiServer, "cron.schedule('*/5 * * * *'", 'Transient upload cleanup must run every five minutes');
 assertIncludes(privacyPage, 'are not persistently stored', 'Privacy page must prohibit persistent shopper photo/result storage');
+assertIncludes(privacyPage, '15-minute failsafe cleanup window', 'Privacy page must publish the interrupted-job cleanup deadline.');
+assertIncludes(read('docs/public-launch-readiness-checklist.md'), '15-minute interrupted-job failsafe', 'Launch checklist must require evidence for the public transient-media policy.');
 assertIncludes(privacyPage, 'privacy@drapixai.com', 'Privacy page must publish privacy contact');
 assertIncludes(privacyPage, 'The launch app requests read_products only', 'Privacy policy must disclose Shopify least-privilege product access');
 assertIncludes(privacyPage, 'does not request Shopify customer, order, payment, or checkout data', 'Privacy policy must disclose excluded Shopify protected data');

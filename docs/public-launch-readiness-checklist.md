@@ -212,7 +212,8 @@ npm --prefix apps/api run security:audit:verify
       processing, consent, and international subprocessors.
 - [ ] Confirm the public policy and SDK use the same retention periods.
 - [ ] Schedule the production retention purge and monitor every run.
-- [ ] Prove 30-day shopper image/result deletion, URL clearing, failure retry,
+- [ ] Prove transient shopper image/result deletion after completion or failure,
+      including the 15-minute interrupted-job failsafe, URL clearing, failure retry,
       and immutable audit evidence in staging.
 - [ ] Prove account deletion, Shopify uninstall/redact, and brand data export.
 - [ ] Publish whether shopper images are used for training. Default launch
