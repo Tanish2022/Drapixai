@@ -68,6 +68,12 @@
       "args": ["--prefix", "apps/api", "run", "test:input-validation"]
     },
     {
+      "id": "public-api-contracts",
+      "label": "Public v1 API security and billing contract tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:public-api"]
+    },
+    {
       "id": "shopify-contracts",
       "label": "Shopify signature and app-proxy contract tests",
       "runner": "npm",

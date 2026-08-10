@@ -445,6 +445,7 @@ assertIncludes(aiServer, 'normalize_request_id', 'AI server must constrain clien
 assertIncludes(launchGates, 'ai-ingress-security', 'Launch gates must execute AI ingress hardening regressions');
 assertIncludes(launchGates, 'node-runtime', 'Launch gates must reject unsupported Node.js runtimes.');
 assertIncludes(launchGates, 'tracked-secret-scan', 'Launch gates must scan tracked source for recognizable private credentials.');
+assertIncludes(launchGates, 'public-api-contracts', 'Launch gates must execute the public API security and billing contract tests.');
 assertIncludes(trackedSecretVerifier, 'TRACKED_SECRET_DETECTED', 'Tracked-secret verifier must fail without echoing a detected credential.');
 assertIncludes(trackedSecretVerifier, "git', ['ls-files', '-z']", 'Tracked-secret verifier must inspect only versioned source files.');
 assertIncludes(nodeRuntimeVerifier, 'UNSUPPORTED_NODE_RUNTIME', 'Node runtime verifier must fail closed on unsupported Node.js versions.');
