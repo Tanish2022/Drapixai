@@ -8,6 +8,12 @@
       "args": ["scripts/verify-node-runtime.mjs"]
     },
     {
+      "id": "tracked-secret-scan",
+      "label": "Tracked source contains no recognizable private credentials",
+      "runner": "node",
+      "args": ["scripts/verify-no-tracked-secrets.mjs"]
+    },
+    {
       "id": "api-build",
       "label": "API production build",
       "runner": "npm",

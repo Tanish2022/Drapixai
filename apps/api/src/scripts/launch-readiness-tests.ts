@@ -227,6 +227,7 @@ const pipeline = read('drapixai_ai/pipeline/tryon_pipeline.py');
 const aiServer = read('drapixai_ai/api/ai_server.py');
 const launchGates = read('deploy/launch-gates.json');
 const nodeRuntimeVerifier = read('scripts/verify-node-runtime.mjs');
+const trackedSecretVerifier = read('scripts/verify-no-tracked-secrets.mjs');
 const aiSettings = read('drapixai_ai/configs/settings.py');
 const tryonService = read('drapixai_ai/services/tryon_service.py');
 const gpuWorker = read('drapixai_ai/worker/gpu_worker.py');
@@ -443,6 +444,9 @@ assertIncludes(aiServer, 'REQUEST_BODY_TOO_LARGE', 'AI server must reject oversi
 assertIncludes(aiServer, 'normalize_request_id', 'AI server must constrain client-supplied request IDs before logging them');
 assertIncludes(launchGates, 'ai-ingress-security', 'Launch gates must execute AI ingress hardening regressions');
 assertIncludes(launchGates, 'node-runtime', 'Launch gates must reject unsupported Node.js runtimes.');
+assertIncludes(launchGates, 'tracked-secret-scan', 'Launch gates must scan tracked source for recognizable private credentials.');
+assertIncludes(trackedSecretVerifier, 'TRACKED_SECRET_DETECTED', 'Tracked-secret verifier must fail without echoing a detected credential.');
+assertIncludes(trackedSecretVerifier, "git', ['ls-files', '-z']", 'Tracked-secret verifier must inspect only versioned source files.');
 assertIncludes(nodeRuntimeVerifier, 'UNSUPPORTED_NODE_RUNTIME', 'Node runtime verifier must fail closed on unsupported Node.js versions.');
 assertIncludes(nodeRuntimeVerifier, 'NODE_ENGINE_RANGE_MISMATCH', 'Node runtime verifier must require one consistent engine range.');
 assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
