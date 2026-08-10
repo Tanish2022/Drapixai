@@ -95,6 +95,15 @@ require_pinned_pytorch_runtime_image() {
     exit 1
   fi
 }
+
+require_digest_pinned_release_image() {
+  local name="$1"
+  local value="${!name:-}"
+  if [[ ! "$value" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$ ]]; then
+    echo "$name must be a digest-pinned immutable container image reference." >&2
+    exit 1
+  fi
+}
 require_base64_bytes() {
   local name="$1"
   local expected="$2"
@@ -157,6 +166,8 @@ case "$profile" in
       SMTP_USER
       SMTP_PASS
       SMTP_FROM
+      DRAPIXAI_API_RELEASE_IMAGE
+      DRAPIXAI_WEB_RELEASE_IMAGE
     )
     ;;
   web)
@@ -170,6 +181,7 @@ case "$profile" in
       DASHBOARD_SESSION_SECRET
       DRAPIXAI_AUTH_SYNC_TOKEN
       DRAPIXAI_DASHBOARD_PROXY_TOKEN
+      DRAPIXAI_WEB_RELEASE_IMAGE
     )
     ;;
   ai)
@@ -186,6 +198,7 @@ case "$profile" in
       DRAPIXAI_GARMENT_CACHE_DIR
       DRAPIXAI_ADMIN_TOKEN
       DRAPIXAI_AI_SERVICE_TOKEN
+      DRAPIXAI_AI_RELEASE_IMAGE
     )
     if [[ "${DRAPIXAI_GARMENT_CACHE_BACKEND:-local}" == "s3" ]]; then
       required_vars+=(
@@ -215,6 +228,7 @@ if [[ "$profile" == "web" ]]; then
   require_min_length DASHBOARD_SESSION_SECRET 32
   require_min_length DRAPIXAI_AUTH_SYNC_TOKEN 32
   require_min_length DRAPIXAI_DASHBOARD_PROXY_TOKEN 32
+  require_digest_pinned_release_image DRAPIXAI_WEB_RELEASE_IMAGE
   if [[ "${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-0}" == "1" ]]; then
     require_var GOOGLE_CLIENT_ID
     require_var GOOGLE_CLIENT_SECRET
@@ -226,6 +240,7 @@ if [[ "$profile" == "api" ]]; then
   require_min_length JWT_SECRET 32
   require_min_length DRAPIXAI_AUTH_SYNC_TOKEN 32
   require_min_length DRAPIXAI_DASHBOARD_PROXY_TOKEN 32
+  require_digest_pinned_release_image DRAPIXAI_WEB_RELEASE_IMAGE
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_PASSWORD 12
@@ -253,6 +268,8 @@ if [[ "$profile" == "api" ]]; then
     exit 1
   fi
   require_not_equals DRAPIXAI_CORS_ORIGINS "*"
+  require_digest_pinned_release_image DRAPIXAI_API_RELEASE_IMAGE
+  require_digest_pinned_release_image DRAPIXAI_WEB_RELEASE_IMAGE
   require_equals DRAPIXAI_REQUIRE_GARMENT_CACHE "1"
   require_equals DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER "0"
   require_equals DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK "0"
@@ -298,6 +315,7 @@ if [[ "$profile" == "ai" ]]; then
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_equals DRAPIXAI_TRYON_ENGINE "catvton"
+  require_digest_pinned_release_image DRAPIXAI_AI_RELEASE_IMAGE
   if [[ "${DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell" ]]; then
     require_pinned_pytorch_runtime_image
     require_equals DRAPIXAI_ENABLE_XFORMERS "0"

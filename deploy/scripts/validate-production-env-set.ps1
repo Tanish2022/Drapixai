@@ -109,6 +109,14 @@ function Assert-HttpsUrl {
     }
 }
 
+function Assert-DigestPinnedImage {
+    param([string]$Path, [string]$Key)
+    $value = Get-EnvValue -Path $Path -Key $Key
+    if ($value -notmatch '^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$') {
+        throw "Value for $Key in $Path must be an immutable sha256-pinned container image"
+    }
+}
+
 function Assert-HttpsOriginList {
     param([string]$Path, [string]$Key)
     $value = Get-EnvValue -Path $Path -Key $Key
@@ -132,14 +140,14 @@ $aiEnv = Resolve-EnvPath "ai.production.env"
 
 Assert-RequiredKeys $apiEnv @(
     "NODE_ENV", "DATABASE_URL", "REDIS_URL", "JWT_SECRET",
-    "DRAPIXAI_AUTH_SYNC_TOKEN", "DRAPIXAI_DASHBOARD_PROXY_TOKEN",
+    "DRAPIXAI_AUTH_SYNC_TOKEN", "DRAPIXAI_DASHBOARD_PROXY_TOKEN", "DRAPIXAI_WEB_RELEASE_IMAGE",
     "DRAPIXAI_AI_URL", "DRAPIXAI_AI_SERVICE_TOKEN", "DRAPIXAI_AI_PRIVATE_NETWORK", "DRAPIXAI_AI_MTLS_ENABLED", "DRAPIXAI_AI_MTLS_CERT_FILE", "DRAPIXAI_AI_MTLS_KEY_FILE", "NODE_EXTRA_CA_CERTS", "DRAPIXAI_CORS_ORIGINS",
     "DRAPIXAI_ADMIN_TOKEN", "DRAPIXAI_ADMIN_PASSWORD", "DRAPIXAI_ADMIN_TOTP_SECRET",
     "DRAPIXAI_STOREFRONT_TOKEN_SECRET", "DRAPIXAI_AUDIT_LOG_SECRET",
     "DRAPIXAI_API_ENVIRONMENT", "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY",
     "DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION", "DRAPIXAI_S3_KMS_KEY_ID", "S3_BUCKET", "AWS_REGION",
     "DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY", "SMTP_HOST", "SMTP_PORT",
-    "SMTP_USER", "SMTP_PASS", "SMTP_FROM"
+    "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "DRAPIXAI_API_RELEASE_IMAGE", "DRAPIXAI_WEB_RELEASE_IMAGE"
 )
 Assert-ExactValue $apiEnv "NODE_ENV" "production"
 Assert-MinLength $apiEnv "JWT_SECRET" 32
@@ -155,6 +163,8 @@ Assert-ExactValue $apiEnv "DRAPIXAI_API_ENVIRONMENT" "live"
 Assert-Base64Bytes $apiEnv "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY" 32
 Assert-ExactValue $apiEnv "DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY" "1"
 Assert-ExactValue $apiEnv "DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION" "aws:kms"
+Assert-DigestPinnedImage $apiEnv "DRAPIXAI_API_RELEASE_IMAGE"
+Assert-DigestPinnedImage $apiEnv "DRAPIXAI_WEB_RELEASE_IMAGE"
 Assert-HttpsUrl $apiEnv "DRAPIXAI_AI_URL"
 Assert-HttpsOriginList $apiEnv "DRAPIXAI_CORS_ORIGINS"
 foreach ($entry in @{
@@ -180,9 +190,10 @@ Assert-NumberAtLeast $apiEnv "DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE" 0.95
 Assert-RequiredKeys $webEnv @(
     "NODE_ENV", "NEXT_PUBLIC_WEB_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "DRAPIXAI_API_URL",
     "NEXTAUTH_URL", "NEXTAUTH_SECRET", "ADMIN_SESSION_SECRET", "DASHBOARD_SESSION_SECRET",
-    "DRAPIXAI_AUTH_SYNC_TOKEN", "DRAPIXAI_DASHBOARD_PROXY_TOKEN"
+    "DRAPIXAI_AUTH_SYNC_TOKEN", "DRAPIXAI_DASHBOARD_PROXY_TOKEN", "DRAPIXAI_WEB_RELEASE_IMAGE"
 )
 Assert-ExactValue $webEnv "NODE_ENV" "production"
+Assert-DigestPinnedImage $webEnv "DRAPIXAI_WEB_RELEASE_IMAGE"
 foreach ($key in @("NEXT_PUBLIC_WEB_BASE_URL", "NEXT_PUBLIC_API_BASE_URL", "DRAPIXAI_API_URL", "NEXTAUTH_URL")) {
     Assert-HttpsUrl $webEnv $key
 }
@@ -194,7 +205,7 @@ Assert-RequiredKeys $aiEnv @(
     "DRAPIXAI_ENV", "DRAPIXAI_GPU_PRESET", "DRAPIXAI_DEVICE", "DRAPIXAI_CUDA_DEVICE",
     "DRAPIXAI_REDIS_URL", "DRAPIXAI_REDIS_PASSWORD", "DRAPIXAI_TRYON_ENGINE", "DRAPIXAI_MODEL_DIR",
     "DRAPIXAI_CATVTON_MODEL_DIR", "DRAPIXAI_CATVTON_BASE_MODEL", "DRAPIXAI_CATVTON_VAE_MODEL",
-    "DRAPIXAI_GARMENT_CACHE_DIR", "DRAPIXAI_ADMIN_TOKEN", "DRAPIXAI_AI_SERVICE_TOKEN"
+    "DRAPIXAI_GARMENT_CACHE_DIR", "DRAPIXAI_ADMIN_TOKEN", "DRAPIXAI_AI_SERVICE_TOKEN", "DRAPIXAI_AI_RELEASE_IMAGE"
 )
 foreach ($entry in @{
     DRAPIXAI_ENV = "production"
@@ -220,6 +231,7 @@ foreach ($entry in @{
 Assert-MinLength $aiEnv "DRAPIXAI_AI_SERVICE_TOKEN" 32
 Assert-MinLength $aiEnv "DRAPIXAI_ADMIN_TOKEN" 32
 Assert-MinLength $aiEnv "DRAPIXAI_REDIS_PASSWORD" 32
+Assert-DigestPinnedImage $aiEnv "DRAPIXAI_AI_RELEASE_IMAGE"
 Assert-NumberAtLeast $aiEnv "DRAPIXAI_MIN_QUALITY_SCORE" 0.95
 
 $shopifyEnabled = Get-EnvValue -Path $apiEnv -Key "DRAPIXAI_SHOPIFY_ENABLED"
@@ -244,6 +256,7 @@ if ($shopifyEnabled -eq "1") {
 
 Assert-Match DRAPIXAI_AUTH_SYNC_TOKEN $apiEnv $webEnv api web
 Assert-Match DRAPIXAI_DASHBOARD_PROXY_TOKEN $apiEnv $webEnv api web
+Assert-Match DRAPIXAI_WEB_RELEASE_IMAGE $apiEnv $webEnv api web
 Assert-Match DRAPIXAI_AI_SERVICE_TOKEN $apiEnv $aiEnv api ai
 Assert-Match DRAPIXAI_ADMIN_TOKEN $apiEnv $aiEnv api ai
 

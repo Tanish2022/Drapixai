@@ -1,5 +1,8 @@
 NODE_ENV=production
 PORT=8000
+DRAPIXAI_API_RELEASE_IMAGE=registry.example/drapixai/api@sha256:replace-with-64-hex-digest
+# Required by the edge Compose manifest before the web container starts. Keep this identical to web.production.env.
+DRAPIXAI_WEB_RELEASE_IMAGE=registry.example/drapixai/web@sha256:replace-with-64-hex-digest
 DRAPIXAI_SECRETS_PROVIDER=aws-secrets-manager
 DRAPIXAI_AWS_SECRET_ID=drapixai/production/api
 DRAPIXAI_INTERNAL_TLS_SECRETS_DIR=/run/secrets/drapixai-api-internal-tls

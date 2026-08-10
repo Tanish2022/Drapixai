@@ -17,9 +17,7 @@ services:
       - backend
 
   api:
-    build:
-      context: ..
-      dockerfile: apps/api/Dockerfile
+    image: ${DRAPIXAI_API_RELEASE_IMAGE:?set DRAPIXAI_API_RELEASE_IMAGE}
     restart: unless-stopped
     env_file:
       - ./env/api.production.env
@@ -46,9 +44,7 @@ services:
       - backend
 
   web:
-    build:
-      context: ..
-      dockerfile: apps/web/Dockerfile
+    image: ${DRAPIXAI_WEB_RELEASE_IMAGE:?set DRAPIXAI_WEB_RELEASE_IMAGE}
     restart: unless-stopped
     env_file:
       - ./env/web.production.env

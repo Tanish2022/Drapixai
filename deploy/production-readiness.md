@@ -28,6 +28,33 @@ DrapixAI public quality and reliability are validated on the same Linux GPU runt
 
 Do not approve public quality from Windows/local smoke images or from a different GPU class. The rights-cleared matrix, direct/SDK parity, and three-tenant test must run on the exact RTX workstation image and release commit that will serve traffic.
 
+## 1B. Immutable Release Artifact Promotion
+
+Production hosts must never rebuild DrapixAI source during a rollout. Build and scan the API, web, and Standard CatVTON runtime from the exact tagged release commit, then deploy only their registry digests. This preserves the approved Standard quality configuration while making rollback and forensic review deterministic.
+
+1. On an isolated trusted builder with registry login, check out the exact release commit with a clean worktree.
+2. Set `DRAPIXAI_RELEASE_REGISTRY` to the private registry namespace and `DRAPIXAI_EXPECTED_GIT_REF` to that 40-character commit, then run:
+
+```bash
+DRAPIXAI_RELEASE_REGISTRY=registry.example/drapixai \
+DRAPIXAI_EXPECTED_GIT_REF=<release-commit> \
+bash deploy/scripts/publish-release-images.sh deploy/env/ai.production.env
+```
+
+The script builds linux/amd64 artifacts, scans each saved image for HIGH/CRITICAL vulnerabilities, pushes only passing images, resolves their registry digests, and writes a private `runtime/release-images/<release-commit>.env` record. Its registry credentials remain in Docker's credential helper, never in source or env templates.
+
+3. Copy the three generated digest references into the ignored production env files. Keep `DRAPIXAI_WEB_RELEASE_IMAGE` identical in both `api.production.env` and `web.production.env`; the API env provides both edge Compose image inputs before any service env file is loaded.
+4. On the matching clean edge and GPU checkouts, validate the env files, then start only prebuilt artifacts:
+
+```bash
+DRAPIXAI_EXPECTED_GIT_REF=<release-commit> \
+bash deploy/scripts/start-production-release.sh edge deploy/env
+
+DRAPIXAI_EXPECTED_GIT_REF=<release-commit> \
+bash deploy/scripts/start-production-release.sh ai deploy/env
+```
+
+The start script runs `docker compose pull` and `up -d --no-build`; it refuses mutable tags, an unexpected commit, or a dirty checkout. The experimental lower-body Compose profile is intentionally excluded from the Standard public-launch deployment.
 ## 2. Production Env Checklist
 
 Use these three files as the source of truth:

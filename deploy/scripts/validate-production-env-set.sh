@@ -70,6 +70,17 @@ require_value() {
   printf '%s' "$value"
 }
 
+require_digest_image() {
+  local file="$1"
+  local key="$2"
+  local value
+  value="$(require_value "$file" "$key")"
+  if [[ ! "$value" =~ ^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$ ]]; then
+    echo "Release image must be sha256-pinned: $key in $file" >&2
+    exit 1
+  fi
+}
+
 require_match() {
   local key="$1"
   local left_file="$2"
@@ -93,6 +104,10 @@ require_match DRAPIXAI_AUTH_SYNC_TOKEN "$api_env" "$web_env" api web
 require_match DRAPIXAI_DASHBOARD_PROXY_TOKEN "$api_env" "$web_env" api web
 require_match DRAPIXAI_AI_SERVICE_TOKEN "$api_env" "$ai_env" api ai
 require_match DRAPIXAI_ADMIN_TOKEN "$api_env" "$ai_env" api ai
+require_match DRAPIXAI_WEB_RELEASE_IMAGE "$api_env" "$web_env" api web
+require_digest_image "$api_env" DRAPIXAI_API_RELEASE_IMAGE
+require_digest_image "$api_env" DRAPIXAI_WEB_RELEASE_IMAGE
+require_digest_image "$ai_env" DRAPIXAI_AI_RELEASE_IMAGE
 
 for env_file in "$api_env" "$web_env" "$ai_env"; do
   if ! git -C "$repo_root" check-ignore -q "$env_file"; then

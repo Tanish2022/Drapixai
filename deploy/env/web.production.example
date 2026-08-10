@@ -1,5 +1,6 @@
 NODE_ENV=production
 PORT=3000
+DRAPIXAI_WEB_RELEASE_IMAGE=registry.example/drapixai/web@sha256:replace-with-64-hex-digest
 NEXT_PUBLIC_WEB_BASE_URL=https://drapixai.com
 NEXT_PUBLIC_API_BASE_URL=https://api.drapixai.com
 DRAPIXAI_API_URL=https://api.drapixai.com

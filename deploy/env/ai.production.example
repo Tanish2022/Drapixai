@@ -1,6 +1,7 @@
 DRAPIXAI_ENV=production
 DRAPIXAI_GPU_PRESET=rtx-pro-6000-blackwell
 DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel@sha256:53ab3de62f6101d1e42f9be28623ab7a468a24c070d632f211ed576e30b6abd3
+DRAPIXAI_AI_RELEASE_IMAGE=registry.example/drapixai/ai@sha256:replace-with-64-hex-digest
 DRAPIXAI_DEVICE=cuda
 DRAPIXAI_CUDA_DEVICE=0
 DRAPIXAI_REDIS_URL=redis://127.0.0.1:6379/0
