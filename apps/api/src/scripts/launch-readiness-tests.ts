@@ -251,6 +251,7 @@ const lowerBodyQualityDoc = read('docs/lower_body_quality_stack.md');
 const cacheRegenerationScript = read('apps/api/src/scripts/regenerate-garment-caches.ts');
 const retentionPurgeScript = read('apps/api/src/scripts/purge-tryon-review-retention.ts');
 const shopperMediaPrivacyVerifier = read('apps/api/src/scripts/verify-shopper-media-privacy.ts');
+const legacyRenderMediaPurge = read('apps/api/src/scripts/purge-legacy-render-media.ts');
 const reviewRetentionService = read('apps/api/src/services/review-retention.ts');
 const smtpTestScript = read('apps/api/src/scripts/send-test-email.ts');
 const emailerService = read('apps/api/src/services/emailer.ts');
@@ -1144,6 +1145,7 @@ assertIncludes(emailerService, 'logId: log.id', 'Email helper must expose the Em
 assertIncludes(productionReadiness, 'npm --prefix apps/api run email:send-test -- --to=admin@yourbrand.com', 'Production readiness doc must include SMTP launch verification command');
 assertIncludes(read('apps/api/package.json'), 'tryon:purge-review-retention', 'API package must expose try-on retention purge command');
 assertIncludes(read('apps/api/package.json'), 'privacy:verify-shopper-media', 'API package must expose shopper-media privacy evidence command');
+assertIncludes(read('apps/api/package.json'), 'privacy:purge-legacy-media', 'API package must expose legacy media purge command');
 assertIncludes(retentionPurgeScript, 'DEFAULT_RETENTION_DAYS = 0', 'Retention purge must default to immediate legacy-media deletion');
 assertIncludes(retentionPurgeScript, '--confirm', 'Retention purge must require explicit confirmation before deleting');
 assertIncludes(reviewRetentionService, 'DeleteObjectCommand', 'Retention service must delete S3 review images');
@@ -1174,6 +1176,12 @@ assertIncludes(sdkRoute, "action: 'privacy.tryon_consent.accepted'", 'Consent mu
 assertIncludes(sdkRoute, "action: 'privacy.tryon_media.not_retained'", 'Non-retention must be recorded in the immutable audit chain');
 assertIncludes(shopperMediaPrivacyVerifier, 'PERSISTENT_SHOPPER_MEDIA_REFERENCES', 'Privacy verifier must fail on database shopper-media references');
 assertIncludes(shopperMediaPrivacyVerifier, 'ORPHANED_SHOPPER_MEDIA_OBJECTS', 'Privacy verifier must fail on orphaned shopper-media objects');
+assertIncludes(shopperMediaPrivacyVerifier, 'LEGACY_RENDER_MEDIA_REFERENCES', 'Privacy verifier must fail on historical legacy render references');
+assertIncludes(shopperMediaPrivacyVerifier, 'LEGACY_RENDER_MEDIA_OBJECTS', 'Privacy verifier must fail on historical legacy render objects');
+assertIncludes(legacyRenderMediaPurge, 'process.argv.includes(\'--confirm\')', 'Legacy render purge must require explicit confirmation before deletion');
+assertIncludes(legacyRenderMediaPurge, 'bucket === STORAGE_BUCKET', 'Legacy render purge must reject storage URLs outside the configured bucket');
+assertIncludes(legacyRenderMediaPurge, 'privacy.legacy_render_media.purged', 'Legacy render purge must append immutable deletion evidence');
+assertIncludes(productionReadiness, 'privacy:purge-legacy-media', 'Production readiness must require legacy media cleanup before privacy certification');
 assertIncludes(shopperMediaPrivacyVerifier, 'CONSENT_AUDIT_EVIDENCE_MISSING', 'Privacy verifier must require consent audit evidence');
 assertIncludes(aiServer, 'sanitized_validation_error', 'AI validation responses must not echo image payload input');
 assertIncludes(aiServer, '"x-drapixai-training-use": "none"', 'AI service must expose the no-training contract');

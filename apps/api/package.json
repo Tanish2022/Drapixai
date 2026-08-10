@@ -13,6 +13,7 @@
     "garments:regenerate-cache:dist": "npm run build && node dist/scripts/regenerate-garment-caches.js",
     "tryon:purge-review-retention": "ts-node src/scripts/purge-tryon-review-retention.ts",
     "privacy:verify-shopper-media": "ts-node src/scripts/verify-shopper-media-privacy.ts",
+    "privacy:purge-legacy-media": "ts-node src/scripts/purge-legacy-render-media.ts",
     "tryon:purge-review-retention:dist": "npm run build && node dist/scripts/purge-tryon-review-retention.js",
     "email:send-test": "ts-node src/scripts/send-test-email.ts",
     "email:send-test:dist": "npm run build && node dist/scripts/send-test-email.js",
