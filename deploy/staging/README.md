@@ -69,8 +69,11 @@ in plaintext.
 
 9. Run `deploy/scripts/verify-private-listeners.sh` on the API/data host and
    `deploy/workstation/internal-proxy/verify-mtls-proxy.sh` on the GPU host. From
-   the API host, record a failed no-client-cert request and a successful dedicated
-   API-client-cert request; confirm the router or cloud firewall rules separately.
+   the API host, run `deploy/workstation/internal-proxy/verify-mtls-api-handshake.sh`
+   with the private GPU URL, internal CA, and dedicated API-client certificate/key.
+   Append both GPU verifier outputs to the redacted mTLS evidence file. Certification
+   requires proof that no-client access was rejected and the dedicated client
+   certificate received `HTTP 200`; confirm router or cloud firewall rules separately.
 
 10. Prove the running containers, not only the Compose source, use the exact release
     artifacts. Run the first command on the edge host and the second on the GPU host;
@@ -131,8 +134,7 @@ It refuses non-staging URLs, a dirty checkout, a commit mismatch, output outside
 `runtime/launch-evidence`, and a live-security URL that differs from the staging
 origin. It collects local topology, actual edge release-image, listener, live security, audit-chain,
 shopper-media privacy, and three-tenant API reports. It retains no output images;
-run the private-listener check separately on the GPU host and attach that redacted
-output to the same release record.
+run the GPU private-listener verifier and the API-host mTLS handshake verifier, append both redacted outputs to the same evidence file, and attach it to the release record.
 
 ## Promotion rule
 

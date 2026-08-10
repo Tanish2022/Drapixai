@@ -84,10 +84,16 @@ gpu_mtls_evidence="${DRAPIXAI_GPU_MTLS_EVIDENCE:-}"
   echo "DRAPIXAI_GPU_MTLS_EVIDENCE must point to redacted GPU mTLS verifier output." >&2
   exit 2
 }
-grep -Fq "PASS: GPU mTLS proxy requires client certificates" "$gpu_mtls_evidence" || {
-  echo "GPU mTLS evidence does not show a successful client-certificate boundary." >&2
-  exit 1
-}
+for marker in \
+  "PASS: GPU mTLS proxy requires client certificates" \
+  "PASS: GPU mTLS no-client handshake was rejected." \
+  "PASS: GPU mTLS API-client handshake returned HTTP 200." \
+  "PASS: GPU mTLS end-to-end handshake boundary passed."; do
+  grep -Fq "$marker" "$gpu_mtls_evidence" || {
+    echo "GPU mTLS evidence is missing required live boundary proof: $marker" >&2
+    exit 1
+  }
+done
 gpu_release_image_evidence="${DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE:-}"
 [[ -f "$gpu_release_image_evidence" ]] || {
   echo "DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE must point to redacted GPU release-image verifier output." >&2
