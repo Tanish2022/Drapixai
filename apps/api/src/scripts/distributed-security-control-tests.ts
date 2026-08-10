@@ -8,8 +8,13 @@ const main = async () => {
   process.env.DRAPIXAI_TENANT_MAX_CONCURRENT_TRYONS = '1';
   process.env.DRAPIXAI_TRYON_SLOT_LEASE_MS = '30000';
 
-  const controlRedis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-  await controlRedis.connect();
+  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  const controlRedis = createClient({ url: redisUrl });
+  try {
+    await controlRedis.connect();
+  } catch {
+    throw new Error(`DISTRIBUTED_SECURITY_REDIS_UNAVAILABLE: start Redis or set REDIS_URL to a reachable isolated test instance (${redisUrl}).`);
+  }
   const keys = await controlRedis.keys('drapixai:tryon-concurrency:*');
   if (keys.length > 0) await controlRedis.del(keys);
 
