@@ -102,8 +102,10 @@ the evidence file.
 
 ## Repeatable staging certification
 
-After saving the restricted environment file and a token-free three-tenant manifest,
-run the guarded certification runner from the exact clean release checkout:
+Start from `deploy/staging/certification.env.example`, copy it outside the repository,
+replace every placeholder from the staging secret store, and set the resulting file to mode
+`0600`. Keep the three-tenant manifest token-free; it references token environment-variable
+names only. Then run the guarded certification runner from the exact clean release checkout:
 
 ```bash
 bash deploy/staging/certify-release.sh /run/secrets/drapixai-staging-certification.env

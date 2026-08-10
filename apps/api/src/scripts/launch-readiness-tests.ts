@@ -311,6 +311,7 @@ const authorizationLib = read('apps/api/src/lib/authorization.ts');
 const securityReleaseGate = read('docs/security-release-gate.md');
 const stagingPentest = read('deploy/scripts/pentest-staging.sh');
 const stagingCertification = read('deploy/staging/certify-release.sh');
+const stagingCertificationTemplate = read('deploy/staging/certification.env.example');
 const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
 const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const launchGateReport = read('scripts/launch-gate-report.mjs');
@@ -1593,6 +1594,9 @@ assertIncludes(stagingCertification, 'privacy:verify-shopper-media', 'Staging ce
 assertIncludes(stagingCertification, 'benchmark-three-tenant-public-api.py', 'Staging certification runner must execute the three-tenant public certification');
 assertIncludes(stagingCertification, 'runtime/launch-evidence', 'Staging certification runner must keep evidence in the ignored evidence directory');
 assertIncludes(stagingCertification, 'write_summary "FAIL"', 'Staging certification runner must retain a redacted failure summary');
+assertIncludes(stagingCertificationTemplate, 'DRAPIXAI_STAGING_CERTIFICATION_ENVIRONMENT=staging', 'Staging certification template must lock the environment to staging');
+assertIncludes(stagingCertificationTemplate, 'DRAPIXAI_THREE_TENANT_MANIFEST', 'Staging certification template must require a token-free three-tenant manifest reference');
+assertIncludes(gitignore, 'deploy/staging/certification.env', 'Git must ignore copied staging certification credentials');
 assertIncludes(publicThreeTenantBenchmark, 'x-drapixai-timing-json', 'Public three-tenant benchmark must collect GPU timing evidence');
 assertIncludes(publicThreeTenantBenchmark, 'worker batch was', 'Public three-tenant benchmark must reject a worker that does not form the target batch');
 assertIncludes(publicThreeTenantBenchmark, 'GPU headroom', 'Public three-tenant benchmark must reject unsafe GPU VRAM headroom');
