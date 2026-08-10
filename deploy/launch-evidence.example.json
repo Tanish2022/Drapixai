@@ -72,6 +72,13 @@
       "verifiedBy": "release-owner@example.com",
     "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     },
+    "three-tenant-gpu": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/three-user-gpu-report.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
     "quality-matrix": {
       "status": "PENDING",
       "evidence": "runtime/launch-evidence/release-record/upper-body-50-summary.json",

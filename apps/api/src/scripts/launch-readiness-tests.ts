@@ -440,6 +440,8 @@ assertIncludes(aiServer, '_read_upload_limited', 'AI server must enforce upload 
 assertIncludes(aiServer, 'REQUEST_BODY_TOO_LARGE', 'AI server must reject oversized declared request bodies before parsing');
 assertIncludes(aiServer, 'normalize_request_id', 'AI server must constrain client-supplied request IDs before logging them');
 assertIncludes(launchGates, 'ai-ingress-security', 'Launch gates must execute AI ingress hardening regressions');
+assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
+assert.ok('three-tenant-gpu' in launchEvidenceTemplate.gates, 'Launch-evidence template must include the three-tenant GPU certification artifact.');
 assertIncludes(aiServer, 'PRODUCTION_CONFIG_INVALID', 'AI server must fail closed when production secrets are missing');
 assertIncludes(aiServer, '_validate_image_bytes', 'AI server must validate image payloads before queueing work');
 assertIncludes(aiServer, 'hmac.compare_digest(token, settings.ai_service_token)', 'AI service-token checks must be timing safe');
@@ -1677,6 +1679,7 @@ assertIncludes(proxyReadme, 'verify-mtls-api-handshake.sh', 'GPU mTLS operator g
 assertIncludes(proxyReadme, 'Do not use `curl -k`', 'GPU mTLS operator guide must forbid insecure certificate bypasses.');
 assertIncludes(securityReleaseGate, 'no-client access is rejected', 'Security release gate must require a live no-client GPU mTLS rejection.');
 assertIncludes(securityReleaseGate, 'certificate receives `/health` HTTP `200`', 'Security release gate must require a live dedicated-client GPU mTLS success.');
+assertIncludes(securityReleaseGate, 'three-tenant public API batch', 'Security release gate must require a three-tenant GPU certification run.');
 assertIncludes(stagingCertification, 'DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE', 'Staging certification must require separate GPU release-image evidence.');
 assertIncludes(stagingCertification, 'edge-release-images', 'Staging certification must verify the running edge image artifacts.');
 assertIncludes(stagingCertification, 'privacy:verify-shopper-media', 'Staging certification runner must execute the shopper-media privacy check');

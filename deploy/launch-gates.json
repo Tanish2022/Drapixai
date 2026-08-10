@@ -192,6 +192,10 @@
       "label": "Public SDK try-on matches approved Standard direct quality and latency targets"
     },
     {
+      "id": "three-tenant-gpu",
+      "label": "Three concurrent tenant Standard try-ons meet quality, latency, VRAM headroom, and isolation thresholds"
+    },
+    {
       "id": "quality-matrix",
       "label": "Rights-cleared 50-case upper-body matrix meets the approved launch threshold"
     },
