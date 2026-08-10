@@ -1576,6 +1576,8 @@ assertIncludes(stagingPentest, '--memory 4g', 'Staging pentest helper must cap s
 assertIncludes(publicThreeTenantBenchmark, 'x-drapixai-timing-json', 'Public three-tenant benchmark must collect GPU timing evidence');
 assertIncludes(publicThreeTenantBenchmark, 'worker batch was', 'Public three-tenant benchmark must reject a worker that does not form the target batch');
 assertIncludes(publicThreeTenantBenchmark, 'GPU headroom', 'Public three-tenant benchmark must reject unsafe GPU VRAM headroom');
+assertIncludes(publicThreeTenantBenchmark, '--retain-output-images', 'Public three-tenant benchmark must make image retention an explicit opt-in');
+assertIncludes(publicThreeTenantBenchmark, 'output_images_retained', 'Public three-tenant benchmark must record whether it retained images');
 assertIncludes(launchGateReport, 'validateEvidenceArtifact', 'Complete launch reports must validate external evidence artifacts');
 assertIncludes(launchGateReport, 'evidence artifact sha256 does not match', 'Complete launch reports must reject altered evidence artifacts');
 assertIncludes(launchGateReport, 'runtime/launch-evidence', 'Complete launch reports must keep evidence inside the ignored local evidence root');

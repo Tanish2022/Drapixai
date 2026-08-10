@@ -26,6 +26,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--latency-target-ms", type=int, default=12000)
     parser.add_argument("--required-worker-batch-size", type=int, default=3)
     parser.add_argument("--minimum-headroom-ratio", type=float, default=0.20)
+    parser.add_argument(
+        "--retain-output-images",
+        action="store_true",
+        help="Save generated test PNGs for consented internal visual review. Disabled by default.",
+    )
     args = parser.parse_args()
     if args.required_worker_batch_size < 1 or args.required_worker_batch_size > 3:
         parser.error("--required-worker-batch-size must be between 1 and 3")
@@ -75,6 +80,7 @@ def run_case(
     base_url: str,
     output_dir: Path,
     timeout: int,
+    retain_output_images: bool,
 ) -> dict[str, Any]:
     case_id = str(case["id"])
     token = os.environ[str(case["token_env"])]
@@ -104,7 +110,8 @@ def run_case(
     wall_ms = int((time.perf_counter() - started) * 1000)
     response.raise_for_status()
     output_path = output_dir / f"{case_id}.png"
-    output_path.write_bytes(response.content)
+    if retain_output_images:
+        output_path.write_bytes(response.content)
     warnings = [item for item in response.headers.get("x-drapixai-warnings", "").split(",") if item]
     timing = parse_timing_header(response)
     return {
@@ -113,7 +120,7 @@ def run_case(
         "product_id": str(case["product_id"]),
         "tryon_id": response.headers.get("x-drapixai-tryon-result-id", ""),
         "status": response.status_code,
-        "output": str(output_path),
+        "output": str(output_path) if retain_output_images else None,
         "quality_score": float(response.headers.get("x-drapixai-quality-score") or 0),
         "candidate_count": int(response.headers.get("x-drapixai-candidate-count") or 0),
         "warnings": warnings,
@@ -180,6 +187,7 @@ def main() -> int:
                 base_url=args.base_url,
                 output_dir=output_dir,
                 timeout=args.timeout,
+                retain_output_images=args.retain_output_images,
             )
             for case in cases
         ]
@@ -228,6 +236,7 @@ def main() -> int:
         "latency_target_ms": args.latency_target_ms,
         "required_worker_batch_size": args.required_worker_batch_size,
         "minimum_headroom_ratio": args.minimum_headroom_ratio,
+        "output_images_retained": args.retain_output_images,
         "cross_tenant_probes": 6,
         "results": results,
         "failures": failures,

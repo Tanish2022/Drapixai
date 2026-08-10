@@ -79,10 +79,12 @@ python deploy/scripts/benchmark-three-tenant-public-api.py \
 ```
 
 Tokens are read from the three environment-variable names in the manifest and
-must never be written into the file. The test submits all three requests together,
-checks quality, latency, warnings, privacy headers, and unique result IDs, then
-proves that each tenant can read its own metadata while all six cross-tenant
-lookups return 404.
+must never be written into the file. By default the benchmark writes only its redacted
+summary and does not retain result PNGs. Add `--retain-output-images` only for a
+consented internal visual review, then delete those PNGs after approval. The test
+submits all three requests together, checks quality, latency, warnings, privacy
+headers, and unique result IDs, then proves that each tenant can read its own
+metadata while all six cross-tenant lookups return 404.
 
 ## Approval gates
 
