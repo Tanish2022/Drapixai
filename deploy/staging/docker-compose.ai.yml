@@ -2,7 +2,7 @@ name: drapixai-staging-ai
 
 services:
   redis:
-    image: ${DRAPIXAI_REDIS_IMAGE:-redis:7-alpine}
+    image: ${DRAPIXAI_REDIS_IMAGE:?set DRAPIXAI_REDIS_IMAGE}
     restart: unless-stopped
     command:
       - sh

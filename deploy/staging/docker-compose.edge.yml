@@ -2,7 +2,7 @@ name: drapixai-staging-edge
 
 services:
   postgres:
-    image: ${DRAPIXAI_POSTGRES_IMAGE:-postgres:16-alpine}
+    image: ${DRAPIXAI_POSTGRES_IMAGE:?set DRAPIXAI_POSTGRES_IMAGE}
     restart: unless-stopped
     environment:
       POSTGRES_USER: drapixai_staging
@@ -22,7 +22,7 @@ services:
       - data
 
   redis:
-    image: ${DRAPIXAI_REDIS_IMAGE:-redis:7-alpine}
+    image: ${DRAPIXAI_REDIS_IMAGE:?set DRAPIXAI_REDIS_IMAGE}
     restart: unless-stopped
     command:
       - sh
@@ -47,7 +47,7 @@ services:
       - data
 
   minio:
-    image: ${DRAPIXAI_MINIO_IMAGE:-minio/minio}
+    image: ${DRAPIXAI_MINIO_IMAGE:?set DRAPIXAI_MINIO_IMAGE}
     restart: unless-stopped
     command: server /data
     environment:
@@ -64,7 +64,7 @@ services:
       - data
 
   minio-init:
-    image: ${DRAPIXAI_MINIO_MC_IMAGE:-minio/mc}
+    image: ${DRAPIXAI_MINIO_MC_IMAGE:?set DRAPIXAI_MINIO_MC_IMAGE}
     restart: "no"
     depends_on:
       - minio

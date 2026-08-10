@@ -72,6 +72,15 @@ def main() -> int:
     runtime_image = image_values.get("DRAPIXAI_AI_RUNTIME_IMAGE", "")
     if not re.fullmatch(r"pytorch/pytorch:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}", runtime_image):
         failures.append("staging images env must pin DRAPIXAI_AI_RUNTIME_IMAGE to an official image digest")
+    for image_variable in (
+        "DRAPIXAI_POSTGRES_IMAGE",
+        "DRAPIXAI_REDIS_IMAGE",
+        "DRAPIXAI_MINIO_IMAGE",
+        "DRAPIXAI_MINIO_MC_IMAGE",
+    ):
+        image = image_values.get(image_variable, "")
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}", image):
+            failures.append(f"staging images env must pin {image_variable} by digest")
     profile_check = subprocess.run(
         [sys.executable, str(repo_root / "deploy" / "scripts" / "verify-standard-release-profile.py")],
         cwd=repo_root,
@@ -92,6 +101,7 @@ def main() -> int:
             "secrets_are_mounted_and_git_ignored": True,
             "standard_release_profile_is_loaded": profile_check.returncode == 0,
             "ai_runtime_image_is_digest_pinned": not any("runtime_image" in failure or "images env" in failure for failure in failures),
+            "all_staging_service_images_are_digest_pinned": not any("must pin DRAPIXAI_" in failure for failure in failures),
             "api_to_gpu_mtls_is_configured": not any("mTLS" in failure or "internal CA" in failure for failure in failures),
         },
     }

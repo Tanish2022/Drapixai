@@ -1582,6 +1582,8 @@ assertIncludes(validateEnv, 'DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell'
 assertIncludes(aiCompose, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Production AI Compose must receive the digest-pinned runtime image from its private environment');
 assertIncludes(stagingAiCompose, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Staging AI Compose must use the same runtime-image contract as production');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:', 'Staging Compose interpolation must supply the digest-pinned AI runtime image before service env files load');
+assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_POSTGRES_IMAGE=postgres:', 'Staging Compose must pin the PostgreSQL image before service startup.');
+assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_REDIS_IMAGE=redis:', 'Staging Compose must pin the Redis image before service startup.');
 assertIncludes(gitignore, 'deploy/staging/.images.env', 'The real staging Compose input file must remain out of Git');
 assertIncludes(aiProductionExample, 'DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:', 'Production AI environment must pin an official PyTorch runtime image');
 assertIncludes(validateEnv, 'require_pinned_pytorch_runtime_image', 'AI production validation must reject unpinned runtime images');
