@@ -1265,6 +1265,7 @@ assertIncludes(proveLivePowerShell, 'Web AI ready', 'Live proof PowerShell must 
 assertIncludes(proveLiveShell, 'resolve_dashboard_proxy_token', 'Live proof shell must resolve dashboard proxy token for SDK smoke flow');
 assertIncludes(proveLiveShell, 'DASHBOARD_PROXY_TOKEN="$dashboard_proxy_token" bash', 'Live proof shell must pass dashboard proxy token to SDK smoke flow');
 assertIncludes(localPreflight, 'Get-LocalSetting', 'Local preflight must read local .env port overrides');
+assertIncludes(localPreflight, "(?m)^ Server:", 'Local preflight must require a reachable Docker Server rather than only the Docker client.');
 assertIncludes(localPreflight, 'Test-LocalPortOpen', 'Local preflight must accept IPv4 or IPv6 localhost bindings');
 assertIncludes(localPreflight, 'Test-DockerPublishedPort', 'Local preflight must verify Docker port bindings, not only open localhost ports');
 assertIncludes(localPreflight, 'Get-PortOwnerDetail', 'Local preflight must report which container owns an occupied port');

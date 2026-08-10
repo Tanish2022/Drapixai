@@ -168,7 +168,10 @@ try {
     $dockerInfo = & docker info 2>&1
     $dockerExitCode = $LASTEXITCODE
     $ErrorActionPreference = $previousErrorPreference
-    Add-Check "Docker daemon" ($dockerExitCode -eq 0) (($dockerInfo | Select-Object -First 1) -join "")
+    $dockerInfoText = $dockerInfo -join "`n"
+    $dockerDaemonReady = $dockerExitCode -eq 0 -and $dockerInfoText -match '(?m)^ Server:'
+    $dockerDetail = if ($dockerDaemonReady) { "Docker Server endpoint reachable" } else { "Docker Server endpoint unavailable: $(($dockerInfo | Select-Object -First 1) -join '')" }
+    Add-Check "Docker daemon" $dockerDaemonReady $dockerDetail
 
     foreach ($container in @("drapixai-postgres", "drapixai-redis", "drapixai-minio")) {
       Add-Check "Docker container: $container" (Test-DockerContainerRunning $container) $container
