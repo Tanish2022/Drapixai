@@ -354,6 +354,14 @@ The on-premises RTX PRO 6000 Blackwell workstation is the primary production GPU
 - Queue: private Redis credentials and network segment distinct from public API and database services.
 - Worker: preload CatVTON before opening traffic; begin with adaptive batching disabled, then enable three-user batching only after its acceptance test passes.
 
+Before starting the AI Compose project on the workstation, set the exact release
+commit and a reviewed, digest-pinned CUDA probe image, then run:
+
+```bash
+export DRAPIXAI_EXPECTED_GIT_REF=replace-with-40-character-release-commit
+export DRAPIXAI_NVIDIA_CUDA_PROBE_IMAGE=registry.example.com/cuda-probe@sha256:replace-with-64-hex-digest
+bash deploy/workstation/preflight.sh deploy/env/ai.production.env
+```
 ### Assumptions that still need live confirmation
 
 - the audited Blackwell-native runtime passes its dependency audit and xFormers CUDA kernel check on this exact driver;
