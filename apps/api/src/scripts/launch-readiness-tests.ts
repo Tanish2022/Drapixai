@@ -1180,6 +1180,7 @@ assertIncludes(watermarkService, 'const escapeSvgText =', 'Watermark SVG text mu
 assertIncludes(watermarkService, 'const sanitizeWatermarkColor =', 'Watermark SVG color must be allowlisted');
 assertIncludes(watermarkService, 'const redactObjectKey =', 'Watermark logs must redact storage object keys');
 assertNotIncludes(watermarkService, '`Downloading ${inputKey} from S3...`', 'Watermark logs must not print raw input object keys');
+assertNotIncludes(sdkRoute, '`Uploaded session image to ${inputKey}`', 'SDK logs must not print raw shopper object keys');
 assertNotIncludes(watermarkService, '`Uploading to ${outputKey}...`', 'Watermark logs must not print raw output object keys');
 assertNotIncludes(watermarkService, "console.error('Watermark processing error:', error);", 'Watermark errors must not dump raw exception objects');
 assertIncludes(emailerService, 'logId: log.id', 'Email helper must expose the EmailLog id for launch verification');

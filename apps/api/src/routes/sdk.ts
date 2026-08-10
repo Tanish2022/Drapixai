@@ -791,7 +791,7 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, upload.single('
         ContentType: req.file.mimetype,
         ...getStorageEncryptionParams(),
       }));
-      console.log(`Uploaded session image to ${inputKey}`);
+      console.log('Uploaded encrypted session image');
     } catch (s3Error) {
       if (!STORAGE_LOCAL_FALLBACK_ALLOWED) throw s3Error;
       console.log('S3 not available, using local temp storage');
