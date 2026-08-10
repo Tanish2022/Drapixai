@@ -919,6 +919,10 @@ assertNotIncludes(sdkReactDoc, 'storefront-token?productId=', 'React SDK docs mu
 assertIncludes(sdkInstallPage, "method: 'POST'", 'SDK install snippets must request shopper tokens with POST.');
 assertNotIncludes(sdkInstallPage, 'drapixai-token?productId=', 'SDK install snippets must not teach a cacheable shopper-token GET endpoint.');
 assertIncludes(helpPage, "method: 'POST'", 'Help SDK examples must request shopper tokens with POST.');
+assertIncludes(homePage, "method: 'POST'", 'Homepage SDK example must request shopper tokens with POST.');
+assertNotIncludes(homePage, 'drapixai-token?productId=', 'Homepage must not teach a cacheable shopper-token GET endpoint.');
+assertIncludes(dashboardPage, "method: 'POST'", 'Dashboard SDK examples must request shopper tokens with POST.');
+assertNotIncludes(dashboardPage, 'drapixai-token?productId=', 'Dashboard must not teach a cacheable shopper-token GET endpoint.');
 assertNotIncludes(helpPage, 'drapixai-token?productId=', 'Help SDK examples must not teach a cacheable shopper-token GET endpoint.');
 assertIncludes(sdkReactDoc, 'confirmed DrapixAI product mapping', 'React SDK docs must require confirmed product mappings.');
 assertIncludes(sdkReactDoc, 'approved cached garment asset', 'React SDK docs must describe cached garment try-on usage.');
