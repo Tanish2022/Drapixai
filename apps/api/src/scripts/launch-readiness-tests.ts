@@ -323,6 +323,7 @@ const stagingCertificationTemplate = read('deploy/staging/certification.env.exam
 const mtlsApiHandshakeVerifier = read('deploy/workstation/internal-proxy/verify-mtls-api-handshake.sh');
 const proxyReadme = read('deploy/workstation/internal-proxy/README.md');
 const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-boundary-tests.ts');
+const distributedSecurityTest = read('apps/api/src/scripts/distributed-security-control-tests.ts');
 const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const launchGateReport = read('scripts/launch-gate-report.mjs');
 const launchEvidenceRecorder = read('scripts/record-launch-evidence.mjs');
@@ -1790,6 +1791,7 @@ assertIncludes(publicApiRoute, 'apiKeyRateLimit', 'Public routes must have API-k
 assertIncludes(publicApiRoute, 'tenantRateLimit', 'Public routes must have tenant-level rate limiting');
 assertIncludes(tryOnConcurrency, "drapixai:tryon-concurrency:tenant:", 'GPU capacity must be partitioned by tenant');
 assertIncludes(tryOnConcurrency, "DRAPIXAI_MAX_CONCURRENT_TRYONS", 'Global GPU concurrency must be configurable');
+assertIncludes(distributedSecurityTest, 'An expired GPU slot must be reclaimed', 'Distributed security tests must prove that crashed-worker concurrency leases expire safely.');
 assertIncludes(tryOnConcurrency, "DRAPIXAI_TENANT_MAX_CONCURRENT_TRYONS", 'Per-tenant GPU concurrency must be configurable');
 assertIncludes(tryOnConcurrency, "ZREMRANGEBYSCORE", 'Crashed GPU leases must expire automatically');
 assertIncludes(sdkRoute, 'acquireTryOnSlot(user.id)', 'SDK and public API generation must acquire a tenant GPU slot');

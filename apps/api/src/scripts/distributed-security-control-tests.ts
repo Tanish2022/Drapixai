@@ -38,6 +38,18 @@ const main = async () => {
   for (const result of [second, third, afterRelease]) {
     if (result.ok) await concurrency.releaseTryOnSlot(result.lease);
   }
+
+  // A crashed API process cannot release its lease. The next request must reclaim
+  // the expired ZSET member instead of leaving a tenant or the GPU permanently full.
+  process.env.DRAPIXAI_TRYON_SLOT_LEASE_MS = '25';
+  const expiringLease = await concurrency.acquireTryOnSlot(201);
+  assert.equal(expiringLease.ok, true);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  const afterExpiry = await concurrency.acquireTryOnSlot(201);
+  assert.equal(afterExpiry.ok, true, 'An expired GPU slot must be reclaimed after a process crash');
+  for (const result of [expiringLease, afterExpiry]) {
+    if (result.ok) await concurrency.releaseTryOnSlot(result.lease);
+  }
   await concurrency.closeTryOnConcurrencyForTests();
   await controlRedis.quit();
 
