@@ -33,7 +33,7 @@ in plaintext.
    cp deploy/staging/.images.env.example deploy/staging/.images.env
    ```
 
-2. Keep the non-secret Compose image inputs beside the staging files. `DRAPIXAI_AI_RUNTIME_IMAGE` must stay at the digest supplied in `.images.env.example`; Compose reads this file before service `env_file` values exist.
+2. Keep the non-secret Compose image inputs beside the staging files. Copy the exact `DRAPIXAI_RELEASE_COMMIT` and all three application release-image digests from the scanned artifact record; `DRAPIXAI_AI_RUNTIME_IMAGE` records approved base-image provenance. Compose reads `.images.env` before service `env_file` values exist.
 
 3. Generate staging-only mounted secrets:
 
@@ -62,9 +62,9 @@ in plaintext.
 
    ```bash
    docker compose --env-file deploy/staging/.images.env \
-     -f deploy/staging/docker-compose.edge.yml up -d --build
+     -f deploy/staging/docker-compose.edge.yml up -d
    docker compose --env-file deploy/staging/.images.env \
-     -f deploy/staging/docker-compose.ai.yml up -d --build
+     -f deploy/staging/docker-compose.ai.yml up -d
    ```
 
 9. Run `deploy/scripts/verify-private-listeners.sh` on the API/data host and
@@ -72,8 +72,17 @@ in plaintext.
    the API host, record a failed no-client-cert request and a successful dedicated
    API-client-cert request; confirm the router or cloud firewall rules separately.
 
-10. Apply the Prisma migration with backup evidence, then run the complete staging
-   smoke and security suites. Never point staging at production to save setup time.
+10. Prove the running containers, not only the Compose source, use the exact release
+    artifacts. Run the first command on the edge host and the second on the GPU host;
+    keep the GPU output as redacted certification evidence:
+
+   ```bash
+   bash deploy/staging/verify-release-images.sh edge deploy/staging/.images.env <release-commit>
+   bash deploy/staging/verify-release-images.sh ai deploy/staging/.images.env <release-commit>
+   ```
+
+11. Apply the Prisma migration with backup evidence, then run the complete staging
+    smoke and security suites. Never point staging at production to save setup time.
 
 ## Live security-boundary certification
 
@@ -120,7 +129,7 @@ bash deploy/staging/certify-release.sh /run/secrets/drapixai-staging-certificati
 
 It refuses non-staging URLs, a dirty checkout, a commit mismatch, output outside
 `runtime/launch-evidence`, and a live-security URL that differs from the staging
-origin. It collects the local topology, listener, live security, audit-chain,
+origin. It collects local topology, actual edge release-image, listener, live security, audit-chain,
 shopper-media privacy, and three-tenant API reports. It retains no output images;
 run the private-listener check separately on the GPU host and attach that redacted
 output to the same release record.

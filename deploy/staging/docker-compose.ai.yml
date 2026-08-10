@@ -22,11 +22,7 @@ services:
       - ai-private
 
   ai-api:
-    build:
-      context: ../..
-      dockerfile: drapixai_ai/docker/Dockerfile
-      args:
-        DRAPIXAI_AI_BASE_IMAGE: ${DRAPIXAI_AI_RUNTIME_IMAGE:?set DRAPIXAI_AI_RUNTIME_IMAGE}
+    image: ${DRAPIXAI_AI_RELEASE_IMAGE:?set DRAPIXAI_AI_RELEASE_IMAGE}
     restart: unless-stopped
     env_file:
       - ../env/ai.staging.env
@@ -53,11 +49,7 @@ services:
     gpus: all
 
   ai-worker:
-    build:
-      context: ../..
-      dockerfile: drapixai_ai/docker/Dockerfile
-      args:
-        DRAPIXAI_AI_BASE_IMAGE: ${DRAPIXAI_AI_RUNTIME_IMAGE:?set DRAPIXAI_AI_RUNTIME_IMAGE}
+    image: ${DRAPIXAI_AI_RELEASE_IMAGE:?set DRAPIXAI_AI_RELEASE_IMAGE}
     restart: unless-stopped
     env_file:
       - ../env/ai.staging.env

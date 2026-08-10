@@ -11,6 +11,7 @@ The environment file must remain outside Git and provide:
   DRAPIXAI_STAGING_CERTIFICATION_ENVIRONMENT=staging
   DRAPIXAI_STAGING_CERTIFICATION_API_URL=https://api.staging.example.com
   DRAPIXAI_EXPECTED_GIT_REF=<40-character release commit>
+  DRAPIXAI_STAGING_IMAGES_ENV=/secure/drapixai-staging-images.env
   DRAPIXAI_THREE_TENANT_MANIFEST=/secure/three-tenant-manifest.json
 
 It may also provide the live security-boundary test variables documented in
@@ -67,12 +68,17 @@ expected_commit="$(git -C "$repo_root" rev-parse "${expected_ref}^{commit}" 2>/d
   exit 1
 }
 
+images_env="${DRAPIXAI_STAGING_IMAGES_ENV:-}"
+[[ -f "$images_env" ]] || {
+  echo "DRAPIXAI_STAGING_IMAGES_ENV must point to the private staging image record." >&2
+  exit 2
+}
+
 manifest="${DRAPIXAI_THREE_TENANT_MANIFEST:-}"
 [[ -f "$manifest" ]] || {
   echo "DRAPIXAI_THREE_TENANT_MANIFEST must point to a local, token-free three-tenant manifest." >&2
   exit 2
 }
-
 gpu_mtls_evidence="${DRAPIXAI_GPU_MTLS_EVIDENCE:-}"
 [[ -f "$gpu_mtls_evidence" ]] || {
   echo "DRAPIXAI_GPU_MTLS_EVIDENCE must point to redacted GPU mTLS verifier output." >&2
@@ -82,7 +88,15 @@ grep -Fq "PASS: GPU mTLS proxy requires client certificates" "$gpu_mtls_evidence
   echo "GPU mTLS evidence does not show a successful client-certificate boundary." >&2
   exit 1
 }
-
+gpu_release_image_evidence="${DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE:-}"
+[[ -f "$gpu_release_image_evidence" ]] || {
+  echo "DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE must point to redacted GPU release-image verifier output." >&2
+  exit 2
+}
+grep -Fq "PASS: Staging ai services use expected release image digests" "$gpu_release_image_evidence" || {
+  echo "GPU release-image evidence does not prove the approved artifact is running." >&2
+  exit 1
+}
 required_live_vars=(
   DRAPIXAI_SECURITY_TEST_API_URL
   DRAPIXAI_SECURITY_TEST_SERVER_KEY_A
@@ -153,8 +167,10 @@ run_and_record() {
 }
 
 run_and_record topology python3 "$repo_root/deploy/scripts/verify-staging-topology.py"
+run_and_record edge-release-images bash "$repo_root/deploy/staging/verify-release-images.sh" edge "$images_env" "$current_commit"
 run_and_record edge-private-listeners bash "$repo_root/deploy/scripts/verify-private-listeners.sh"
 run_and_record gpu-mtls-evidence cat "$gpu_mtls_evidence"
+run_and_record gpu-release-images-evidence cat "$gpu_release_image_evidence"
 run_and_record live-security npm --prefix "$repo_root/apps/api" run test:security:live
 run_and_record audit-chain npm --prefix "$repo_root/apps/api" run security:audit:verify
 run_and_record shopper-media-privacy npm --prefix "$repo_root/apps/api" run privacy:verify-shopper-media
