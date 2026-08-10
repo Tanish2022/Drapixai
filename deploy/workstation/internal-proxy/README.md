@@ -68,7 +68,23 @@ DRAPIXAI_AI_MTLS_KEY_FILE=/run/secrets/drapixai-ai-client.key
 ```
 
 The source configuration prevents accidental public exposure, but the
-end-to-end API client-certificate test remains a release gate.
+end-to-end API client-certificate test remains a release gate. From the API
+host or a locked-down API-runtime shell that can read the mounted client
+certificate, run this against the private GPU DNS name only:
+
+```bash
+export DRAPIXAI_MTLS_GPU_URL=https://ai.drapixai.staging.internal
+export DRAPIXAI_MTLS_CA_CERT=/run/secrets/drapixai-internal-ca.pem
+export DRAPIXAI_MTLS_CLIENT_CERT=/run/secrets/drapixai-ai-client.crt
+export DRAPIXAI_MTLS_CLIENT_KEY=/run/secrets/drapixai-ai-client.key
+bash deploy/workstation/internal-proxy/verify-mtls-api-handshake.sh \
+  | tee /secure/drapixai-gpu-mtls-handshake.out
+```
+
+Do not use `curl -k`, a public DNS name, a public proxy, copied key material, or
+shell history for this check. Append the redacted output to the GPU listener
+verifier output before supplying `DRAPIXAI_GPU_MTLS_EVIDENCE` to staging
+certification.
 
 ## Required proof
 

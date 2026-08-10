@@ -83,7 +83,7 @@ CI builds and scans the API and web runtime images with the immutable Trivy imag
    ```
 5. Verify `npm --prefix apps/api run security:audit:verify` reports `valid: true`.
 6. Exercise retention with a short test window, confirm object deletion, database URL clearing, failure retry, and immutable audit evidence.
-7. Verify Redis, PostgreSQL, MinIO/S3 management, and the GPU worker have no public listener. Only HTTPS edge ports may be public.
+7. Verify Redis, PostgreSQL, MinIO/S3 management, and the GPU worker have no public listener. Only HTTPS edge ports may be public. Save the GPU listener check plus an API-host mTLS test that proves no-client access is rejected and the dedicated API client certificate receives `/health` HTTP `200`.
 8. Verify backup restore, secret rotation, key revocation, alert delivery, and incident rollback.
 
 ## Independent penetration test
