@@ -6,6 +6,7 @@ import path from 'path';
 import { createStorageClient } from '../lib/storage';
 import { safeFetchBuffer } from '../lib/remote-fetch';
 import { formatLogError, readLocalUploadFile } from '../lib/security';
+import { aiFetch } from '../lib/ai-client';
 
 type GarmentPreprocessResponse = {
   cache_key?: string;
@@ -164,7 +165,7 @@ const main = async () => {
     }
 
     try {
-      const response = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+      const response = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
         headers: getAiHeaders({
           'Content-Type': 'application/json',

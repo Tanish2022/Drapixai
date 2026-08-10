@@ -73,6 +73,16 @@ manifest="${DRAPIXAI_THREE_TENANT_MANIFEST:-}"
   exit 2
 }
 
+gpu_mtls_evidence="${DRAPIXAI_GPU_MTLS_EVIDENCE:-}"
+[[ -f "$gpu_mtls_evidence" ]] || {
+  echo "DRAPIXAI_GPU_MTLS_EVIDENCE must point to redacted GPU mTLS verifier output." >&2
+  exit 2
+}
+grep -Fq "PASS: GPU mTLS proxy requires client certificates" "$gpu_mtls_evidence" || {
+  echo "GPU mTLS evidence does not show a successful client-certificate boundary." >&2
+  exit 1
+}
+
 required_live_vars=(
   DRAPIXAI_SECURITY_TEST_API_URL
   DRAPIXAI_SECURITY_TEST_SERVER_KEY_A
@@ -143,7 +153,8 @@ run_and_record() {
 }
 
 run_and_record topology python3 "$repo_root/deploy/scripts/verify-staging-topology.py"
-run_and_record private-listeners bash "$repo_root/deploy/scripts/verify-private-listeners.sh"
+run_and_record edge-private-listeners bash "$repo_root/deploy/scripts/verify-private-listeners.sh"
+run_and_record gpu-mtls-evidence cat "$gpu_mtls_evidence"
 run_and_record live-security npm --prefix "$repo_root/apps/api" run test:security:live
 run_and_record audit-chain npm --prefix "$repo_root/apps/api" run security:audit:verify
 run_and_record shopper-media-privacy npm --prefix "$repo_root/apps/api" run privacy:verify-shopper-media

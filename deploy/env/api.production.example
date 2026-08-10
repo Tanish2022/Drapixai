@@ -2,6 +2,7 @@ NODE_ENV=production
 PORT=8000
 DRAPIXAI_SECRETS_PROVIDER=aws-secrets-manager
 DRAPIXAI_AWS_SECRET_ID=drapixai/production/api
+DRAPIXAI_INTERNAL_TLS_SECRETS_DIR=/run/secrets/drapixai-api-internal-tls
 # Alternative: DRAPIXAI_SECRETS_PROVIDER=mounted-file
 # DRAPIXAI_MOUNTED_SECRET_FILE=/run/secrets/drapixai-api
 DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:5432/drapixai?sslmode=verify-full
@@ -25,6 +26,9 @@ DRAPIXAI_DASHBOARD_PROXY_TOKEN=replace-with-the-same-dashboard-proxy-token
 DRAPIXAI_AI_URL=https://ai.drapixai.internal
 DRAPIXAI_AI_ALLOWED_HOSTS=ai.drapixai.internal
 DRAPIXAI_AI_PRIVATE_NETWORK=1
+DRAPIXAI_AI_MTLS_ENABLED=1
+DRAPIXAI_AI_MTLS_CERT_FILE=/run/secrets/drapixai-ai-client.crt
+DRAPIXAI_AI_MTLS_KEY_FILE=/run/secrets/drapixai-ai-client.key
 NODE_EXTRA_CA_CERTS=/run/secrets/drapixai-internal-ca.pem
 DRAPIXAI_AI_SERVICE_TOKEN=replace-with-a-long-random-secret
 DRAPIXAI_CORS_ORIGINS=https://drapixai.com,https://www.drapixai.com

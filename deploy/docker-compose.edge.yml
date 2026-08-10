@@ -25,6 +25,10 @@ services:
       - ./env/api.production.env
     environment:
       REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379
+    volumes:
+      - ${DRAPIXAI_INTERNAL_TLS_SECRETS_DIR:?set DRAPIXAI_INTERNAL_TLS_SECRETS_DIR}/drapixai-internal-ca.pem:/run/secrets/drapixai-internal-ca.pem:ro
+      - ${DRAPIXAI_INTERNAL_TLS_SECRETS_DIR:?set DRAPIXAI_INTERNAL_TLS_SECRETS_DIR}/drapixai-ai-client.crt:/run/secrets/drapixai-ai-client.crt:ro
+      - ${DRAPIXAI_INTERNAL_TLS_SECRETS_DIR:?set DRAPIXAI_INTERNAL_TLS_SECRETS_DIR}/drapixai-ai-client.key:/run/secrets/drapixai-ai-client.key:ro
     depends_on:
       - redis
     expose:

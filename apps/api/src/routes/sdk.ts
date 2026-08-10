@@ -3,6 +3,7 @@
  */
 
 import { Router } from 'express';
+import { aiFetch } from '../lib/ai-client';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
 import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
@@ -246,7 +247,7 @@ const isExpectedCacheKey = (cacheKey: string | undefined | null, garmentType = '
 };
 
 const getCacheImageInfo = async (cacheKey: string, garmentType = 'upper') => {
-  const response = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(cacheKey)}`, {
+  const response = await aiFetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(cacheKey)}`, {
     headers: getAiHeaders()
   });
   const width = Number(response.headers.get('x-drapixai-cache-width') || 0);
@@ -1063,7 +1064,7 @@ router.post('/tryon', authMiddleware, upload.fields([
           garment_type: garmentType,
           admin_bypass: false
         };
-        const regenRes = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+        const regenRes = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
           method: 'POST',
           headers: getAiHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(regenPayload)
@@ -1155,7 +1156,7 @@ router.post('/tryon', authMiddleware, upload.fields([
 
       let aiResponse: Response;
       try {
-        aiResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
+        aiResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
           method: 'POST',
           headers: getAiHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload)
@@ -1398,7 +1399,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
       admin_bypass: adminBypass
     };
 
-    const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+    const aiResponse = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
       method: 'POST',
       headers: getAiHeaders({
         'Content-Type': 'application/json',
@@ -1516,7 +1517,7 @@ router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.arra
         garment_type: requestedGarmentType,
         admin_bypass: false
       };
-      const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+      const aiResponse = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
         headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
@@ -1794,7 +1795,7 @@ router.get('/garments/:garmentId/image', authMiddleware, requireDashboardProxy, 
     if (!garment || !garment.cacheKey) {
       return res.status(404).json({ error: 'GARMENT_NOT_READY' });
     }
-    const aiRes = await fetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(garment.cacheKey)}`, {
+    const aiRes = await aiFetch(`${AI_URL}/ai/garment/cache?cache_key=${encodeURIComponent(garment.cacheKey)}`, {
       headers: getAiHeaders()
     });
     if (!aiRes.ok) {

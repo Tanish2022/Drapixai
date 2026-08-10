@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { aiFetch } from '../lib/ai-client';
 import { PrismaClient } from '@prisma/client';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { createClient } from 'redis';
@@ -251,9 +252,9 @@ router.get('/ops', async (_req, res) => {
 
   if (aiBaseUrl) {
     try {
-      const healthResponse = await fetch(`${aiBaseUrl}/health`, { signal: AbortSignal.timeout(5000) });
+      const healthResponse = await aiFetch(`${aiBaseUrl}/health`, { signal: AbortSignal.timeout(5000) });
       aiReachable = healthResponse.ok;
-      const readyResponse = await fetch(`${aiBaseUrl}/ready`, { signal: AbortSignal.timeout(5000) });
+      const readyResponse = await aiFetch(`${aiBaseUrl}/ready`, { signal: AbortSignal.timeout(5000) });
       const readyPayload = await readyResponse.json().catch(() => null);
       const readyJson: { status?: string } =
         readyPayload && typeof readyPayload === 'object' ? (readyPayload as { status?: string }) : {};

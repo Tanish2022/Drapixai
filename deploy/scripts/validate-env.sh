@@ -260,6 +260,9 @@ if [[ "$profile" == "api" ]]; then
   require_equals DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON "0"
   require_equals DRAPIXAI_SDK_GENERATION_SOURCE "original_verified"
   require_equals DRAPIXAI_AI_PRIVATE_NETWORK "1"
+  require_equals DRAPIXAI_AI_MTLS_ENABLED "1"
+  require_var DRAPIXAI_AI_MTLS_CERT_FILE
+  require_var DRAPIXAI_AI_MTLS_KEY_FILE
   require_var DRAPIXAI_AI_ALLOWED_HOSTS
   ai_hostname="$(printf '%s' "$DRAPIXAI_AI_URL" | sed -E 's#^https://([^/:]+).*$#\1#' | tr '[:upper:]' '[:lower:]')"
   if [[ ",${DRAPIXAI_AI_ALLOWED_HOSTS,,}," != *",$ai_hostname,"* ]]; then

@@ -41,3 +41,5 @@ deploy/staging/certification.env
 output/
 outputs/
 deploy/staging/.images.env
+
+deploy/private/

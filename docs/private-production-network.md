@@ -14,8 +14,8 @@ For the on-premises RTX PRO 6000 workstation, use a dedicated Tailscale tailnet 
 2. Allow API-to-GPU TCP 443 only.
 3. Allow operations SSH only from the administrator device group.
 4. Deny GPU-to-database, GPU-to-Redis, and unrestricted outbound access.
-5. Terminate private TLS in front of the AI API and forward to `127.0.0.1:8080`.
+5. Run `deploy/workstation/internal-proxy/render-config.sh` to bind the mTLS Nginx proxy only to the VPN address, require the API client certificate, and forward to `127.0.0.1:8080`.
 6. Keep the RQ Redis instance on the GPU private network and use a separate credential from the API Redis instance.
 7. Rotate the AI service token and VPN machine credentials independently.
 
-Run `bash deploy/scripts/verify-private-listeners.sh` on database, Redis, MinIO, and GPU hosts. Also verify cloud security groups and the physical router firewall because a local listener check cannot inspect upstream firewalls.
+Run `bash deploy/scripts/verify-private-listeners.sh` on database, Redis, and MinIO hosts. On the GPU host, run `bash deploy/workstation/internal-proxy/verify-mtls-proxy.sh`; then prove an API-host request without its client certificate fails while the mounted API client certificate succeeds. Also verify cloud security groups and the physical router firewall because a local listener check cannot inspect upstream firewalls.

@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import sharp from 'sharp';
 import { createStorageClient, getStorageEncryptionParams, STORAGE_BUCKET, STORAGE_LOCAL_FALLBACK_ALLOWED } from '../lib/storage';
 import { buildUploadPath, detectImageMimeType, sanitizePathSegment } from '../lib/security';
+import { aiFetch } from '../lib/ai-client';
 
 const AI_URL = (process.env.DRAPIXAI_AI_URL || 'http://localhost:8080').replace(/\/+$/, '');
 const AI_SERVICE_TOKEN = (process.env.DRAPIXAI_AI_SERVICE_TOKEN || '').trim();
@@ -193,7 +194,7 @@ const preprocessProduct = async (prisma: PrismaClient, productId: number) => {
   if (!product?.imageUrl) throw new Error('SHOPIFY_PRODUCT_IMAGE_MISSING');
   const { image, mime } = await downloadShopifyImage(product.imageUrl);
   const garmentId = `shopify-${product.productId}`;
-  const aiResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+  const aiResponse = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

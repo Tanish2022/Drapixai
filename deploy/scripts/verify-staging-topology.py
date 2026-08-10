@@ -40,11 +40,15 @@ def main() -> int:
     require(ai, "standard-catvton-rc1.env", failures, "AI release profile")
     require(ai, "internal: true", failures, "AI network")
     require(ai, "DRAPIXAI_AI_RUNTIME_IMAGE", failures, "AI runtime image build argument")
+    require(edge, "drapixai-internal-ca.pem:/run/secrets/drapixai-internal-ca.pem:ro", failures, "API internal CA mount")
+    require(edge, "drapixai-ai-client.crt:/run/secrets/drapixai-ai-client.crt:ro", failures, "API mTLS certificate mount")
+    require(edge, "drapixai-ai-client.key:/run/secrets/drapixai-ai-client.key:ro", failures, "API mTLS private-key mount")
 
     env_requirements = {
         "DRAPIXAI_API_ENVIRONMENT": "sandbox",
         "DRAPIXAI_SECRETS_PROVIDER": "mounted-file",
         "DRAPIXAI_AI_PRIVATE_NETWORK": "1",
+        "DRAPIXAI_AI_MTLS_ENABLED": "1",
         "DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK": "0",
         "DRAPIXAI_ALLOW_LEGACY_API_KEYS": "0",
         "DRAPIXAI_ENABLE_LOWER_BODY": "0",
@@ -88,6 +92,7 @@ def main() -> int:
             "secrets_are_mounted_and_git_ignored": True,
             "standard_release_profile_is_loaded": profile_check.returncode == 0,
             "ai_runtime_image_is_digest_pinned": not any("runtime_image" in failure or "images env" in failure for failure in failures),
+            "api_to_gpu_mtls_is_configured": not any("mTLS" in failure or "internal CA" in failure for failure in failures),
         },
     }
     print(json.dumps(report, indent=2, sort_keys=True))

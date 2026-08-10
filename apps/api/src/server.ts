@@ -28,6 +28,7 @@ import { createVerifiedStorefrontOriginCache } from './lib/cors-origin-cache';
 import { processPendingWebhookDeliveries } from './services/webhooks';
 import { observeHttpResponse, renderOperationalMetrics } from './lib/operational-metrics';
 import { inputValidationMiddleware } from './lib/input-validation';
+import { assertAiMtlsConfiguration } from './lib/ai-client';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -152,6 +153,9 @@ const requireProductionConfig = () => {
   }
   requireHttpsUrl('DRAPIXAI_AI_URL');
   requireExact('DRAPIXAI_AI_PRIVATE_NETWORK', '1');
+  requireExact('DRAPIXAI_AI_MTLS_ENABLED', '1');
+  requireValue('DRAPIXAI_AI_MTLS_CERT_FILE');
+  requireValue('DRAPIXAI_AI_MTLS_KEY_FILE');
   const allowedAiHosts = requireValue('DRAPIXAI_AI_ALLOWED_HOSTS')
     .split(',')
     .map((host) => host.trim().toLowerCase())
@@ -228,6 +232,7 @@ const requireProductionConfig = () => {
 };
 
 requireProductionConfig();
+assertAiMtlsConfiguration();
 
 const localDevOrigins = [
   'http://localhost:3000',

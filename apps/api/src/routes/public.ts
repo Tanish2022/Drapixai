@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { aiFetch } from '../lib/ai-client';
 import { Prisma, PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
@@ -220,7 +221,7 @@ router.post(
       const personBytes = fs.readFileSync(personFile.path);
       const clothBytes = fs.readFileSync(clothFile.path);
 
-      const preprocessResponse = await fetch(`${AI_URL}/ai/garment/preprocess/base64`, {
+      const preprocessResponse = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
         headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
@@ -246,7 +247,7 @@ router.post(
       }
       transientCacheKey = preprocessResult.cache_key;
 
-      const tryOnResponse = await fetch(`${AI_URL}/ai/tryon/base64`, {
+      const tryOnResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
         method: 'POST',
         headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
@@ -320,7 +321,7 @@ router.post(
     } finally {
       if (transientCacheKey) {
         try {
-          const cleanupResponse = await fetch(`${AI_URL}/ai/garment/cache/delete`, {
+          const cleanupResponse = await aiFetch(`${AI_URL}/ai/garment/cache/delete`, {
             method: 'POST',
             headers: getAiHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ cache_key: transientCacheKey }),

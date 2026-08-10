@@ -41,14 +41,16 @@ in plaintext.
    python deploy/scripts/generate-staging-secrets.py
    ```
 
-4. Install the private CA certificate at
+4. Issue separate GPU server and API client certificates from the private CA, then install the CA certificate and API client certificate/key at
    `/run/secrets/drapixai-internal-ca.pem` in the API container. Configure the GPU
    reverse proxy with a certificate for `drapixai-ai.staging.internal`.
 
-5. Put the generated AI Redis password and service token on the GPU host through
+5. On the GPU host, follow `deploy/workstation/internal-proxy/README.md` to bind Nginx only to its VPN IP and require the API client certificate.
+
+6. Put the generated AI Redis password and service token on the GPU host through
    the VPN. Replace the matching placeholders in `ai.staging.env` locally.
 
-6. Verify source topology and environment separation:
+7. Verify source topology and environment separation:
 
    ```bash
    python deploy/scripts/verify-staging-topology.py
@@ -56,7 +58,7 @@ in plaintext.
      deploy/env/api.staging.env deploy/env/api.production.env
    ```
 
-7. Start the edge and GPU projects with different Compose project names:
+8. Start the edge and GPU projects with different Compose project names:
 
    ```bash
    docker compose --env-file deploy/staging/.images.env \
@@ -65,10 +67,12 @@ in plaintext.
      -f deploy/staging/docker-compose.ai.yml up -d --build
    ```
 
-8. Run `deploy/scripts/verify-private-listeners.sh` on both hosts and confirm the
-   router or cloud firewall rules separately.
+9. Run `deploy/scripts/verify-private-listeners.sh` on the API/data host and
+   `deploy/workstation/internal-proxy/verify-mtls-proxy.sh` on the GPU host. From
+   the API host, record a failed no-client-cert request and a successful dedicated
+   API-client-cert request; confirm the router or cloud firewall rules separately.
 
-9. Apply the Prisma migration with backup evidence, then run the complete staging
+10. Apply the Prisma migration with backup evidence, then run the complete staging
    smoke and security suites. Never point staging at production to save setup time.
 
 ## Live security-boundary certification

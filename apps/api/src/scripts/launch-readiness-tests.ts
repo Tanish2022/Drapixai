@@ -1607,6 +1607,8 @@ assertIncludes(stagingCertification, 'DRAPIXAI_STAGING_CERTIFICATION_ENVIRONMENT
 assertIncludes(stagingCertification, 'Refusing certification against a non-staging API host', 'Staging certification runner must refuse production targets');
 assertIncludes(stagingCertification, 'status --porcelain', 'Staging certification runner must require a clean release checkout');
 assertIncludes(stagingCertification, 'test:security:live', 'Staging certification runner must execute live tenant-security checks');
+assertIncludes(stagingCertification, 'edge-private-listeners', 'Staging certification must collect private-listener evidence from the edge host.');
+assertIncludes(stagingCertification, 'DRAPIXAI_GPU_MTLS_EVIDENCE', 'Staging certification must require separate GPU mTLS evidence.');
 assertIncludes(stagingCertification, 'privacy:verify-shopper-media', 'Staging certification runner must execute the shopper-media privacy check');
 assertIncludes(stagingCertification, 'benchmark-three-tenant-public-api.py', 'Staging certification runner must execute the three-tenant public certification');
 assertIncludes(stagingCertification, 'runtime/launch-evidence', 'Staging certification runner must keep evidence in the ignored evidence directory');
@@ -1693,6 +1695,9 @@ const isolationVerifier = read('deploy/scripts/verify-environment-isolation.mjs'
 const migrationWrapper = read('deploy/scripts/migrate-with-evidence.sh');
 const restoreWrapper = read('deploy/scripts/restore-postgres-backup.sh');
 const privateListenerVerifier = read('deploy/scripts/verify-private-listeners.sh');
+const aiClient = read('apps/api/src/lib/ai-client.ts');
+const mtlsProxyTemplate = read('deploy/workstation/internal-proxy/drapixai-ai-mtls.conf.template');
+const mtlsProxyVerifier = read('deploy/workstation/internal-proxy/verify-mtls-proxy.sh');
 const monitoringAlerts = read('deploy/monitoring/drapixai-alerts.yml');
 const securityOperations = read('docs/security-operations-runbook.md');
 assertIncludes(publicApiRoute, 'serverKeyRateLimit', 'Public token issuance must have API-key rate limiting');
@@ -1724,6 +1729,15 @@ assertIncludes(restoreWrapper, 'SELECT current_database()', 'Restore tooling mus
 assertIncludes(securityOperations, 'DRAPIXAI_CHANGE_APPROVAL_ID', 'Recovery runbook must document migration approval evidence');
 assertIncludes(securityOperations, 'DRAPIXAI_RESTORE_APPROVAL_ID', 'Recovery runbook must document restore approval evidence');
 assertIncludes(privateListenerVerifier, 'private service port', 'Deployment must verify private services are not on wildcard listeners');
+assertIncludes(apiServer, "requireExact('DRAPIXAI_AI_MTLS_ENABLED', '1')", 'Production API must require API-to-GPU mTLS.');
+assertIncludes(aiClient, 'cert: fs.readFileSync(certPath)', 'AI client must load its dedicated client certificate.');
+assertIncludes(aiClient, 'key: fs.readFileSync(keyPath)', 'AI client must load its dedicated client private key.');
+assertIncludes(aiClient, 'rejectUnauthorized: true', 'AI client must reject an untrusted GPU TLS certificate.');
+assertIncludes(sdkRoute, 'aiFetch(', 'SDK try-on must use the mTLS-aware AI client.');
+assertIncludes(mtlsProxyTemplate, 'ssl_verify_client on;', 'GPU proxy must require an API client certificate.');
+assertIncludes(mtlsProxyTemplate, 'proxy_pass http://127.0.0.1:', 'GPU proxy must forward only to loopback AI service.');
+assertIncludes(mtlsProxyVerifier, 'mTLS proxy port is exposed on a wildcard address', 'GPU proxy verifier must reject wildcard mTLS listeners.');
+assertIncludes(mtlsProxyVerifier, 'wildcard HTTP listener', 'GPU proxy verifier must reject the default public HTTP listener.');
 assertIncludes(operationalMetrics, 'drapixai_auth_failures_total', 'Operational metrics must expose authentication failures');
 assertIncludes(operationalMetrics, 'drapixai_gpu_queue_depth', 'Operational metrics must expose GPU queue growth');
 assertIncludes(monitoringAlerts, 'DrapixAIGpuQueueCritical', 'Monitoring must page on a critical GPU queue');

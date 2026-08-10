@@ -2,6 +2,7 @@ import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaClient, ShopifyInstallation } from '@prisma/client';
 import { removeLocalStoredFile } from '../lib/security';
 import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import { aiFetch } from '../lib/ai-client';
 
 const AI_URL = (process.env.DRAPIXAI_AI_URL || 'http://localhost:8080').replace(/\/+$/, '');
 const AI_SERVICE_TOKEN = (process.env.DRAPIXAI_AI_SERVICE_TOKEN || '').trim();
@@ -9,7 +10,7 @@ const storage = createStorageClient();
 
 const deleteAiCache = async (cacheKey: string | null) => {
   if (!cacheKey) return;
-  const response = await fetch(`${AI_URL}/ai/garment/cache/delete`, {
+  const response = await aiFetch(`${AI_URL}/ai/garment/cache/delete`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

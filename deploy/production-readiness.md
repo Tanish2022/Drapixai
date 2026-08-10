@@ -112,6 +112,10 @@ Required:
 - `DRAPIXAI_DASHBOARD_PROXY_TOKEN`
 - `DRAPIXAI_AI_URL`
 - `DRAPIXAI_AI_SERVICE_TOKEN`
+- `DRAPIXAI_AI_PRIVATE_NETWORK=1`
+- `DRAPIXAI_AI_MTLS_ENABLED=1`
+- `DRAPIXAI_AI_MTLS_CERT_FILE` and `DRAPIXAI_AI_MTLS_KEY_FILE`
+- `NODE_EXTRA_CA_CERTS`
 - `DRAPIXAI_CORS_ORIGINS`
 - `DRAPIXAI_ADMIN_TOKEN`
 - `DRAPIXAI_ADMIN_PASSWORD`
@@ -175,6 +179,10 @@ Required:
 - `DRAPIXAI_MIN_QUALITY_SCORE=0.95`
 - `DRAPIXAI_ADMIN_TOKEN`
 - `DRAPIXAI_AI_SERVICE_TOKEN`
+- `DRAPIXAI_AI_PRIVATE_NETWORK=1`
+- `DRAPIXAI_AI_MTLS_ENABLED=1`
+- `DRAPIXAI_AI_MTLS_CERT_FILE` and `DRAPIXAI_AI_MTLS_KEY_FILE`
+- `NODE_EXTRA_CA_CERTS`
 
 Required only when `DRAPIXAI_GARMENT_CACHE_BACKEND=s3`:
 
@@ -279,7 +287,7 @@ Fill these with your real values before launch:
 | `DRAPIXAI_REDIS_URL` | `redis://default:pass@redis-host:6379/0` | `deploy/env/ai.production.env` |
 | `NEXT_PUBLIC_WEB_BASE_URL` | `https://<your-domain>` | `deploy/env/web.production.env` |
 | `NEXT_PUBLIC_API_BASE_URL` | `https://api.<your-domain>` | `deploy/env/web.production.env` |
-| `DRAPIXAI_AI_URL` | `http://<runpod-ip>:8080` during staging | `deploy/env/api.production.env` |
+| `DRAPIXAI_AI_URL` | `https://ai.<private-domain>` over VPN/mTLS | `deploy/env/api.production.env` |
 | `SMTP_FROM` | `no-reply@<your-domain>` | `deploy/env/api.production.env` |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client id | `deploy/env/web.production.env` |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth web client secret | `deploy/env/web.production.env` |
@@ -510,7 +518,7 @@ Before calling anything launch-ready, complete this list:
 
 ## 12. Remaining Launch Evidence
 
-- replace the remaining `DRAPIXAI_AI_URL` placeholder with the next private/restricted live GPU endpoint
+- configure `DRAPIXAI_AI_URL` as the verified private VPN/mTLS GPU endpoint, then record failed and successful client-certificate handshakes
 - promote the primary RTX PRO 6000 Blackwell runtime only after direct/SDK parity, output-safety, quality, latency, and three-tenant validation on that exact release image
 - pass the rights-cleared 50-case upper-body matrix with one candidate, score at least `0.95`, no warnings, and recorded latency
 - deploy migrations to the production PostgreSQL database and prove API/Redis/AI readiness through the public HTTPS edge

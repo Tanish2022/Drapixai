@@ -95,6 +95,9 @@ services:
       - ../env/api.staging.env
     volumes:
       - ./private/drapixai-api.json:/run/secrets/drapixai-api:ro
+      - ./private/drapixai-internal-ca.pem:/run/secrets/drapixai-internal-ca.pem:ro
+      - ./private/drapixai-ai-client.crt:/run/secrets/drapixai-ai-client.crt:ro
+      - ./private/drapixai-ai-client.key:/run/secrets/drapixai-ai-client.key:ro
     depends_on:
       postgres:
         condition: service_healthy
