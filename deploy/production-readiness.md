@@ -20,6 +20,8 @@ DrapixAI public quality and reliability are validated on the same Linux GPU runt
 
 - Host OS: Ubuntu Linux with the NVIDIA driver and Docker NVIDIA runtime verified.
 - GPU preset: rtx-pro-6000-blackwell.
+- AI runtime: the digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel` image configured by `DRAPIXAI_AI_RUNTIME_IMAGE`; its CUDA 12.8/PyTorch 2.11 build is Blackwell-capable. It uses Python 3.12. The older RunPod Python 3.11/CUDA 12.4 stack is reference-only and must not run production Compose.
+- Host driver: NVIDIA 570 or newer; workstation preflight rejects an older driver before AI services start.
 - Runtime: Blackwell-native Linux image and the audited security-candidate Python stack, promoted only after direct, SDK, quality, latency, and three-tenant tests.
 - Mode: Standard-only CatVTON, one candidate, 22 steps, 2.5 guidance scale.
 - Caches and model locks are immutable for a release; shopper images remain transient under /dev/shm.
@@ -183,7 +185,7 @@ Required only when `DRAPIXAI_GARMENT_CACHE_BACKEND=s3`:
 
 Recommended defaults match the RTX PRO 6000 Standard path:
 
-- `DRAPIXAI_ENABLE_XFORMERS=1`
+- `DRAPIXAI_ENABLE_XFORMERS=0` for the pinned Blackwell runtime. Do not enable it until the exact workstation image passes the direct, SDK, latency, and quality certification suite.
 - `DRAPIXAI_ENABLE_TF32=1`
 - `DRAPIXAI_ENABLE_VAE_TILING=1`
 - `DRAPIXAI_ENABLE_CPU_OFFLOAD=0`
@@ -351,6 +353,8 @@ The on-premises RTX PRO 6000 Blackwell workstation is the primary production GPU
 - GPU: RTX PRO 6000 Blackwell Workstation Edition, 96 GB VRAM.
 - OS: supported Ubuntu Linux with a validated NVIDIA driver and Docker NVIDIA Container Toolkit.
 - GPU preset: rtx-pro-6000-blackwell.
+- AI runtime: the digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel` image configured by `DRAPIXAI_AI_RUNTIME_IMAGE`; its CUDA 12.8/PyTorch 2.11 build is Blackwell-capable. It uses Python 3.12. The older RunPod Python 3.11/CUDA 12.4 stack is reference-only and must not run production Compose.
+- Host driver: NVIDIA 570 or newer; workstation preflight rejects an older driver before AI services start.
 - Runtime storage: immutable models and a persistent garment cache; transient shopper image spool in /dev/shm only.
 - Queue: private Redis credentials and network segment distinct from public API and database services.
 - Worker: preload CatVTON before opening traffic; begin with adaptive batching disabled, then enable three-user batching only after its acceptance test passes.

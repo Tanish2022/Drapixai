@@ -88,6 +88,13 @@ require_min_length() {
   fi
 }
 
+require_pinned_pytorch_runtime_image() {
+  local value="${DRAPIXAI_AI_RUNTIME_IMAGE:-}"
+  if [[ ! "$value" =~ ^pytorch/pytorch:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$ ]]; then
+    echo "DRAPIXAI_AI_RUNTIME_IMAGE must be a digest-pinned official pytorch/pytorch image." >&2
+    exit 1
+  fi
+}
 require_base64_bytes() {
   local name="$1"
   local expected="$2"
@@ -288,6 +295,10 @@ if [[ "$profile" == "ai" ]]; then
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
   require_equals DRAPIXAI_TRYON_ENGINE "catvton"
+  if [[ "${DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell" ]]; then
+    require_pinned_pytorch_runtime_image
+    require_equals DRAPIXAI_ENABLE_XFORMERS "0"
+  fi
   require_equals DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK "0"
   require_equals DRAPIXAI_CATVTON_MODEL_REVISION "2969fcf85fe62f2036605716f0b56f0b81d01d79"
   require_equals DRAPIXAI_CATVTON_GIT_COMMIT "7818397f25613beedb3d861a34769f607cfcf3b1"

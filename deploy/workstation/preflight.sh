@@ -63,6 +63,7 @@ current_commit="$(git -C "$repo_root" rev-parse HEAD)"
   exit 1
 }
 
+driver_version="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 | tr -dc '0-9.')"
 gpu_name="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1 | tr '[:upper:]' '[:lower:]')"
 gpu_memory_mib="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n 1 | tr -dc '0-9')"
 [[ "$gpu_name" =~ rtx.*pro.*6000 ]] || {
@@ -74,6 +75,12 @@ gpu_memory_mib="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,noun
   exit 1
 }
 
+python3 - "$driver_version" <<'PY'
+import sys
+parts = tuple(int(part) for part in sys.argv[1].split('.') if part)
+if not parts or parts[0] < 570:
+    raise SystemExit(f"RTX PRO 6000 Blackwell requires NVIDIA driver 570 or newer; found {sys.argv[1] or 'unknown'}")
+PY
 probe_image="${DRAPIXAI_NVIDIA_CUDA_PROBE_IMAGE:-}"
 [[ "$probe_image" =~ @sha256:[a-f0-9]{64}$ ]] || {
   echo "DRAPIXAI_NVIDIA_CUDA_PROBE_IMAGE must be an approved digest-pinned CUDA image." >&2
@@ -104,4 +111,5 @@ free_bytes="$(df -PB1 "$repo_root" | awk 'NR == 2 { print $4 }')"
 echo "RTX PRO 6000 production preflight passed."
 echo "Commit: $current_commit"
 echo "GPU: $gpu_name ($gpu_memory_mib MiB)"
+echo "Driver: $driver_version"
 echo "Next: start the private AI Compose stack, then run verify-private-listeners.sh and the staged certification suites."

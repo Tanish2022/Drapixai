@@ -25,6 +25,8 @@ services:
     build:
       context: ../..
       dockerfile: drapixai_ai/docker/Dockerfile
+      args:
+        DRAPIXAI_AI_BASE_IMAGE: ${DRAPIXAI_AI_RUNTIME_IMAGE:?set DRAPIXAI_AI_RUNTIME_IMAGE}
     restart: unless-stopped
     env_file:
       - ../env/ai.staging.env
@@ -54,6 +56,8 @@ services:
     build:
       context: ../..
       dockerfile: drapixai_ai/docker/Dockerfile
+      args:
+        DRAPIXAI_AI_BASE_IMAGE: ${DRAPIXAI_AI_RUNTIME_IMAGE:?set DRAPIXAI_AI_RUNTIME_IMAGE}
     restart: unless-stopped
     env_file:
       - ../env/ai.staging.env
