@@ -107,7 +107,10 @@
       "id": "prisma-schema",
       "label": "Prisma schema validation",
       "runner": "npm",
-      "args": ["--prefix", "apps/api", "exec", "prisma", "validate", "--", "--schema", "apps/api/prisma/schema.prisma"]
+      "args": ["--prefix", "apps/api", "exec", "prisma", "validate", "--", "--schema", "apps/api/prisma/schema.prisma"],
+      "env": {
+        "DATABASE_URL": "postgresql://schema_validation:local_only@127.0.0.1:5432/drapixai_schema_validation"
+      }
     },
     {
       "id": "edge-compose",

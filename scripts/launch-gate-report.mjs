@@ -116,7 +116,7 @@ const run = (gate) => {
     result = spawnSync(invocation.command, invocation.args, {
       cwd: root,
       encoding: "utf8",
-      env: { ...process.env, CI: "1", NO_COLOR: "1" },
+      env: { ...process.env, ...(gate.env || {}), CI: "1", NO_COLOR: "1" },
       maxBuffer: 16 * 1024 * 1024,
       windowsHide: true
     });

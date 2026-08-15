@@ -463,6 +463,8 @@ assertIncludes(trackedSecretVerifier, "git', ['ls-files', '-z']", 'Tracked-secre
 assertIncludes(nodeRuntimeVerifier, 'UNSUPPORTED_NODE_RUNTIME', 'Node runtime verifier must fail closed on unsupported Node.js versions.');
 assertIncludes(nodeRuntimeVerifier, 'NODE_ENGINE_RANGE_MISMATCH', 'Node runtime verifier must require one consistent engine range.');
 assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
+assertIncludes(launchGates, 'postgresql://schema_validation:local_only@127.0.0.1:5432/drapixai_schema_validation', 'Prisma validation must be reproducible without an ignored developer environment file.');
+assertIncludes(launchGateReport, '...(gate.env || {})', 'Launch gates must apply explicit per-gate environment values.');
 assert.ok('three-tenant-gpu' in launchEvidenceTemplate.gates, 'Launch-evidence template must include the three-tenant GPU certification artifact.');
 const requiredP0EvidenceGates = [
   'clean-release-commit',
