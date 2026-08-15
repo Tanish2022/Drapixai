@@ -29,6 +29,7 @@
     "test:public-api": "ts-node src/scripts/public-api-v1-tests.ts",
     "test:distributed-security": "ts-node src/scripts/distributed-security-control-tests.ts",
     "test:log-privacy": "ts-node src/scripts/log-privacy-tests.ts",
+    "test:admin-mfa": "ts-node src/scripts/admin-mfa-tests.ts",
     "test:input-validation": "ts-node src/scripts/input-validation-tests.ts",
     "security:audit:verify": "ts-node src/scripts/verify-security-audit.ts",
     "security:webhooks:rotate-key": "ts-node src/scripts/rotate-webhook-encryption.ts",

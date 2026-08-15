@@ -44,8 +44,13 @@ export const isSystemAdminEmail = (email: string) => {
   return Boolean(adminEmail) && email.trim().toLowerCase() === adminEmail;
 };
 
-export const verifyAdminTotp = (email: string, rawCode: unknown, now = Date.now()) => {
-  if (!isSystemAdminEmail(email)) return true;
+export const verifyAdminTotp = (
+  email: string,
+  rawCode: unknown,
+  now = Date.now(),
+  requireForRole = false,
+) => {
+  if (!requireForRole && !isSystemAdminEmail(email)) return true;
 
   const secretValue = (process.env.DRAPIXAI_ADMIN_TOTP_SECRET || '').trim();
   if (!secretValue) return process.env.NODE_ENV !== 'production';

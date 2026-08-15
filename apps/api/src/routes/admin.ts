@@ -16,7 +16,7 @@ import { hasPermission } from '../lib/authorization';
 
 const router = Router();
 const prisma = new PrismaClient();
-const ADMIN_EMAIL = process.env.DRAPIXAI_ADMIN_EMAIL || '';
+const ADMIN_EMAIL = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
 const ADMIN_USER_ID = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
 const s3 = createStorageClient();
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
@@ -92,7 +92,10 @@ const adminAuth = async (req: any, res: any, next: any) => {
   }
 
   const user = await prisma.user.findUnique({ where: { id: activeKey.userId } });
-  const matchesConfiguredAdmin = Boolean(user && ((ADMIN_EMAIL && user.email === ADMIN_EMAIL) || (ADMIN_USER_ID && user.id === ADMIN_USER_ID)));
+  const matchesConfiguredAdmin = Boolean(user && (
+    (ADMIN_EMAIL && user.email.trim().toLowerCase() === ADMIN_EMAIL)
+    || (ADMIN_USER_ID && user.id === ADMIN_USER_ID)
+  ));
   const isAdmin = Boolean(user && hasPermission(user.role, 'system:admin') && matchesConfiguredAdmin);
   if (!user || !isAdmin) {
     return res.status(403).json({ error: 'ADMIN_REQUIRED' });

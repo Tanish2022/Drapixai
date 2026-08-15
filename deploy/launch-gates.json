@@ -86,6 +86,12 @@
       "args": ["--prefix", "apps/api", "run", "test:log-privacy"]
     },
     {
+      "id": "admin-mfa",
+      "label": "System-administrator TOTP is role-enforced and fails closed",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:admin-mfa"]
+    },
+    {
       "id": "shopify-contracts",
       "label": "Shopify signature and app-proxy contract tests",
       "runner": "npm",

@@ -633,7 +633,11 @@ assertIncludes(accountRoute, 'where: { userId: resolved.user.id, isActive: true 
 assertIncludes(securityHelpers, 'PASSWORD_HASH_ROUNDS = 12', 'Passwords must use strengthened bcrypt parameters');
 assertIncludes(adminMfa, 'createHmac', 'Administrator MFA must validate TOTP server-side');
 assertIncludes(adminMfa, 'timingSafeEqual', 'Administrator MFA comparisons must be timing safe');
+assertIncludes(adminMfa, 'requireForRole', 'Administrator MFA must support fail-closed role-based enforcement');
+assertIncludes(authRoute, "user.role === 'system_admin'", 'Every system administrator must require MFA even when matched by configured user ID');
 assertIncludes(authRoute, 'authIdentityRateLimit', 'Authentication must rate-limit both IP addresses and account identities');
+assertIncludes(authRoute, 'user?.passwordHash || LOGIN_TIMING_SENTINEL_HASH', 'Unknown-account login must perform password-hash work to resist timing enumeration');
+assertIncludes(authRoute, 'fallbackStatus = 500', 'Unexpected authentication failures must not be mislabeled as client errors');
 assertIncludes(securityHelpers, 'Bearer [redacted]', 'Log redaction must remove bearer credentials');
 assertIncludes(securityHelpers, '[redacted-email]', 'Log redaction must remove email addresses');
 assertIncludes(remoteFetchHelpers, 'lookup: (_hostname', 'Outbound fetches must connect to the DNS address that passed validation');

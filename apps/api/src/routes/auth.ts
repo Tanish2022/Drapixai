@@ -22,6 +22,7 @@ const authIdentityRateLimit = createRateLimitMiddleware(5, 15 * 60 * 1000, (req)
   return `auth-identity:${digest}:${req.path}`;
 });
 const AUTH_SYNC_TOKEN = process.env.DRAPIXAI_AUTH_SYNC_TOKEN || '';
+const LOGIN_TIMING_SENTINEL_HASH = '$2a$12$cKQO1Nwsd/egkllnn1PoqeOXRRR9p.q61rpKWt9.wlnKRBrfqzhw2';
 
 const isProduction = () => process.env.NODE_ENV === 'production';
 
@@ -33,7 +34,7 @@ const hasValidAuthSyncToken = (provided: unknown) => {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 };
 
-const publicAuthFailure = (_error: unknown, fallback: string, fallbackStatus = 400) => {
+const publicAuthFailure = (_error: unknown, fallback: string, fallbackStatus = 500) => {
   return { status: fallbackStatus, error: fallback };
 };
 
@@ -218,7 +219,11 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
     }
     const normalizedEmail = normalizeEmail(String(email));
     let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    const passwordMatches = await bcrypt.compare(
+      String(password),
+      user?.passwordHash || LOGIN_TIMING_SENTINEL_HASH,
+    );
+    if (!user || !passwordMatches) {
       await appendSecurityAudit(prisma, {
         actorRole: 'unknown',
         action: 'auth.login.denied',
@@ -227,7 +232,7 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
       }).catch(() => undefined);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    if (!verifyAdminTotp(normalizedEmail, mfaCode)) {
+    if (!verifyAdminTotp(normalizedEmail, mfaCode, Date.now(), user.role === 'system_admin')) {
       await appendSecurityAudit(prisma, {
         actorUserId: user.id,
         actorRole: user.role,
