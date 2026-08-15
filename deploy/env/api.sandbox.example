@@ -1,6 +1,14 @@
 NODE_ENV=production
 PORT=8000
 DRAPIXAI_API_ENVIRONMENT=sandbox
+DRAPIXAI_WEB_BASE_URL=https://sandbox.drapixai.com
+DRAPIXAI_STRIPE_BILLING_ENABLED=1
+DRAPIXAI_STRIPE_LIVE_MODE=0
+DRAPIXAI_STRIPE_CURRENCY=usd
+# Test-mode DRAPIXAI_STRIPE_SECRET_KEY and DRAPIXAI_STRIPE_WEBHOOK_SECRET are loaded from Secrets Manager.
+DRAPIXAI_STRIPE_PRICE_STARTER=replace-with-stripe-test-starter-price-id
+DRAPIXAI_STRIPE_PRICE_GROWTH=replace-with-stripe-test-growth-price-id
+DRAPIXAI_STRIPE_PRICE_PRO=replace-with-stripe-test-pro-price-id
 DRAPIXAI_SECRETS_PROVIDER=aws-secrets-manager
 DRAPIXAI_AWS_SECRET_ID=drapixai/sandbox/api
 DATABASE_URL=postgresql://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-db.internal:5432/drapixai_sandbox?sslmode=verify-full

@@ -108,8 +108,29 @@ const openApiV1 = {
     },
     '/usage': {
       get: {
-        summary: 'Read successful try-on usage, quota, and remaining capacity',
-        responses: { '200': { description: 'Usage summary' } },
+        summary: 'Read successful try-on usage, quota, remaining capacity, and exact billing-period boundaries',
+        responses: {
+          '200': {
+            description: 'Usage summary',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    environment: { enum: ['live', 'sandbox'] },
+                    period: { type: ['string', 'null'] },
+                    period_start: { type: ['string', 'null'], format: 'date-time' },
+                    period_end: { type: ['string', 'null'], format: 'date-time' },
+                    approved_tryons: { type: 'integer', minimum: 0 },
+                    quota: { type: 'integer', minimum: 0 },
+                    remaining: { type: 'integer', minimum: 0 },
+                    active: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
     '/webhook-endpoints': {

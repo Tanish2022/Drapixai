@@ -1,6 +1,6 @@
 # DrapixAI Security Development Status
 
-Last local verification: 2026-07-29
+Last local verification: 2026-08-16
 
 This document separates controls implemented in the repository from controls
 that require real infrastructure, staging credentials, or an independent
@@ -35,6 +35,10 @@ supported by dated evidence.
   dropped capabilities, bounded tmpfs, and current patched OpenSSL.
 - Key rotation, breach response, backup restore, customer deletion, and alert
   response procedures.
+- Stripe-hosted Checkout and customer portal with raw-body signature checking,
+  replay-safe event claims, live/test separation, managed secrets, monotonic
+  subscription state, exact billing-period quota counters, and fail-closed paid
+  access.
 
 ## Local evidence
 
@@ -52,6 +56,11 @@ supported by dated evidence.
   survived the rollback.
 - Local evidence is stored under `runtime/security/` and is intentionally not
   committed.
+- All 35 repository launch gates pass, including billing security contracts and
+  the immutable Standard CatVTON release profile.
+- A fresh PostgreSQL 16 disposable database applied all eight migrations;
+  exact-period billing rollover, duplicate provider-event rejection, unique
+  customer mapping, and immutable audit UPDATE/DELETE rejection passed.
 
 ## External launch gates
 
@@ -72,6 +81,9 @@ supported by dated evidence.
   critical and high finding.
 - Perform a timed backup restore, key rotation, breach tabletop, and customer
   deletion exercise with named operators.
+- Configure separate Stripe test/live catalogs and webhook endpoints, verify the
+  live catalog, and run the complete billing lifecycle rehearsal with redacted
+  evidence and qualified tax/accounting review.
 
 ## Estimated pricing
 

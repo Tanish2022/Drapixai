@@ -107,6 +107,8 @@ router.get('/summary', async (req, res) => {
   const plan = getPlanAccessContext({
     planType: user?.planType,
     subscriptionStatus: user?.subscriptionStatus,
+    subscriptionProvider: user?.subscriptionProvider,
+    subscriptionCurrentPeriodEndsAt: user?.subscriptionCurrentPeriodEndsAt,
     trialExpiresAt: user?.trialExpiresAt,
   });
   const normalizedDomain = (validKey.domainWhitelist || '').trim();
@@ -124,6 +126,7 @@ router.get('/summary', async (req, res) => {
     subscriptionPlan: user?.subscriptionPlan || null,
     subscriptionPlanName: user?.subscriptionPlan ? getPlanName(user.subscriptionPlan) : null,
     subscriptionStatus: user?.subscriptionStatus || null,
+    subscriptionProvider: user?.subscriptionProvider || null,
     planAccessActive: plan.active,
     planBlockedReason: plan.blockedReason,
     subscriptionCurrentPeriodEndsAt: user?.subscriptionCurrentPeriodEndsAt

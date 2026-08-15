@@ -306,10 +306,14 @@ const uploadReviewImage = async (
 const getUserPlanContext = (user: {
   planType?: string | null;
   subscriptionStatus?: string | null;
+  subscriptionProvider?: string | null;
+  subscriptionCurrentPeriodEndsAt?: Date | null;
   trialExpiresAt?: Date | null;
 }) => getPlanAccessContext({
   planType: user.planType,
   subscriptionStatus: user.subscriptionStatus,
+  subscriptionProvider: user.subscriptionProvider,
+  subscriptionCurrentPeriodEndsAt: user.subscriptionCurrentPeriodEndsAt,
   trialExpiresAt: user.trialExpiresAt,
 });
 

@@ -1891,6 +1891,8 @@ assertIncludes(webhookService, "data: { status: 'processing' }", 'Webhook delive
 assertIncludes(webhookService, "status: 'processing', updatedAt: { lte: staleClaimAt }", 'Crashed webhook claims must be reclaimable');
 assertIncludes(externalSecrets, 'SecretsManagerClient', 'Production secrets must support AWS Secrets Manager');
 assertIncludes(externalSecrets, "provider === 'mounted-file'", 'Production secrets must support a read-only orchestrator mount');
+assertIncludes(externalSecrets, 'MANAGED_SECRET_SET_INCOMPLETE', 'Production managed-secret providers must supply the complete required secret set');
+assertIncludes(externalSecrets, "'DRAPIXAI_STRIPE_WEBHOOK_SECRET'", 'Stripe webhook verification material must be loaded from the managed provider');
 assertIncludes(apiBootstrap, "await loadExternalSecrets()", 'Managed secrets must load before the API server imports');
 assertIncludes(apiDockerfile, 'dist/bootstrap.js', 'The production API container must enter through managed-secret bootstrap');
 assertIncludes(cloudflareWaf, 'http_request_firewall_managed', 'Cloudflare must execute a managed WAF ruleset');

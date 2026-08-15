@@ -23,7 +23,10 @@ type PlanConfig = {
 export type PlanAccessInput = {
   planType?: string | null;
   subscriptionStatus?: string | null;
+  subscriptionProvider?: string | null;
+  subscriptionCurrentPeriodEndsAt?: Date | string | null;
   trialExpiresAt?: Date | string | null;
+  at?: Date | string | null;
 };
 
 export type PlanAccessContext = {
@@ -33,7 +36,7 @@ export type PlanAccessContext = {
   quality: 'standard';
   active: boolean;
   inactive: boolean;
-  blockedReason: 'PLAN_INACTIVE' | 'TRIAL_EXPIRED' | 'SUBSCRIPTION_INACTIVE' | null;
+  blockedReason: 'PLAN_INACTIVE' | 'TRIAL_EXPIRED' | 'SUBSCRIPTION_INACTIVE' | 'SUBSCRIPTION_PERIOD_EXPIRED' | null;
   trialDaysLeft: number;
 };
 
@@ -102,6 +105,9 @@ const INACTIVE_SUBSCRIPTION_STATUSES = new Set([
   'expired',
   'inactive',
   'past_due',
+  'paused',
+  'incomplete',
+  'incomplete_expired',
   'unpaid',
   'suspended',
 ]);
@@ -114,6 +120,8 @@ const normalizeTrialExpiry = (value: Date | string | null | undefined) => {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
 };
+
+const STRIPE_PERIOD_GRACE_MS = 15 * 60 * 1000;
 
 export const normalizePlanKey = (value: string | null | undefined): PlanKey => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -155,6 +163,8 @@ export const getPlanAccessContext = (input: PlanAccessInput): PlanAccessContext 
   const config = PLAN_CONFIG[normalizedPlan];
   const subscriptionStatus = normalizeSubscriptionStatus(input.subscriptionStatus);
   const trialExpiresAt = normalizeTrialExpiry(input.trialExpiresAt);
+  const subscriptionPeriodEndsAt = normalizeTrialExpiry(input.subscriptionCurrentPeriodEndsAt);
+  const at = normalizeTrialExpiry(input.at) || new Date();
   const trialDaysLeft = normalizedPlan === 'trial' && trialExpiresAt
     ? Math.max(0, Math.ceil((trialExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
@@ -170,6 +180,16 @@ export const getPlanAccessContext = (input: PlanAccessInput): PlanAccessContext 
   if (active && INACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
     active = false;
     blockedReason = 'SUBSCRIPTION_INACTIVE';
+  }
+
+  if (
+    active
+    && input.subscriptionProvider === 'stripe'
+    && subscriptionPeriodEndsAt
+    && subscriptionPeriodEndsAt.getTime() + STRIPE_PERIOD_GRACE_MS <= at.getTime()
+  ) {
+    active = false;
+    blockedReason = 'SUBSCRIPTION_PERIOD_EXPIRED';
   }
 
   return {

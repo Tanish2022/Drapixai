@@ -46,6 +46,16 @@ def main() -> int:
     minio_user = f"drapixai-staging-{secrets.token_hex(6)}"
     minio_password = token()
     ai_service_token = token(64)
+    stripe_secret_key = os.environ.get("DRAPIXAI_STRIPE_SECRET_KEY", "").strip()
+    stripe_webhook_secret = os.environ.get("DRAPIXAI_STRIPE_WEBHOOK_SECRET", "").strip()
+    if not stripe_secret_key.startswith("sk_test_") or len(stripe_secret_key) < 32:
+        raise SystemExit(
+            "Export a valid test-mode DRAPIXAI_STRIPE_SECRET_KEY before generating staging secrets."
+        )
+    if not stripe_webhook_secret.startswith("whsec_") or len(stripe_webhook_secret) < 32:
+        raise SystemExit(
+            "Export a valid staging DRAPIXAI_STRIPE_WEBHOOK_SECRET before generating staging secrets."
+        )
 
     write_private(output_dir / "postgres_password", postgres_password)
     write_private(output_dir / "redis_password", redis_password)
@@ -73,6 +83,9 @@ def main() -> int:
         "DRAPIXAI_AUDIT_LOG_SECRET": token(64),
         "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY": token(32),
         "DRAPIXAI_METRICS_TOKEN": token(48),
+        "DRAPIXAI_STRIPE_SECRET_KEY": stripe_secret_key,
+        "DRAPIXAI_STRIPE_WEBHOOK_SECRET": stripe_webhook_secret,
+        "SMTP_PASS": token(32),
         "AWS_ACCESS_KEY_ID": minio_user,
         "AWS_SECRET_ACCESS_KEY": minio_password,
     }

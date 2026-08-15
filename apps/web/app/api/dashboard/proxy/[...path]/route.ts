@@ -10,6 +10,7 @@ type DashboardProxyContext = {
 
 const allowedSdkRoots = new Set(['garments', 'catalog', 'matches', 'result']);
 const allowedShopifyActions = new Set(['link', 'status', 'sync', 'disconnect', 'preparation', 'prepare']);
+const allowedBillingActions = new Set(['checkout', 'portal']);
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
 
 const isSafePath = (segments: string[]) =>
@@ -22,6 +23,7 @@ const isAllowedDashboardPath = (segments: string[]) => {
   if (root === 'account') return true;
   if (root === 'sdk' && second && allowedSdkRoots.has(second)) return true;
   if (root === 'shopify' && second && allowedShopifyActions.has(second)) return true;
+  if (root === 'billing' && second && allowedBillingActions.has(second) && segments.length === 2) return true;
   return false;
 };
 
@@ -57,6 +59,8 @@ const proxyDashboardRequest = async (request: NextRequest, context: DashboardPro
   if (dashboardProxyToken) headers.set('x-drapixai-dashboard-proxy-token', dashboardProxyToken);
   const contentType = request.headers.get('content-type');
   if (contentType) headers.set('Content-Type', contentType);
+  const idempotencyKey = request.headers.get('idempotency-key');
+  if (idempotencyKey) headers.set('Idempotency-Key', idempotencyKey);
 
   const bodyResult = await readLimitedProxyBody(request);
   if (bodyResult.rejection) return bodyResult.rejection;

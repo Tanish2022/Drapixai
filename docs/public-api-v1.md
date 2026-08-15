@@ -55,7 +55,7 @@ Successful responses contain PNG bytes and the same `x-drapixai-*` quality and l
 
 ## API usage pricing
 
-The storefront SDK and REST API share one monthly account quota. All public plans use the same Standard generation pipeline.
+The storefront SDK and REST API share one account quota for each subscription billing period. All public plans use the same Standard generation pipeline.
 
 | Plan | Monthly price | Included successful try-ons | Effective price |
 | --- | ---: | ---: | ---: |
@@ -72,7 +72,7 @@ One unit is consumed only when `POST /v1/tryons` produces its first successful, 
 - a duplicate idempotency key after an already-counted result
 - token exchange, usage reads, webhook operations, and OpenAPI access
 
-Public plans use a hard monthly quota with no automatic overage billing at launch. When quota is exhausted, try-on creation returns HTTP 429. Use `GET /v1/usage` to read current usage, quota, and remaining capacity. Prices are in USD and exclude applicable taxes.
+Public plans use a hard quota aligned to the exact Stripe monthly subscription period, with no automatic overage billing at launch. Trial quota runs from account creation through the trial expiry. When quota is exhausted, try-on creation returns HTTP 429. Use `GET /v1/usage` to read current usage, quota, remaining capacity, `period_start`, and `period_end`. Prices are in USD and exclude applicable taxes.
 
 ## Idempotency
 

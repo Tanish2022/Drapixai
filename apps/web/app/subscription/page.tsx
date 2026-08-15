@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CreditCard, ExternalLink, Gauge, ShieldCheck, Store, UserCircle2 } from 'lucide-react';
+import { CreditCard, ExternalLink, Gauge, Loader2, ShieldCheck, Store, UserCircle2 } from 'lucide-react';
 import { useThemePreference } from '@/app/lib/theme-client';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
 
@@ -13,6 +13,7 @@ type UsageData = {
   selectedPlanName?: string | null;
   subscriptionPlanName?: string | null;
   subscriptionStatus?: string | null;
+  subscriptionProvider?: string | null;
   subscriptionCurrentPeriodEndsAt?: string | null;
   trialDaysLeft: number;
   rendersUsed: number;
@@ -28,6 +29,9 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const themePreference = useThemePreference();
   const [usage, setUsage] = useState<UsageData | null>(null);
+  const [billingAction, setBillingAction] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingNotice, setBillingNotice] = useState<'success' | 'canceled' | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +57,11 @@ export default function SubscriptionPage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get('billing');
+    setBillingNotice(value === 'success' || value === 'canceled' ? value : null);
+  }, []);
+
   const pageClass = themePreference === 'light' ? 'min-h-screen bg-[#f4f6f2] text-[#172019]' : 'min-h-screen bg-[#0f1511] text-[#edf2ed]';
   const cardClass = useMemo(
     () =>
@@ -70,6 +79,34 @@ export default function SubscriptionPage() {
   );
   const mutedTextClass = themePreference === 'light' ? 'text-[#68736b]' : 'text-[#aab6ac]';
   const strongTextClass = themePreference === 'light' ? 'text-[#172019]' : 'text-[#edf2ed]';
+
+  const openHostedBilling = async (action: 'checkout' | 'portal', plan?: 'starter' | 'growth' | 'pro') => {
+    setBillingAction(plan || action);
+    setBillingError(null);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (action === 'checkout') headers['Idempotency-Key'] = crypto.randomUUID();
+      const response = await fetch(`/api/dashboard/proxy/billing/${action}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(plan ? { plan } : {}),
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null) as { url?: unknown; error?: unknown } | null;
+      if (!response.ok || typeof payload?.url !== 'string') {
+        throw new Error(typeof payload?.error === 'string' ? payload.error : 'BILLING_REQUEST_FAILED');
+      }
+      const hostedUrl = new URL(payload.url);
+      const allowedHost = action === 'checkout' ? 'checkout.stripe.com' : 'billing.stripe.com';
+      if (hostedUrl.protocol !== 'https:' || hostedUrl.hostname !== allowedHost) {
+        throw new Error('BILLING_REDIRECT_REJECTED');
+      }
+      window.location.assign(hostedUrl.toString());
+    } catch (error) {
+      setBillingError(error instanceof Error ? error.message : 'BILLING_REQUEST_FAILED');
+      setBillingAction(null);
+    }
+  };
 
   if (!usage) {
     return (
@@ -102,6 +139,22 @@ export default function SubscriptionPage() {
             </Link>
           </div>
         </div>
+
+        {billingNotice === 'success' ? (
+          <div className={`mb-8 border p-5 ${themePreference === 'light' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100'}`}>
+            Payment received. Your plan will update after the signed billing webhook confirms the subscription.
+          </div>
+        ) : billingNotice === 'canceled' ? (
+          <div className={`mb-8 border p-5 ${themePreference === 'light' ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-amber-400/30 bg-amber-500/10 text-amber-100'}`}>
+            Checkout was canceled. No plan change was applied.
+          </div>
+        ) : null}
+
+        {billingError ? (
+          <div role="alert" className={`mb-8 border p-5 ${themePreference === 'light' ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-rose-400/30 bg-rose-500/10 text-rose-100'}`}>
+            Billing could not be opened safely. Please retry or contact support with code {billingError}.
+          </div>
+        ) : null}
 
         {isQuotaExhausted ? (
           <div className={`mb-8 rounded-[28px] border p-6 ${themePreference === 'light' ? 'border-rose-200 bg-rose-50/90' : 'border-rose-400/30 bg-rose-500/10'}`}>
@@ -237,6 +290,49 @@ export default function SubscriptionPage() {
             </div>
           </div>
         </div>
+
+        <section className={`${cardClass} mt-6`} aria-labelledby="secure-billing-heading">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className={`mb-2 text-xs font-bold uppercase ${themePreference === 'light' ? 'text-[#31725b]' : 'text-[#7fb29a]'}`}>Secure hosted billing</p>
+              <h2 id="secure-billing-heading" className="text-2xl font-semibold">Choose capacity without sharing card details with DrapixAI.</h2>
+              <p className={`mt-2 max-w-3xl text-sm leading-7 ${mutedTextClass}`}>
+                Payment and tax details are collected by Stripe. DrapixAI enables a paid plan only after a signed provider event is verified and processed.
+              </p>
+            </div>
+            {usage.subscriptionProvider === 'stripe' ? (
+              <button
+                type="button"
+                onClick={() => openHostedBilling('portal')}
+                disabled={billingAction !== null}
+                className="inline-flex min-h-11 items-center justify-center gap-2 border border-black/15 bg-white px-4 py-2 text-sm font-semibold text-[#172019] transition-colors hover:bg-[#eef2ed] disabled:cursor-wait disabled:opacity-60"
+              >
+                {billingAction === 'portal' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                Manage billing
+              </button>
+            ) : null}
+          </div>
+          {usage.subscriptionProvider === 'stripe' ? (
+            <p className={`mt-6 border-t pt-5 text-sm ${themePreference === 'light' ? 'border-black/10' : 'border-white/10'} ${mutedTextClass}`}>
+              Use Manage billing to change plan, update payment details, review invoices, or cancel renewal without creating a duplicate subscription.
+            </p>
+          ) : (
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              {(['starter', 'growth', 'pro'] as const).map((plan) => (
+                <button
+                  key={plan}
+                  type="button"
+                  onClick={() => openHostedBilling('checkout', plan)}
+                  disabled={billingAction !== null}
+                  className={`flex min-h-12 items-center justify-between border px-4 py-3 text-left text-sm font-semibold capitalize transition-colors disabled:cursor-wait disabled:opacity-60 ${themePreference === 'light' ? 'border-black/15 bg-[#f4f6f2] hover:bg-[#e7ede7]' : 'border-white/15 bg-[#101712] hover:bg-white/[0.06]'}`}
+                >
+                  {plan}
+                  {billingAction === plan ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

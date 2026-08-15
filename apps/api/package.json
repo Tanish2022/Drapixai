@@ -31,6 +31,9 @@
     "test:log-privacy": "ts-node src/scripts/log-privacy-tests.ts",
     "test:admin-mfa": "ts-node src/scripts/admin-mfa-tests.ts",
     "test:tryon-intake": "ts-node src/scripts/tryon-intake-tests.ts",
+    "test:billing-security": "ts-node src/scripts/billing-security-tests.ts",
+    "test:billing-database": "ts-node src/scripts/billing-database-tests.ts",
+    "billing:verify-catalog": "ts-node src/scripts/verify-stripe-catalog.ts",
     "test:input-validation": "ts-node src/scripts/input-validation-tests.ts",
     "security:audit:verify": "ts-node src/scripts/verify-security-audit.ts",
     "security:webhooks:rotate-key": "ts-node src/scripts/rotate-webhook-encryption.ts",
@@ -56,7 +59,8 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^9.0.3",
     "redis": "^4.6.0",
-    "sharp": "0.35.3"
+    "sharp": "0.35.3",
+    "stripe": "22.5.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.0",

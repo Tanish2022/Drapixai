@@ -171,6 +171,8 @@ Write-Host "- Confirm DRAPIXAI_AI_SERVICE_TOKEN matches between API and AI env f
 Write-Host "- Attach an AWS workload identity with Secrets Manager, S3, and KMS access; do not create long-lived access keys"
 Write-Host "- DRAPIXAI_API_RELEASE_IMAGE / DRAPIXAI_WEB_RELEASE_IMAGE / DRAPIXAI_AI_RELEASE_IMAGE from the scanned release artifact record"
 Write-Host "- SMTP_HOST / SMTP_USER / SMTP_PASS"
+Write-Host "- Create live Stripe products/prices, replace all DRAPIXAI_STRIPE_PRICE_* values, and register https://$apiDomain/billing/webhooks/stripe"
+Write-Host "- Store DRAPIXAI_STRIPE_SECRET_KEY and DRAPIXAI_STRIPE_WEBHOOK_SECRET in the managed secret provider; never place them in an env file"
 Write-Host "- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET if Google login is enabled"
 Write-Host "- SHOPIFY_API_KEY / SHOPIFY_API_SECRET and set DRAPIXAI_SHOPIFY_ENABLED=1 when the Shopify app is created"
 Write-Host "- NEXT_PUBLIC_SHOPIFY_APP_INSTALL_URL after the Shopify listing or install link exists"

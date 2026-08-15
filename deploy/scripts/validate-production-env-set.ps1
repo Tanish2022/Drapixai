@@ -84,6 +84,22 @@ function Assert-MinLength {
     }
 }
 
+function Assert-Prefix {
+    param([string]$Path, [string]$Key, [string]$Expected)
+    $value = Get-EnvValue -Path $Path -Key $Key
+    if (-not $value.StartsWith($Expected, [StringComparison]::Ordinal)) {
+        throw "Value for $Key in $Path must start with $Expected"
+    }
+}
+
+function Assert-StripePriceId {
+    param([string]$Path, [string]$Key)
+    $value = Get-EnvValue -Path $Path -Key $Key
+    if ($value -notmatch '^price_[A-Za-z0-9]+$') {
+        throw "Value for $Key in $Path must be a Stripe Price ID"
+    }
+}
+
 function Assert-NumberAtLeast {
     param([string]$Path, [string]$Key, [double]$Minimum)
     $value = Get-EnvValue -Path $Path -Key $Key
@@ -155,6 +171,8 @@ Assert-RequiredKeys $apiEnv @(
     "DRAPIXAI_ADMIN_TOKEN", "DRAPIXAI_ADMIN_PASSWORD", "DRAPIXAI_ADMIN_TOTP_SECRET",
     "DRAPIXAI_STOREFRONT_TOKEN_SECRET", "DRAPIXAI_AUDIT_LOG_SECRET",
     "DRAPIXAI_API_ENVIRONMENT", "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY",
+    "DRAPIXAI_WEB_BASE_URL", "DRAPIXAI_STRIPE_BILLING_ENABLED", "DRAPIXAI_STRIPE_LIVE_MODE", "DRAPIXAI_STRIPE_CURRENCY",
+    "DRAPIXAI_STRIPE_PRICE_STARTER", "DRAPIXAI_STRIPE_PRICE_GROWTH", "DRAPIXAI_STRIPE_PRICE_PRO",
     "DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION", "DRAPIXAI_S3_KMS_KEY_ID", "S3_BUCKET", "AWS_REGION",
     "DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY", "SMTP_HOST", "SMTP_PORT",
     "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "DRAPIXAI_API_RELEASE_IMAGE", "DRAPIXAI_WEB_RELEASE_IMAGE"
@@ -169,6 +187,12 @@ Assert-MinLength $apiEnv "DRAPIXAI_ADMIN_PASSWORD" 12
 Assert-MinLength $apiEnv "DRAPIXAI_ADMIN_TOTP_SECRET" 16
 Assert-MinLength $apiEnv "DRAPIXAI_STOREFRONT_TOKEN_SECRET" 32
 Assert-MinLength $apiEnv "DRAPIXAI_AUDIT_LOG_SECRET" 32
+Assert-ExactValue $apiEnv "DRAPIXAI_STRIPE_BILLING_ENABLED" "1"
+Assert-ExactValue $apiEnv "DRAPIXAI_STRIPE_LIVE_MODE" "1"
+Assert-ExactValue $apiEnv "DRAPIXAI_STRIPE_CURRENCY" "usd"
+Assert-StripePriceId $apiEnv "DRAPIXAI_STRIPE_PRICE_STARTER"
+Assert-StripePriceId $apiEnv "DRAPIXAI_STRIPE_PRICE_GROWTH"
+Assert-StripePriceId $apiEnv "DRAPIXAI_STRIPE_PRICE_PRO"
 Assert-ExactValue $apiEnv "DRAPIXAI_API_ENVIRONMENT" "live"
 Assert-Base64Bytes $apiEnv "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY" 32
 Assert-ExactValue $apiEnv "DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY" "1"

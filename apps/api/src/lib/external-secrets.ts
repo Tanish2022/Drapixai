@@ -18,6 +18,8 @@ const MANAGED_SECRET_NAMES = new Set([
   'DRAPIXAI_WEBHOOK_ENCRYPTION_KEY',
   'DRAPIXAI_WEBHOOK_PREVIOUS_ENCRYPTION_KEYS',
   'DRAPIXAI_METRICS_TOKEN',
+  'DRAPIXAI_STRIPE_SECRET_KEY',
+  'DRAPIXAI_STRIPE_WEBHOOK_SECRET',
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
   'SMTP_USER',
@@ -26,6 +28,25 @@ const MANAGED_SECRET_NAMES = new Set([
   'DRAPIXAI_SHOPIFY_STATE_SECRET',
   'DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY',
 ]);
+
+const REQUIRED_PRODUCTION_MANAGED_SECRET_NAMES = [
+  'DATABASE_URL',
+  'REDIS_URL',
+  'JWT_SECRET',
+  'DRAPIXAI_AUTH_SYNC_TOKEN',
+  'DRAPIXAI_DASHBOARD_PROXY_TOKEN',
+  'DRAPIXAI_AI_SERVICE_TOKEN',
+  'DRAPIXAI_ADMIN_TOKEN',
+  'DRAPIXAI_ADMIN_PASSWORD',
+  'DRAPIXAI_ADMIN_TOTP_SECRET',
+  'DRAPIXAI_STOREFRONT_TOKEN_SECRET',
+  'DRAPIXAI_AUDIT_LOG_SECRET',
+  'DRAPIXAI_WEBHOOK_ENCRYPTION_KEY',
+  'DRAPIXAI_METRICS_TOKEN',
+  'DRAPIXAI_STRIPE_SECRET_KEY',
+  'DRAPIXAI_STRIPE_WEBHOOK_SECRET',
+  'SMTP_PASS',
+] as const;
 
 const parseSecretObject = (raw: string, source: string) => {
   let parsed: unknown;
@@ -41,6 +62,18 @@ const parseSecretObject = (raw: string, source: string) => {
 };
 
 const applySecrets = (values: Record<string, unknown>) => {
+  if (process.env.NODE_ENV === 'production') {
+    const required = [
+      ...REQUIRED_PRODUCTION_MANAGED_SECRET_NAMES,
+      ...(process.env.DRAPIXAI_SHOPIFY_ENABLED === '1'
+        ? ['SHOPIFY_API_SECRET', 'DRAPIXAI_SHOPIFY_STATE_SECRET', 'DRAPIXAI_SHOPIFY_TOKEN_ENCRYPTION_KEY']
+        : []),
+    ];
+    const missing = required.filter((name) => typeof values[name] !== 'string' || String(values[name]).length === 0);
+    if (missing.length > 0) {
+      throw new Error(`MANAGED_SECRET_SET_INCOMPLETE:${missing.sort().join(',')}`);
+    }
+  }
   let applied = 0;
   for (const [name, value] of Object.entries(values)) {
     if (!MANAGED_SECRET_NAMES.has(name)) continue;

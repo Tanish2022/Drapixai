@@ -35,11 +35,24 @@ in plaintext.
 
 2. Keep the non-secret Compose image inputs beside the staging files. Copy the exact `DRAPIXAI_RELEASE_COMMIT` and all three application release-image digests from the scanned artifact record; `DRAPIXAI_AI_RUNTIME_IMAGE` records approved base-image provenance. Compose reads `.images.env` before service `env_file` values exist.
 
-3. Generate staging-only mounted secrets:
+3. Create test-mode Stripe products and prices, register the staging webhook at
+   `https://api.staging.drapixai.com/billing/webhooks/stripe`, and put the three
+   test Price IDs in `api.staging.env`. Export the test secret key and endpoint
+   signing secret only for the generator process, then generate staging-only
+   mounted secrets:
 
    ```bash
+   read -rsp "Stripe test secret key: " DRAPIXAI_STRIPE_SECRET_KEY && echo
+   export DRAPIXAI_STRIPE_SECRET_KEY
+   read -rsp "Stripe staging webhook secret: " DRAPIXAI_STRIPE_WEBHOOK_SECRET && echo
+   export DRAPIXAI_STRIPE_WEBHOOK_SECRET
    python deploy/scripts/generate-staging-secrets.py
+   unset DRAPIXAI_STRIPE_SECRET_KEY DRAPIXAI_STRIPE_WEBHOOK_SECRET
    ```
+
+   After the mounted secret is available to the API environment, run
+   `npm --prefix apps/api run billing:verify-catalog`. Save its redacted PASS
+   output with the billing release evidence.
 
 4. Issue separate GPU server and API client certificates from the private CA, then install the CA certificate and API client certificate/key at
    `/run/secrets/drapixai-internal-ca.pem` in the API container. Configure the GPU

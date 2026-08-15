@@ -88,6 +88,25 @@ require_min_length() {
   fi
 }
 
+require_prefix() {
+  local name="$1"
+  local expected="$2"
+  local value="${!name:-}"
+  if [[ "$value" != "$expected"* ]]; then
+    echo "Environment variable must start with $expected: $name" >&2
+    exit 1
+  fi
+}
+
+require_stripe_price() {
+  local name="$1"
+  local value="${!name:-}"
+  if [[ ! "$value" =~ ^price_[A-Za-z0-9]+$ ]]; then
+    echo "Environment variable must be a Stripe Price ID: $name" >&2
+    exit 1
+  fi
+}
+
 require_pinned_pytorch_runtime_image() {
   local value="${DRAPIXAI_AI_RUNTIME_IMAGE:-}"
   if [[ ! "$value" =~ ^pytorch/pytorch:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$ ]]; then
@@ -168,6 +187,15 @@ case "$profile" in
       SMTP_FROM
       DRAPIXAI_API_RELEASE_IMAGE
       DRAPIXAI_WEB_RELEASE_IMAGE
+      DRAPIXAI_WEB_BASE_URL
+      DRAPIXAI_STRIPE_BILLING_ENABLED
+      DRAPIXAI_STRIPE_LIVE_MODE
+      DRAPIXAI_STRIPE_CURRENCY
+      DRAPIXAI_STRIPE_SECRET_KEY
+      DRAPIXAI_STRIPE_WEBHOOK_SECRET
+      DRAPIXAI_STRIPE_PRICE_STARTER
+      DRAPIXAI_STRIPE_PRICE_GROWTH
+      DRAPIXAI_STRIPE_PRICE_PRO
     )
     ;;
   web)
@@ -249,9 +277,24 @@ if [[ "$profile" == "api" ]]; then
   require_min_length DRAPIXAI_ADMIN_TOTP_SECRET 16
   require_min_length DRAPIXAI_STOREFRONT_TOKEN_SECRET 32
   require_min_length DRAPIXAI_AUDIT_LOG_SECRET 32
+  require_equals DRAPIXAI_STRIPE_BILLING_ENABLED "1"
+  require_equals DRAPIXAI_STRIPE_CURRENCY "usd"
+  require_min_length DRAPIXAI_STRIPE_SECRET_KEY 32
+  require_prefix DRAPIXAI_STRIPE_WEBHOOK_SECRET "whsec_"
+  require_min_length DRAPIXAI_STRIPE_WEBHOOK_SECRET 32
+  require_stripe_price DRAPIXAI_STRIPE_PRICE_STARTER
+  require_stripe_price DRAPIXAI_STRIPE_PRICE_GROWTH
+  require_stripe_price DRAPIXAI_STRIPE_PRICE_PRO
   if [[ "$DRAPIXAI_API_ENVIRONMENT" != "live" && "$DRAPIXAI_API_ENVIRONMENT" != "sandbox" ]]; then
     echo "DRAPIXAI_API_ENVIRONMENT must be live or sandbox" >&2
     exit 1
+  fi
+  if [[ "$DRAPIXAI_API_ENVIRONMENT" == "live" ]]; then
+    require_equals DRAPIXAI_STRIPE_LIVE_MODE "1"
+    require_prefix DRAPIXAI_STRIPE_SECRET_KEY "sk_live_"
+  else
+    require_equals DRAPIXAI_STRIPE_LIVE_MODE "0"
+    require_prefix DRAPIXAI_STRIPE_SECRET_KEY "sk_test_"
   fi
   require_base64_bytes DRAPIXAI_WEBHOOK_ENCRYPTION_KEY 32
   require_equals DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY "1"

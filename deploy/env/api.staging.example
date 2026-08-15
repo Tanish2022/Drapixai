@@ -6,6 +6,13 @@ DRAPIXAI_MOUNTED_SECRET_FILE=/run/secrets/drapixai-api
 DRAPIXAI_AWS_SECRET_ID=drapixai/staging/api
 DRAPIXAI_PUBLIC_API_BASE_URL=https://api.staging.drapixai.com
 DRAPIXAI_WEB_BASE_URL=https://staging.drapixai.com
+DRAPIXAI_STRIPE_BILLING_ENABLED=1
+DRAPIXAI_STRIPE_LIVE_MODE=0
+DRAPIXAI_STRIPE_CURRENCY=usd
+# Test-mode DRAPIXAI_STRIPE_SECRET_KEY and DRAPIXAI_STRIPE_WEBHOOK_SECRET are loaded from the mounted secret file.
+DRAPIXAI_STRIPE_PRICE_STARTER=replace-with-stripe-test-starter-price-id
+DRAPIXAI_STRIPE_PRICE_GROWTH=replace-with-stripe-test-growth-price-id
+DRAPIXAI_STRIPE_PRICE_PRO=replace-with-stripe-test-pro-price-id
 DRAPIXAI_CORS_ORIGINS=https://staging.drapixai.com
 DRAPIXAI_TRUST_PROXY=1
 DRAPIXAI_AI_URL=https://drapixai-ai.staging.internal

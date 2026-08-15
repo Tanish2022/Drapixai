@@ -138,6 +138,12 @@ Evidence:
 - [x] Public pricing defines Starter, Growth, Pro, and Enterprise quotas.
 - [x] SDK and REST API share the account quota.
 - [x] Only the first successful publishable result consumes a unit.
+- [x] Hosted Checkout and customer portal are implemented without DrapixAI
+      receiving card data.
+- [x] Signed billing webhooks are raw-body verified, replay-safe, mode-separated,
+      ordered monotonically, and prevented from activating non-subscription invoices.
+- [x] Paid quota enforcement follows the exact provider billing period and fails
+      closed after an expired entitlement grace window.
 - [ ] Connect the production payment provider.
 - [ ] Test subscription creation, renewal, upgrade, downgrade, cancellation,
       failed payment, invoice, refund, and webhook replay.

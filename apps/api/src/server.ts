@@ -15,6 +15,7 @@ import shopifyRoutes from './routes/shopify';
 import shopifyStorefrontRoutes from './routes/shopify-storefront';
 import shopifyWebhookRoutes from './routes/shopify-webhooks';
 import v1Routes from './routes/v1';
+import billingRoutes, { stripeWebhookRouter } from './routes/billing';
 import cron from 'node-cron';
 import { startTrialNotifications } from './services/trial_notifier';
 import { getStorageSummary } from './lib/storage';
@@ -29,6 +30,7 @@ import { processPendingWebhookDeliveries } from './services/webhooks';
 import { observeHttpResponse, renderOperationalMetrics } from './lib/operational-metrics';
 import { inputValidationMiddleware } from './lib/input-validation';
 import { assertAiMtlsConfiguration } from './lib/ai-client';
+import { assertStripeEnvironment } from './lib/billing';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -148,6 +150,10 @@ const requireProductionConfig = () => {
     weak.push('DRAPIXAI_SECRETS_PROVIDER must use aws-secrets-manager or mounted-file in production');
   }
   requireExact('DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY', '1');
+  requireExact('DRAPIXAI_STRIPE_BILLING_ENABLED', '1');
+  requireExact('DRAPIXAI_STRIPE_LIVE_MODE', apiEnvironment === 'live' ? '1' : '0');
+  requireExact('DRAPIXAI_STRIPE_CURRENCY', 'usd');
+  requireExact('DRAPIXAI_STRIPE_CURRENCY', 'usd');
   if (secretsProvider === 'aws-secrets-manager' && process.env.DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY !== '1') {
     weak.push('AWS Secrets Manager must be bootstrapped with workload identity');
   }
@@ -236,6 +242,7 @@ const requireProductionConfig = () => {
 
 requireProductionConfig();
 assertAiMtlsConfiguration();
+assertStripeEnvironment();
 
 const localDevOrigins = [
   'http://localhost:3000',
@@ -296,6 +303,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(helmet());
+app.use('/billing/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookRouter);
 if (shopifyEnabled) {
   app.use('/shopify', shopifyStorefrontRoutes);
   app.use('/shopify/webhooks', express.raw({ type: 'application/json', limit: '2mb' }), shopifyWebhookRoutes);
@@ -332,6 +340,7 @@ app.use('/v1', v1Routes);
 app.use('/sdk', sdkRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/account', accountRoutes);
+app.use('/billing', billingRoutes);
 app.use('/admin', adminRoutes);
 if (shopifyEnabled) app.use('/shopify', shopifyRoutes);
 app.use('/', publicRoutes);

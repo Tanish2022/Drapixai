@@ -98,6 +98,12 @@
       "args": ["--prefix", "apps/api", "run", "test:tryon-intake"]
     },
     {
+      "id": "billing-security-contracts",
+      "label": "Hosted billing signature, replay, idempotency, and entitlement tests",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:billing-security"]
+    },
+    {
       "id": "shopify-contracts",
       "label": "Shopify signature and app-proxy contract tests",
       "runner": "npm",
