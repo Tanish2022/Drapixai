@@ -8,6 +8,7 @@ REDIS_URL=rediss://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-redis.internal:6379/1
 DRAPIXAI_AI_URL=https://sandbox-ai.drapixai.internal
 DRAPIXAI_AI_ALLOWED_HOSTS=sandbox-ai.drapixai.internal
 DRAPIXAI_AI_PRIVATE_NETWORK=1
+DRAPIXAI_TRYON_INTAKE_ENABLED=1
 S3_BUCKET=drapixai-sandbox
 AWS_REGION=ap-south-1
 DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY=1

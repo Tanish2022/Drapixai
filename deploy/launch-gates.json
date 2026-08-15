@@ -92,6 +92,12 @@
       "args": ["--prefix", "apps/api", "run", "test:admin-mfa"]
     },
     {
+      "id": "tryon-intake-containment",
+      "label": "Emergency try-on intake control fails closed before private uploads",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:tryon-intake"]
+    },
+    {
       "id": "shopify-contracts",
       "label": "Shopify signature and app-proxy contract tests",
       "runner": "npm",

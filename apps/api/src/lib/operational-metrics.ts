@@ -29,11 +29,14 @@ export const observeHttpResponse = (method: string, path: string, statusCode: nu
 };
 
 export const observeWebhookFailure = () => increment('drapixai_webhook_failures_total');
+export const observeTryOnIntakeRejection = () => increment('drapixai_tryon_intake_rejections_total');
 
 export const renderOperationalMetrics = async (
   prisma: PrismaClient,
   redis: RedisMetricsClient,
 ) => {
+  const intakeSetting = String(process.env.DRAPIXAI_TRYON_INTAKE_ENABLED || '').trim();
+  const intakeEnabled = intakeSetting === '1' || (!intakeSetting && process.env.NODE_ENV !== 'production');
   const lines = [
     '# HELP drapixai_http_requests_total HTTP responses returned by the API.',
     '# TYPE drapixai_http_requests_total counter',
@@ -43,6 +46,8 @@ export const renderOperationalMetrics = async (
     '# TYPE drapixai_rate_limited_total counter',
     '# HELP drapixai_webhook_failures_total Webhook attempts that failed.',
     '# TYPE drapixai_webhook_failures_total counter',
+    '# HELP drapixai_tryon_intake_rejections_total Try-on requests rejected while intake is paused.',
+    '# TYPE drapixai_tryon_intake_rejections_total counter',
   ];
   for (const [key, value] of [...counters.entries()].sort(([left], [right]) => left.localeCompare(right))) {
     lines.push(`${key} ${value}`);
@@ -68,6 +73,9 @@ export const renderOperationalMetrics = async (
     '# HELP drapixai_active_tryons Current distributed GPU slot leases.',
     '# TYPE drapixai_active_tryons gauge',
     `drapixai_active_tryons ${activeTryOns}`,
+    '# HELP drapixai_tryon_intake_enabled Whether new try-on generation is accepted.',
+    '# TYPE drapixai_tryon_intake_enabled gauge',
+    `drapixai_tryon_intake_enabled ${intakeEnabled ? 1 : 0}`,
   );
   return `${lines.join('\n')}\n`;
 };

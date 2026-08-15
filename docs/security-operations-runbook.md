@@ -17,6 +17,29 @@ This runbook applies to public production. Every action needs an incident or cha
 
 Emergency rotation skips normal notice but not evidence, staging where feasible, or post-change verification.
 
+## Emergency try-on intake
+
+Pause only new generation while preserving health checks, authentication,
+usage reads, result metadata, audit access, and operator investigation:
+
+```bash
+DRAPIXAI_TRYON_INTAKE_ENABLED=0 docker compose --env-file deploy/env/api.production.env -f deploy/docker-compose.edge.yml up -d --no-deps --force-recreate api
+```
+
+Confirm `/metrics` reports `drapixai_tryon_intake_enabled 0`, then verify SDK,
+public API, and demo creation return HTTP `503`, `Retry-After: 60`, and
+`x-drapixai-intake-status: paused`. Existing result metadata reads must remain
+available. Record the incident/change ID and alert delivery evidence.
+
+Resume only after the incident owner approves and dependency readiness is green:
+
+```bash
+DRAPIXAI_TRYON_INTAKE_ENABLED=1 docker compose --env-file deploy/env/api.production.env -f deploy/docker-compose.edge.yml up -d --no-deps --force-recreate api
+```
+
+Confirm the metric returns to `1` and run one approved Standard smoke test. Do
+not increase candidate count, inference steps, or GPU concurrency during recovery.
+
 ## Breach response
 
 1. Page the incident commander and security owner. Record the discovery time and preserve logs.

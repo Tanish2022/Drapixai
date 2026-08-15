@@ -23,6 +23,7 @@ services:
       - ./env/api.production.env
     environment:
       REDIS_URL: redis://default:${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}@redis:6379
+      DRAPIXAI_TRYON_INTAKE_ENABLED: ${DRAPIXAI_TRYON_INTAKE_ENABLED:?set DRAPIXAI_TRYON_INTAKE_ENABLED to 0 or 1}
     volumes:
       - ${DRAPIXAI_INTERNAL_TLS_SECRETS_DIR:?set DRAPIXAI_INTERNAL_TLS_SECRETS_DIR}/drapixai-internal-ca.pem:/run/secrets/drapixai-internal-ca.pem:ro
       - ${DRAPIXAI_INTERNAL_TLS_SECRETS_DIR:?set DRAPIXAI_INTERNAL_TLS_SECRETS_DIR}/drapixai-ai-client.crt:/run/secrets/drapixai-ai-client.crt:ro

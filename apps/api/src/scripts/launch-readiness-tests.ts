@@ -177,6 +177,7 @@ assert.deepStrictEqual(
 );
 
 const sdkRoute = read('apps/api/src/routes/sdk.ts');
+const tryOnIntake = read('apps/api/src/lib/tryon-intake.ts');
 const apiKeyAuth = read('apps/api/src/lib/api-key-auth.ts');
 const apiServer = read('apps/api/src/server.ts');
 const authRoute = read('apps/api/src/routes/auth.ts');
@@ -1143,6 +1144,9 @@ assertIncludes(validateEnv, 'require_equals DRAPIXAI_TRYON_ENGINE "catvton"', 'A
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_CATVTON_SKIP_SAFETY_CHECK "0"', 'AI env validation must keep CatVTON output safety enabled');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_CANDIDATE_COUNT "1"', 'AI env validation must enforce Standard-only candidate count');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_REVIEW_RETENTION_DAYS "0"', 'API env validation must prohibit persistent shopper review media');
+assertIncludes(validateEnv, 'require_equals DRAPIXAI_TRYON_INTAKE_ENABLED "1"', 'API env validation must require an explicit enabled intake state');
+assertIncludes(edgeCompose, 'DRAPIXAI_TRYON_INTAKE_ENABLED:?set DRAPIXAI_TRYON_INTAKE_ENABLED to 0 or 1', 'Production Compose must not silently enable try-on intake');
+assertIncludes(stagingEdgeCompose, 'DRAPIXAI_TRYON_INTAKE_ENABLED:?set DRAPIXAI_TRYON_INTAKE_ENABLED to 0 or 1', 'Staging Compose must not silently enable try-on intake');
 assertIncludes(validateEnv, 'require_equals DRAPIXAI_TRANSIENT_SPOOL_DIR "/dev/shm/drapixai-tryon-spool"', 'AI env validation must keep shopper media on volatile memory storage');
 assertIncludes(validateProductionEnvSetPowerShell, 'DRAPIXAI_REVIEW_RETENTION_DAYS = "0"', 'Windows production env validation must prohibit persistent shopper review media');
 assertIncludes(validateEnv, 'require_number_at_least DRAPIXAI_MIN_QUALITY_SCORE "0.95"', 'AI env validation must enforce launch quality threshold');
@@ -1914,7 +1918,20 @@ assertIncludes(operationalMetrics, 'drapixai_auth_failures_total', 'Operational 
 assertIncludes(operationalMetrics, 'drapixai_gpu_queue_depth', 'Operational metrics must expose GPU queue growth');
 assertIncludes(monitoringAlerts, 'DrapixAIGpuQueueCritical', 'Monitoring must page on a critical GPU queue');
 assertIncludes(monitoringAlerts, 'DrapixAIWebhookDeliveryFailures', 'Monitoring must alert on webhook failures');
+assertIncludes(monitoringAlerts, 'DrapixAITryOnIntakePaused', 'Monitoring must page when emergency intake is paused');
+assertIncludes(operationalMetrics, 'drapixai_tryon_intake_enabled', 'Operational metrics must expose the intake state');
+assertIncludes(tryOnIntake, "process.env.NODE_ENV !== 'production'", 'Production try-on intake must fail closed without explicit configuration');
+assertIncludes(sdkRoute, "authMiddleware, requireTryOnIntake, upload.fields", 'SDK intake must reject requests before parsing private shopper uploads');
+assertIncludes(sdkRoute, "requireDashboardProxy, requireTryOnIntake, upload.single('cloth_image')", 'Garment preparation intake must reject requests before parsing uploads');
+assertIncludes(sdkRoute, "requireDashboardProxy, requireTryOnIntake, upload.array('cloth_images', 20)", 'Bulk garment preparation must respect emergency intake containment');
+assertIncludes(publicApiRoute, "requireScope('api:tryon'), requireTryOnIntake", 'Public API try-on must share the emergency intake gate');
+assertIncludes(publicRoute, 'createRateLimitMiddleware(3, 24 * 60 * 60 * 1000),\n  requireTryOnIntake,', 'Public demo must share the emergency intake gate');
+assertIncludes(publicRoute, 'const slot = await acquireTryOnSlot(0);', 'Public demo must consume the shared GPU capacity lease');
+assertIncludes(publicRoute, 'await releaseTryOnSlot(publicDemoLease)', 'Public demo must release its GPU capacity lease');
+assertIncludes(shopifyRoutes, "requireDashboardProxy, requireTryOnIntake, async", 'Merchant-triggered Shopify preparation must respect emergency intake containment');
+assertIncludes(catalogPreparationService, 'if (!isTryOnIntakeEnabled())', 'Scheduled Shopify preparation must stop while emergency intake is paused');
 assertIncludes(securityOperations, '## Key rotation', 'Operations must document key rotation');
+assertIncludes(securityOperations, '## Emergency try-on intake', 'Operations must document emergency intake pause and recovery');
 assertIncludes(securityOperations, '## Breach response', 'Operations must document breach response');
 assertIncludes(securityOperations, '## Backup and restore', 'Operations must document backup restore');
 assertIncludes(securityOperations, '## Customer deletion', 'Operations must document customer deletion');

@@ -14,6 +14,8 @@ import {
 } from '../lib/privacy';
 import { shouldAutoRejectTryOn } from '../lib/tryon-quality';
 import { validateMultipartFields } from '../lib/input-validation';
+import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
+import { requireTryOnIntake } from '../lib/tryon-intake';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -149,6 +151,7 @@ router.post(
 router.post(
   '/demo/tryon',
   createRateLimitMiddleware(3, 24 * 60 * 60 * 1000),
+  requireTryOnIntake,
   upload.fields([
     { name: 'person_image', maxCount: 1 },
     { name: 'cloth_image', maxCount: 1 },
@@ -165,6 +168,7 @@ router.post(
     const clothFile = files?.cloth_image?.[0];
     const requestId = crypto.randomUUID();
     let transientCacheKey: string | null = null;
+    let publicDemoLease: Parameters<typeof releaseTryOnSlot>[0] | null = null;
     let consentRecorded = false;
     let cacheCleanupOutcome: 'not_created' | 'deleted' | 'failed' = 'not_created';
 
@@ -196,6 +200,21 @@ router.post(
         message: 'Uploaded image content must match a supported JPEG, PNG, or WebP file.'
       });
     }
+
+    const slot = await acquireTryOnSlot(0);
+    if (!slot.ok) {
+      removeUploadedFile(personFile);
+      removeUploadedFile(clothFile);
+      const unavailable = slot.reason === 'CONCURRENCY_CONTROL_UNAVAILABLE';
+      res.setHeader('Retry-After', '2');
+      return res.status(unavailable ? 503 : 429).json({
+        error: slot.reason,
+        message: unavailable
+          ? 'Try-on capacity control is temporarily unavailable.'
+          : 'DrapixAI is processing the current GPU capacity. Please retry shortly.',
+      });
+    }
+    publicDemoLease = slot.lease;
 
     try {
       await appendSecurityAudit(prisma, {
@@ -319,6 +338,7 @@ router.post(
       }).catch(() => undefined);
       return res.status(500).json({ error: 'DEMO_TRY_ON_FAILED' });
     } finally {
+      if (publicDemoLease) await releaseTryOnSlot(publicDemoLease);
       if (transientCacheKey) {
         try {
           const cleanupResponse = await aiFetch(`${AI_URL}/ai/garment/cache/delete`, {

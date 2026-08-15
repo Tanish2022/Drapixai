@@ -20,6 +20,7 @@ import {
   queueWebhookEvent,
 } from '../services/webhooks';
 import { formatLogError } from '../lib/security';
+import { requireTryOnIntake } from '../lib/tryon-intake';
 import openApiV1 from '../openapi/v1';
 
 const router = Router();
@@ -233,7 +234,7 @@ router.get('/usage', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requireS
   });
 });
 
-router.post('/tryons', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requireScope('api:tryon'), async (req: any, res: any, next) => {
+router.post('/tryons', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requireScope('api:tryon'), requireTryOnIntake, async (req: any, res: any, next) => {
   const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
   if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
     return res.status(400).json({ error: 'VALID_IDEMPOTENCY_KEY_REQUIRED' });

@@ -91,6 +91,8 @@ services:
     restart: unless-stopped
     env_file:
       - ../env/api.staging.env
+    environment:
+      DRAPIXAI_TRYON_INTAKE_ENABLED: ${DRAPIXAI_TRYON_INTAKE_ENABLED:?set DRAPIXAI_TRYON_INTAKE_ENABLED to 0 or 1}
     volumes:
       - ./private/drapixai-api.json:/run/secrets/drapixai-api:ro
       - ./private/drapixai-internal-ca.pem:/run/secrets/drapixai-internal-ca.pem:ro

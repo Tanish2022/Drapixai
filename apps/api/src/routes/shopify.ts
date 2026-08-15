@@ -14,6 +14,7 @@ import {
 } from '../lib/shopify-auth';
 import { encryptShopifySecret } from '../lib/shopify-crypto';
 import { formatLogError } from '../lib/security';
+import { requireTryOnIntake } from '../lib/tryon-intake';
 import { processShopifyCatalogPreparationBatch } from '../services/catalog-preparation';
 import {
   buildShopifyThemeEditorUrl,
@@ -217,7 +218,7 @@ router.get('/preparation', authMiddleware, requireDashboardProxy, async (req: an
   return res.json({ counts, failures });
 });
 
-router.post('/prepare', authMiddleware, requireDashboardProxy, async (req: any, res) => {
+router.post('/prepare', authMiddleware, requireDashboardProxy, requireTryOnIntake, async (req: any, res) => {
   try {
     const requestedLimit = Number(req.body?.limit || 3);
     const result = await processShopifyCatalogPreparationBatch(prisma, requestedLimit, req.user.id);

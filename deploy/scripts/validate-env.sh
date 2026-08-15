@@ -297,6 +297,7 @@ if [[ "$profile" == "api" ]]; then
   require_equals DRAPIXAI_AUTO_REJECT_BAD_RESULTS "1"
   require_equals DRAPIXAI_EXCELLENT_LATENCY_MS "10000"
   require_equals DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS "12000"
+  require_equals DRAPIXAI_TRYON_INTAKE_ENABLED "1"
   require_equals DRAPIXAI_REVIEW_RETENTION_DAYS "0"
   require_equals DRAPIXAI_ENABLE_LOWER_BODY "0"
   if [[ "${DRAPIXAI_SHOPIFY_ENABLED:-0}" == "1" ]]; then

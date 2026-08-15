@@ -13,6 +13,7 @@ logs
 models
 runtime
 uploads
+docs
 **/.env
 **/.env.*
 deploy/env/*.production.env

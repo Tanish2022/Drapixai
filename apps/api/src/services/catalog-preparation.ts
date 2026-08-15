@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { createStorageClient, getStorageEncryptionParams, STORAGE_BUCKET, STORAGE_LOCAL_FALLBACK_ALLOWED } from '../lib/storage';
 import { buildUploadPath, detectImageMimeType, sanitizePathSegment } from '../lib/security';
 import { aiFetch } from '../lib/ai-client';
+import { isTryOnIntakeEnabled } from '../lib/tryon-intake';
 
 const AI_URL = (process.env.DRAPIXAI_AI_URL || 'http://localhost:8080').replace(/\/+$/, '');
 const AI_SERVICE_TOKEN = (process.env.DRAPIXAI_AI_SERVICE_TOKEN || '').trim();
@@ -327,6 +328,9 @@ export const processShopifyCatalogPreparationBatch = async (
   limit = 3,
   userId?: number,
 ) => {
+  if (!isTryOnIntakeEnabled()) {
+    return { busy: false, paused: true, items: [] as Array<{ productId: string; status: string; error?: string }> };
+  }
   const lease = await acquirePreparationLease(prisma);
   if (!lease) return { busy: true, items: [] as Array<{ productId: string; status: string; error?: string }> };
   try {

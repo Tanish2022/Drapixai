@@ -21,6 +21,15 @@ groups:
 
   - name: drapixai-capacity
     rules:
+      - alert: DrapixAITryOnIntakePaused
+        expr: drapixai_tryon_intake_enabled == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: DrapixAI try-on intake is paused
+          description: New shopper try-ons are being rejected. Confirm this is an approved maintenance or incident action.
+
       - alert: DrapixAIGpuQueueGrowing
         expr: drapixai_gpu_queue_depth > 10
         for: 3m

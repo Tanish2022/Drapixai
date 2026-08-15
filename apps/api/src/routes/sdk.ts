@@ -7,6 +7,7 @@ import { aiFetch } from '../lib/ai-client';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createClient } from 'redis';
 import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
+import { requireTryOnIntake } from '../lib/tryon-intake';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import multer from 'multer';
 import fs from 'fs';
@@ -720,7 +721,7 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
  * POST /sdk/render
  * Submit a new render job
  */
-router.post('/render', authMiddleware, requireLegacyAsyncRender, upload.single('image'), async (req: any, res: any) => {
+router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnIntake, upload.single('image'), async (req: any, res: any) => {
   if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const apiKey = req.apiKey;
@@ -848,7 +849,7 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, upload.single('
  * POST /sdk/tryon
  * Direct binary try-on (person + cloth) via AI service
  */
-router.post('/tryon', authMiddleware, upload.fields([
+router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
   { name: 'person_image', maxCount: 1 },
   { name: 'cloth_image', maxCount: 1 }
 ]), async (req: any, res: any) => {
@@ -1349,7 +1350,7 @@ router.post('/tryon-feedback', authMiddleware, async (req: any, res: any) => {
  * POST /sdk/garments
  * Upload + preprocess garment, store cache key
  */
-router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('cloth_image'), async (req: any, res: any) => {
+router.post('/garments', authMiddleware, requireDashboardProxy, requireTryOnIntake, upload.single('cloth_image'), async (req: any, res: any) => {
   if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const user = req.user;
@@ -1477,7 +1478,7 @@ router.post('/garments', authMiddleware, requireDashboardProxy, upload.single('c
  * POST /sdk/garments/bulk
  * Bulk upload garments as standalone assets
  */
-router.post('/garments/bulk', authMiddleware, requireDashboardProxy, upload.array('cloth_images', 20), async (req: any, res: any) => {
+router.post('/garments/bulk', authMiddleware, requireDashboardProxy, requireTryOnIntake, upload.array('cloth_images', 20), async (req: any, res: any) => {
   if (rejectInvalidMultipartFields(req, res)) return;
   try {
     const user = req.user;
