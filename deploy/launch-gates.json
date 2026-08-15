@@ -74,6 +74,18 @@
       "args": ["--prefix", "apps/api", "run", "test:public-api"]
     },
     {
+      "id": "distributed-security-controls",
+      "label": "Redis-backed rate, concurrency, fairness, and webhook-claim controls",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:distributed-security"]
+    },
+    {
+      "id": "api-log-redaction",
+      "label": "API logs redact credentials, identities, URLs, and image payloads",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:log-privacy"]
+    },
+    {
       "id": "shopify-contracts",
       "label": "Shopify signature and app-proxy contract tests",
       "runner": "npm",
@@ -96,6 +108,18 @@
       "label": "Hardened AI Compose manifest",
       "runner": "docker",
       "args": ["compose", "--env-file", "deploy/env/ai.production.example", "-f", "deploy/docker-compose.ai.yml", "config", "--quiet"]
+    },
+    {
+      "id": "environment-isolation-contract",
+      "label": "Sandbox and production resource identities remain separate",
+      "runner": "node",
+      "args": ["deploy/scripts/verify-environment-isolation.mjs", "deploy/env/api.sandbox.example", "deploy/env/api.production.example"]
+    },
+    {
+      "id": "staging-topology-contract",
+      "label": "Staging topology is private, immutable, mTLS-ready, and Standard-only",
+      "runner": "python",
+      "args": ["deploy/scripts/verify-staging-topology.py"]
     },
     {
       "id": "api-dependency-audit",
@@ -126,6 +150,12 @@
       "label": "AI upload and readiness hardening regression suite",
       "runner": "python",
       "args": ["-m", "drapixai_ai.scripts.validate_ai_ingress_security"]
+    },
+    {
+      "id": "ai-log-redaction",
+      "label": "AI structured logs redact secrets, identities, URLs, and image payloads",
+      "runner": "python",
+      "args": ["-m", "drapixai_ai.scripts.validate_log_privacy"]
     },
     {
       "id": "garment-cache-expiry",
@@ -220,6 +250,38 @@
     {
       "id": "authorized-pentest",
       "label": "Authorized independent penetration test has no unresolved high or critical findings"
+    },
+    {
+      "id": "edge-operator-access",
+      "label": "Public edge, deny-by-default firewall, VPN-only administration, MFA, and operator access are verified"
+    },
+    {
+      "id": "environment-isolation",
+      "label": "Production and sandbox databases, Redis, buckets, keys, secrets, and AI endpoints are physically isolated"
+    },
+    {
+      "id": "auth-lifecycle",
+      "label": "Registration, verification, MFA, session expiry, reset, revocation, logout, and operator offboarding are verified"
+    },
+    {
+      "id": "log-privacy",
+      "label": "Production logs and observability exports contain no shopper media, credentials, signed URLs, or direct identifiers"
+    },
+    {
+      "id": "billing-security",
+      "label": "Billing lifecycle, signed webhook replay defense, quota accounting, refunds, and tax configuration are verified"
+    },
+    {
+      "id": "failure-containment",
+      "label": "Queue saturation, GPU OOM, worker loss, dependency outage, tenant fairness, and emergency disable are contained"
+    },
+    {
+      "id": "legal-privacy-approval",
+      "label": "Qualified legal review approves privacy, consent, retention, terms, refunds, DPA, and subprocessors"
+    },
+    {
+      "id": "controlled-pilot-approval",
+      "label": "Controlled pilot exit criteria pass and founders sign the exact-commit go-live decision"
     }
   ]
 }

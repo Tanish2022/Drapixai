@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { formatLogError } from '../lib/security';
@@ -24,20 +23,6 @@ const authIdentityRateLimit = createRateLimitMiddleware(5, 15 * 60 * 1000, (req)
 });
 const AUTH_SYNC_TOKEN = process.env.DRAPIXAI_AUTH_SYNC_TOKEN || '';
 
-const getJwtSecret = () => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET_NOT_CONFIGURED');
-  }
-  return secret;
-};
-
-const issueJwt = (userId: number) =>
-  jwt.sign({ userId }, getJwtSecret(), {
-    expiresIn: '7d',
-    issuer: 'drapixai',
-  });
-
 const isProduction = () => process.env.NODE_ENV === 'production';
 
 const hasValidAuthSyncToken = (provided: unknown) => {
@@ -48,12 +33,7 @@ const hasValidAuthSyncToken = (provided: unknown) => {
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 };
 
-const publicAuthFailure = (error: unknown, fallback: string, fallbackStatus = 400) => {
-  const code = error instanceof Error ? error.message : '';
-  if (code === 'JWT_SECRET_NOT_CONFIGURED') {
-    return { status: 500, error: 'AUTH_CONFIGURATION_ERROR' };
-  }
-
+const publicAuthFailure = (_error: unknown, fallback: string, fallbackStatus = 400) => {
   return { status: fallbackStatus, error: fallback };
 };
 
@@ -215,9 +195,7 @@ router.post('/register', async (req, res) => {
     });
 
     const apiKey = await issueApiKeyForUser(prisma, user.id);
-    const token = issueJwt(user.id);
     res.json({
-      token,
       apiKey,
       user: {
         email: user.email,
@@ -272,7 +250,6 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
     }
 
     const apiKey = issueNewKey ? await issueApiKeyForUser(prisma, user.id) : null;
-    const token = issueJwt(user.id);
     await appendSecurityAudit(prisma, {
       actorUserId: user.id,
       actorRole: user.role,
@@ -282,7 +259,6 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
       metadata: { apiKeyIssued: Boolean(apiKey) },
     });
     res.json({
-      token,
       apiKey,
       user: {
         email: user.email,

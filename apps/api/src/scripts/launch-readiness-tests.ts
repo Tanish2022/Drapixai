@@ -339,6 +339,9 @@ const launchEvidenceRecorder = read('scripts/record-launch-evidence.mjs');
 const launchEvidenceTemplate = JSON.parse(read('deploy/launch-evidence.example.json')) as {
   gates: Record<string, { evidence?: string; sha256?: string }>;
 };
+const launchGateConfig = JSON.parse(launchGates) as {
+  releaseEvidence: Array<{ id: string }>;
+};
 const rootPackageJson = read('package.json');
 const gitignore = read('.gitignore');
 const gitattributes = read('.gitattributes');
@@ -460,6 +463,40 @@ assertIncludes(nodeRuntimeVerifier, 'UNSUPPORTED_NODE_RUNTIME', 'Node runtime ve
 assertIncludes(nodeRuntimeVerifier, 'NODE_ENGINE_RANGE_MISMATCH', 'Node runtime verifier must require one consistent engine range.');
 assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
 assert.ok('three-tenant-gpu' in launchEvidenceTemplate.gates, 'Launch-evidence template must include the three-tenant GPU certification artifact.');
+const requiredP0EvidenceGates = [
+  'clean-release-commit',
+  'disposable-db-migration',
+  'container-image-scan',
+  'two-tenant-staging',
+  'audit-chain-staging',
+  'retention-staging',
+  'private-services',
+  'backup-restore',
+  'secret-rotation',
+  'alerts',
+  'sdk-quality-parity',
+  'three-tenant-gpu',
+  'quality-matrix',
+  'authorized-pentest',
+  'edge-operator-access',
+  'environment-isolation',
+  'auth-lifecycle',
+  'log-privacy',
+  'billing-security',
+  'failure-containment',
+  'legal-privacy-approval',
+  'controlled-pilot-approval',
+] as const;
+assert.deepStrictEqual(
+  launchGateConfig.releaseEvidence.map(({ id }) => id),
+  requiredP0EvidenceGates,
+  'Release evidence must contain the complete ordered 22-gate P0 launch program.',
+);
+for (const gateId of requiredP0EvidenceGates.filter((id) => id !== 'clean-release-commit')) {
+  assert.ok(gateId in launchEvidenceTemplate.gates, `Launch-evidence template must include ${gateId}.`);
+  assert.ok(launchEvidenceTemplate.gates[gateId].evidence, `${gateId} must name a release-record artifact.`);
+  assert.ok(launchEvidenceTemplate.gates[gateId].sha256, `${gateId} must require an artifact digest.`);
+}
 assertIncludes(aiServer, 'PRODUCTION_CONFIG_INVALID', 'AI server must fail closed when production secrets are missing');
 assertIncludes(aiServer, '_validate_image_bytes', 'AI server must validate image payloads before queueing work');
 assertIncludes(aiServer, 'hmac.compare_digest(token, settings.ai_service_token)', 'AI service-token checks must be timing safe');
@@ -583,13 +620,15 @@ assertIncludes(securitySchema, 'expiresAt           DateTime?', 'API keys must s
 assertIncludes(apiKeyAuth, 'revokedAt: null', 'Revoked API keys must fail authentication');
 assertIncludes(apiKeyAuth, 'lastUsedAt: new Date()', 'API key use must update lifecycle metadata');
 assertIncludes(authRoute, "router.post('/logout'", 'Logout must revoke the server-side API key');
-assertIncludes(authRoute, 'authVersion: { increment: 1 }', 'Password reset must invalidate account sessions');
+assertIncludes(authRoute, 'authVersion: { increment: 1 }', 'Password reset must advance account credential versioning');
+assertNotIncludes(authRoute, 'const issueJwt', 'Account authentication must not issue an untracked long-lived bearer JWT');
+assertNotIncludes(authRoute, 'token,\n      apiKey', 'Login and registration must return only revocable server-side credentials');
 assertIncludes(authRoute, "error: 'EMAIL_NOT_VERIFIED'", 'Password login must reject accounts without verified email ownership');
 assertIncludes(authRoute, "action: 'auth.email_unverified.denied'", 'Unverified login attempts must enter the security audit chain');
 assertNotIncludes(authRoute, 'data: { emailVerifiedAt: new Date() }', 'Password login must never auto-verify email ownership');
 assertIncludes(accountRoute, 'sessionsRevoked: true', 'Password changes must report session revocation');
 assertIncludes(accountRoute, 'emailVerifiedAt: revokedAt', 'Email changes must establish the verified identity and revocation time atomically');
-assertIncludes(accountRoute, 'authVersion: { increment: 1 }', 'Email changes must invalidate signed account sessions');
+assertIncludes(accountRoute, 'authVersion: { increment: 1 }', 'Email changes must advance account credential versioning');
 assertIncludes(accountRoute, 'where: { userId: resolved.user.id, isActive: true }', 'Sensitive account changes must revoke active API keys');
 assertIncludes(securityHelpers, 'PASSWORD_HASH_ROUNDS = 12', 'Passwords must use strengthened bcrypt parameters');
 assertIncludes(adminMfa, 'createHmac', 'Administrator MFA must validate TOTP server-side');
@@ -618,7 +657,7 @@ assertIncludes(authRoute, "purpose: 'password_reset'", 'Password reset must use 
 assertIncludes(authRoute, "error: 'INVALID_OR_EXPIRED_OTP'", 'Password reset must not disclose account existence through OTP failures');
 assertIncludes(authRoute, "return res.json({ ok: true });", 'Password reset request must avoid account enumeration');
 assertIncludes(authRoute, 'const publicAuthFailure =', 'Auth route must centralize public error sanitization');
-assertIncludes(authRoute, "error: 'AUTH_CONFIGURATION_ERROR'", 'Auth route must not expose internal JWT config errors to clients');
+assertNotIncludes(authRoute, "error: 'AUTH_CONFIGURATION_ERROR'", 'Password authentication must not depend on an account JWT configuration');
 assertIncludes(authRoute, "error: 'EMAIL_ALREADY_REGISTERED'", 'Auth register flow must use stable public error codes');
 assertNotIncludes(authRoute, "err.message || 'OTP_REQUEST_FAILED'", 'Auth OTP route must not return raw exception messages');
 assertNotIncludes(authRoute, "err.message || 'PASSWORD_RESET_OTP_REQUEST_FAILED'", 'Password reset OTP route must not return raw exception messages');

@@ -38,12 +38,49 @@ The command does not decide that a gate passed; the operator remains accountable
 for the evidence. It makes the recorded artifact, hash, timestamp, gate identity,
 and release commit mechanically consistent.
 
+## Complete P0 evidence set
+
+Public launch requires all 22 gates below. Repository tests may prove that a
+control exists, but they do not replace dated evidence from the exact deployed
+commit and environment.
+
+1. Exact clean release commit.
+2. Disposable database migration and immutable-audit trigger proof.
+3. Exact API, web, and AI container-image scans.
+4. Live two-tenant staging attack harness.
+5. Valid staging audit hash chain.
+6. Retention, deletion, retry, and URL-clearing proof.
+7. Private database, Redis, storage administration, and GPU services.
+8. Backup restoration and rollback drill.
+9. Secret rotation and revocation drill.
+10. Delivered security, availability, queue, and quality alerts.
+11. SDK and direct Standard quality parity.
+12. Three-tenant GPU quality, latency, capacity, and isolation proof.
+13. Rights-cleared 50-case upper-body quality matrix.
+14. Authorized independent penetration test with no unresolved high/critical findings.
+15. WAF/edge, firewall, VPN-only administration, MFA, and operator-access proof.
+16. Physical sandbox/production data, queue, storage, secret, key, and AI isolation.
+17. Complete user and operator authentication/session lifecycle proof.
+18. Production log-privacy proof across API, web, AI, proxies, and observability exports.
+19. Production billing lifecycle, signed-webhook replay, quota, refund, and tax proof.
+20. Queue, GPU, worker, dependency, tenant-fairness, and emergency-disable failure containment.
+21. Qualified legal approval for privacy, consent, retention, terms, refunds, DPA, and subprocessors.
+22. Controlled-pilot exit evidence and founder approval for the exact commit.
+
+No gate may be marked `PASS` from a planned configuration, screenshot without
+context, local-only test, or unverified statement. External reviews and approvals
+must identify the reviewer, scope, timestamp, exact release commit, and artifact
+digest.
+
 ## Repository gates
 
 - API and web production builds pass.
 - `npm --prefix apps/api run test:launch` passes.
 - `npm --prefix apps/api run test:authorization` passes.
 - `npm --prefix apps/api run test:storefront-tokens` passes.
+- `npm --prefix apps/api run test:distributed-security` passes.
+- AI structured-log redaction regression tests pass.
+- Sandbox/production isolation and staging-topology contract tests pass.
 - Prisma migrations apply to a disposable PostgreSQL database and the audit mutation triggers reject UPDATE and DELETE.
 - Both hardened Compose manifests render successfully from example environment files.
 - Production CSP contains a per-request nonce and contains no `unsafe-inline`.

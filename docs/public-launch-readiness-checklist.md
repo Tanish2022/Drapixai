@@ -294,7 +294,13 @@ The release record must contain, at minimum:
 - `release-record/three-user-gpu-report.json`
 - `release-record/billing-e2e.md`
 - `release-record/pentest-final-report.pdf`
+- `release-record/edge-operator-access.md`
+- `release-record/environment-isolation.json`
+- `release-record/auth-lifecycle.json`
+- `release-record/log-privacy.json`
 - `release-record/founder-go-live-approval.md`
+- `release-record/failure-containment.json`
+- `release-record/legal-privacy-approval.pdf`
 
 ## Final Go-Live Command
 

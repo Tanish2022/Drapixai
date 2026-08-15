@@ -91,7 +91,63 @@
       "evidence": "runtime/launch-evidence/release-record/pentest-final-report.pdf",
       "verifiedAt": "2026-01-01T00:00:00.000Z",
       "verifiedBy": "independent-tester@example.com",
-    "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "edge-operator-access": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/edge-operator-access.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "environment-isolation": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/environment-isolation.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "auth-lifecycle": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/auth-lifecycle.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "log-privacy": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/log-privacy.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "billing-security": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/billing-e2e.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "failure-containment": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/failure-containment.json",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "release-owner@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "legal-privacy-approval": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/legal-privacy-approval.pdf",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "legal-reviewer@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
+    },
+    "controlled-pilot-approval": {
+      "status": "PENDING",
+      "evidence": "runtime/launch-evidence/release-record/founder-go-live-approval.md",
+      "verifiedAt": "2026-01-01T00:00:00.000Z",
+      "verifiedBy": "founder@example.com",
+      "sha256": "REPLACE_WITH_ARTIFACT_SHA256"
     }
   }
 }

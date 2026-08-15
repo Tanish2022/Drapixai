@@ -209,7 +209,7 @@ export const sanitizeUpstreamError = (fallback: string, raw: string) => {
 export const redactSensitiveText = (value: unknown) =>
   String(value ?? '')
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [redacted]')
-    .replace(/\b(dpx(?:st|pv)?_[A-Za-z0-9_-]{12,})\b/g, '[redacted-api-key]')
+    .replace(/\b(dpx(?:st|sf|pv|api)?_[A-Za-z0-9_-]{12,})\b/g, '[redacted-api-key]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
     .replace(/(cookie|set-cookie)(\s*:\s*)[^\r\n]+/gi, '$1$2[redacted]')
     .replace(/("?(?:person|cloth|image)_image_base64"?\s*[:=]\s*"?)[A-Za-z0-9+/=]{32,}/gi, '$1[redacted]')
