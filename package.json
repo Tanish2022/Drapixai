@@ -17,6 +17,8 @@
     "prove:live": "powershell -ExecutionPolicy Bypass -File deploy\\scripts\\prove-live-stack.ps1",
     "launch:report": "node scripts/launch-gate-report.mjs --scope=all",
     "launch:report:repository": "node scripts/launch-gate-report.mjs --scope=repository",
+    "launch:evidence:init": "node scripts/init-launch-evidence.mjs",
+    "launch:certify:disposable-db": "node scripts/certify-disposable-db.mjs",
     "test:launch": "npm --prefix apps/api run test:launch",
     "test:shopify": "npm --prefix apps/api run test:shopify",
     "test:storefront-key-lifecycle": "npm --prefix apps/api run test:storefront-key-lifecycle"

@@ -20,6 +20,10 @@ npm run launch:report
 
 Copy `deploy/launch-evidence.example.json` to the ignored `runtime/launch-evidence/approved-evidence.json`, set the exact 40-character release commit, and place each redacted evidence artifact beneath `runtime/launch-evidence/`. For every completed external gate, record the verifier, timestamp, artifact path, and SHA-256 digest. `PASS` entries are accepted only when the evidence file targets the current commit and the referenced artifact exists under that directory with the recorded hash.
 
+Initialize a fresh record for the current commit with `npm run launch:evidence:init`.
+The command preserves a prior-commit record under `runtime/launch-evidence/archive/`
+instead of silently reusing or destroying it.
+
 The complete command intentionally exits nonzero while any release evidence is `PENDING` or any gate is `FAIL`. A report is evidence for the exact commit and working-tree state it records; it must not be reused for a different release. Never put credentials, shopper images, or customer data in the evidence metadata.
 
 Use the recorder after reviewing a redacted artifact. It verifies that the artifact
@@ -88,6 +92,11 @@ digest.
 - `npm run launch:report:repository` reports no failed repository gate for the exact release commit.
 
 CI applies every migration to disposable PostgreSQL and then runs `npm --prefix apps/api run test:audit-immutability`. Never point that command at a retained development, staging, or production database because its verification row is intentionally append-only.
+
+For a local disposable loopback database whose name contains `p0`, `test`, or
+`disposable`, set `DRAPIXAI_DISPOSABLE_DB_APPROVAL=I_ACKNOWLEDGE_DISPOSABLE_DATABASE`
+and run `npm run launch:certify:disposable-db`. The helper refuses remote and
+ambiguously named databases and writes a redacted `release-record/migrations.md`.
 
 CI builds and scans the API and web runtime images with the immutable Trivy image pinned in `deploy/scripts/scan-container-images.sh`. Before GPU promotion, run the same script against the exact AI image digest on Linux and attach all three scan outputs to the release record. Do not mark `container-image-scan` passed from dependency audits alone.
 
