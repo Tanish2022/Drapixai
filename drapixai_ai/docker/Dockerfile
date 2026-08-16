@@ -11,6 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    VIRTUAL_ENV=/opt/drapixai-venv \
+    PATH=/opt/drapixai-venv/bin:$PATH \
     HF_HOME=/workspace/.cache/huggingface \
     TRANSFORMERS_CACHE=/workspace/.cache/huggingface \
     DRAPIXAI_APP_ROOT=/workspace/drapixai \
@@ -32,6 +34,7 @@ RUN apt-get update \
         libsm6 \
         libxext6 \
         libxrender1 \
+        python3-venv \
         redis-server \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,7 +42,8 @@ WORKDIR /workspace/drapixai
 
 COPY drapixai_ai/requirements.rtx-pro-6000.txt /tmp/requirements.txt
 
-RUN python -m pip install --upgrade pip setuptools wheel \
+RUN /usr/bin/python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
+    && python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install -r /tmp/requirements.txt \
     && python -m pip check \
     && python - <<'PY'
