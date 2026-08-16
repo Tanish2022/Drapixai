@@ -1703,6 +1703,7 @@ assertIncludes(webDockerfile, 'apt-get install -y --no-install-recommends libssl
 assertIncludes(containerScanScript, 'docker save --output', 'Container scanning must export an immutable image archive');
 assertIncludes(containerScanScript, '--input /scan/image.tar', 'Container scanning must inspect the exported archive');
 assertNotIncludes(containerScanScript, '/var/run/docker.sock', 'Container scanners must not receive Docker daemon control');
+assertIncludes(containerScanScript, '--security-opt no-new-privileges', 'Container scanners must not gain privileges during analysis');
 assertIncludes(aiDockerfile, 'USER 10001:10001', 'AI container must run as a dedicated non-root user');
 assertIncludes(aiDockerfile, 'pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel@sha256:53ab3de62f6101d1e42f9be28623ab7a468a24c070d632f211ed576e30b6abd3', 'AI builder must pin the Blackwell-capable CUDA 12.8 PyTorch devel image by digest');
 assertIncludes(aiDockerfile, 'pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime@sha256:eee11b3b3872a8c838e35ef48f08b2d5def2080902c7f666831310ca1a0ef2be', 'AI production stage must pin the matching CUDA 12.8 runtime image by digest');
@@ -1711,6 +1712,8 @@ assertIncludes(aiDockerfile, 'FROM ${DRAPIXAI_AI_BASE_IMAGE}', 'AI production mu
 assertIncludes(aiDockerfile, 'apt-get upgrade -y', 'AI build must apply current Ubuntu security updates');
 assertIncludes(aiDockerfile, '/opt/nvidia/nsight-compute', 'AI runtime must remove build-only NVIDIA profiler tooling');
 assertIncludes(aiDockerfile, '/usr/local/cuda-*/libnvvp', 'AI runtime must remove the unused Java visual profiler');
+assertNotIncludes(aiDockerfile, 'redis-server', 'AI application images must not embed the private queue service');
+assertIncludes(aiDockerfile, 'CMD ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]', 'AI image must default to one least-privilege service role');
 assertNotIncludes(aiDockerfile, 'runpod/pytorch:2.4.0', 'Production AI image must not inherit the retired A100 CUDA 12.4 base');
 assertIncludes(aiDockerfile, 'DRAPIXAI_GPU_PRESET=rtx-pro-6000-blackwell', 'AI image must default to the primary RTX PRO 6000 production preset');
 assertIncludes(aiDockerfile, 'sys.version_info[:2] != (3, 12)', 'AI image must assert the pinned Python 3.12 runtime contract at build time');

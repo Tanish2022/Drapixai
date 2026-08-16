@@ -49,6 +49,7 @@ scan_image() {
     if docker run --rm \
       --read-only \
       --cap-drop ALL \
+      --security-opt no-new-privileges \
       --tmpfs /tmp:rw,noexec,nosuid,size=512m \
       --mount "type=bind,src=${archive},dst=/scan/image.tar,readonly" \
       --mount "type=volume,src=${TRIVY_CACHE_VOLUME},dst=/root/.cache/" \

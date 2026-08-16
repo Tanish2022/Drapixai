@@ -59,7 +59,6 @@ RUN apt-get update \
         libsm6 \
         libxext6 \
         libxrender1 \
-        redis-server \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf \
@@ -103,4 +102,4 @@ EXPOSE 8080
 
 USER 10001:10001
 
-CMD ["bash", "/workspace/drapixai/deploy/runpod/start-all.sh"]
+CMD ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
