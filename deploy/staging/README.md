@@ -33,7 +33,7 @@ in plaintext.
    cp deploy/staging/.images.env.example deploy/staging/.images.env
    ```
 
-2. Keep the non-secret Compose image inputs beside the staging files. Copy the exact `DRAPIXAI_RELEASE_COMMIT` and all three application release-image digests from the scanned artifact record; `DRAPIXAI_AI_RUNTIME_IMAGE` records approved base-image provenance. Compose reads `.images.env` before service `env_file` values exist.
+2. Keep the non-secret Compose image inputs beside the staging files. Copy the exact `DRAPIXAI_RELEASE_COMMIT` and all three application release-image digests from the scanned artifact record; `DRAPIXAI_AI_BUILD_IMAGE` and `DRAPIXAI_AI_RUNTIME_IMAGE` record approved builder and final-stage provenance. Compose reads `.images.env` before service `env_file` values exist.
 
 3. Create test-mode Stripe products and prices, register the staging webhook at
    `https://api.staging.drapixai.com/billing/webhooks/stripe`, and put the three

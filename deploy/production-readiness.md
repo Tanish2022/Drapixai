@@ -20,7 +20,7 @@ DrapixAI public quality and reliability are validated on the same Linux GPU runt
 
 - Host OS: Ubuntu Linux with the NVIDIA driver and Docker NVIDIA runtime verified.
 - GPU preset: rtx-pro-6000-blackwell.
-- AI runtime: the digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel` image configured by `DRAPIXAI_AI_RUNTIME_IMAGE`; its CUDA 12.8/PyTorch 2.11 build is Blackwell-capable. It uses Python 3.12. The older RunPod Python 3.11/CUDA 12.4 stack is reference-only and must not run production Compose.
+- AI runtime: dependencies compile in the digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel` builder configured by `DRAPIXAI_AI_BUILD_IMAGE`; the final artifact uses the matching digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime` image configured by `DRAPIXAI_AI_RUNTIME_IMAGE`. Its CUDA 12.8/PyTorch 2.11 build is Blackwell-capable and uses Python 3.12. The older RunPod Python 3.11/CUDA 12.4 stack is reference-only and must not run production Compose.
 - Host driver: NVIDIA 570 or newer; workstation preflight rejects an older driver before AI services start.
 - Runtime: Blackwell-native Linux image and the audited security-candidate Python stack, promoted only after direct, SDK, quality, latency, and three-tenant tests.
 - Mode: Standard-only CatVTON, one candidate, 22 steps, 2.5 guidance scale.
@@ -386,7 +386,7 @@ The on-premises RTX PRO 6000 Blackwell workstation is the primary production GPU
 - GPU: RTX PRO 6000 Blackwell Workstation Edition, 96 GB VRAM.
 - OS: supported Ubuntu Linux with a validated NVIDIA driver and Docker NVIDIA Container Toolkit.
 - GPU preset: rtx-pro-6000-blackwell.
-- AI runtime: the digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel` image configured by `DRAPIXAI_AI_RUNTIME_IMAGE`; its CUDA 12.8/PyTorch 2.11 build is Blackwell-capable. It uses Python 3.12. The older RunPod Python 3.11/CUDA 12.4 stack is reference-only and must not run production Compose.
+- AI runtime: dependencies compile in the digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel` builder configured by `DRAPIXAI_AI_BUILD_IMAGE`; the final artifact uses the matching digest-pinned `pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime` image configured by `DRAPIXAI_AI_RUNTIME_IMAGE`. Its CUDA 12.8/PyTorch 2.11 build is Blackwell-capable and uses Python 3.12. The older RunPod Python 3.11/CUDA 12.4 stack is reference-only and must not run production Compose.
 - Host driver: NVIDIA 570 or newer; workstation preflight rejects an older driver before AI services start.
 - Runtime storage: immutable models and a persistent garment cache; transient shopper image spool in /dev/shm only.
 - Queue: private Redis credentials and network segment distinct from public API and database services.

@@ -42,6 +42,10 @@ set +a
   echo "DRAPIXAI_AI_RUNTIME_IMAGE must be the digest-pinned approved PyTorch base before release publication." >&2
   exit 1
 }
+[[ "${DRAPIXAI_AI_BUILD_IMAGE:-}" =~ ^pytorch/pytorch:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$ ]] || {
+  echo "DRAPIXAI_AI_BUILD_IMAGE must be the digest-pinned approved PyTorch build image before release publication." >&2
+  exit 1
+}
 
 registry="${DRAPIXAI_RELEASE_REGISTRY:-}"
 [[ "$registry" =~ ^[a-z0-9][a-z0-9._:/-]*[a-z0-9]$ ]] || {
@@ -76,6 +80,7 @@ docker build --platform linux/amd64 \
   -f "$repo_root/apps/web/Dockerfile" -t "$web_tag" "$repo_root"
 docker build --platform linux/amd64 \
   --label "org.opencontainers.image.revision=$current_commit" \
+  --build-arg "DRAPIXAI_AI_BUILD_IMAGE=$DRAPIXAI_AI_BUILD_IMAGE" \
   --build-arg "DRAPIXAI_AI_BASE_IMAGE=$DRAPIXAI_AI_RUNTIME_IMAGE" \
   -f "$repo_root/drapixai_ai/docker/Dockerfile" -t "$ai_tag" "$repo_root"
 

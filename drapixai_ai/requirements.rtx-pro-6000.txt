@@ -2,12 +2,14 @@
 # Torch and torchvision are supplied by the immutable CUDA 12.8 PyTorch base image.
 # xFormers remains disabled for this release; CatVTON's vendored pipeline does not
 # require it and the Standard quality baseline must be re-certified before enabling it.
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+fastapi==0.139.0
+uvicorn[standard]==0.40.0
 redis==5.0.8
 rq==1.16.2
 python-multipart==0.0.32
 requests==2.34.2
+urllib3==2.7.0
+msgpack==1.2.1
 boto3==1.34.131
 tomli==2.0.1; python_version < "3.11"
 

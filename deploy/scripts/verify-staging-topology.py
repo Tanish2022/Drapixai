@@ -89,6 +89,8 @@ def main() -> int:
     ):
         if not DIGEST_IMAGE.fullmatch(images_env.get(image_variable, "")):
             failures.append(f"staging images env must pin {image_variable} by digest")
+    if not PYTORCH_IMAGE.fullmatch(images_env.get("DRAPIXAI_AI_BUILD_IMAGE", "")):
+        failures.append("staging images env must record DRAPIXAI_AI_BUILD_IMAGE as an official digest")
     if not PYTORCH_IMAGE.fullmatch(images_env.get("DRAPIXAI_AI_RUNTIME_IMAGE", "")):
         failures.append("staging images env must record DRAPIXAI_AI_RUNTIME_IMAGE as an official digest")
 
