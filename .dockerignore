@@ -8,6 +8,8 @@ node_modules
 **/dist
 **/coverage
 **/*.log
+**/__pycache__
+**/*.py[cod]
 apps/web/tsconfig.tsbuildinfo
 logs
 models
