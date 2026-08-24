@@ -100,6 +100,25 @@ ambiguously named databases and writes a redacted `release-record/migrations.md`
 
 CI builds and scans the API and web runtime images with the immutable Trivy image pinned in `deploy/scripts/scan-container-images.sh`. Before GPU promotion, run the same script against the exact AI image digest on Linux and attach all three scan outputs to the release record. Do not mark `container-image-scan` passed from dependency audits alone.
 
+For a clean local or staging checkout, preserve the exact-image summary and raw
+Trivy reports instead of relying on console output:
+
+```bash
+DRAPIXAI_RELEASE_COMMIT="$(git rev-parse HEAD)" \
+DRAPIXAI_CONTAINER_SCAN_EVIDENCE="runtime/launch-evidence/release-record/container-scan.json" \
+  bash deploy/scripts/scan-container-images.sh \
+  "drapixai-api:$(git rev-parse HEAD)" \
+  "drapixai-web:$(git rev-parse HEAD)" \
+  "drapixai-ai:$(git rev-parse HEAD)"
+```
+
+The summary records the pinned scanner, exact local image IDs, embedded release
+revision labels, high/critical counts, retained report paths, and SHA-256
+digests. Evidence mode rejects an image whose
+`org.opencontainers.image.revision` label differs from the release commit. A
+failed or incomplete scan writes `FAIL` evidence and keeps the release gate
+closed.
+
 ## Staging gates
 
 1. Deploy the exact release commit to an isolated production-like staging environment.

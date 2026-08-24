@@ -84,7 +84,10 @@ docker build --platform linux/amd64 \
   --build-arg "DRAPIXAI_AI_BASE_IMAGE=$DRAPIXAI_AI_RUNTIME_IMAGE" \
   -f "$repo_root/drapixai_ai/docker/Dockerfile" -t "$ai_tag" "$repo_root"
 
-bash "$repo_root/deploy/scripts/scan-container-images.sh" "$api_tag" "$web_tag" "$ai_tag"
+scan_evidence="${DRAPIXAI_CONTAINER_SCAN_EVIDENCE:-$repo_root/runtime/launch-evidence/release-record/container-scan.json}"
+DRAPIXAI_RELEASE_COMMIT="$current_commit" \
+DRAPIXAI_CONTAINER_SCAN_EVIDENCE="$scan_evidence" \
+  bash "$repo_root/deploy/scripts/scan-container-images.sh" "$api_tag" "$web_tag" "$ai_tag"
 docker push "$api_tag"
 docker push "$web_tag"
 docker push "$ai_tag"

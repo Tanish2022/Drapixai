@@ -1734,6 +1734,13 @@ assertNotIncludes(aiCompose, 'build:', 'Production AI Compose must never rebuild
 assertNotIncludes(edgeCompose, 'dockerfile: apps/api/Dockerfile', 'Production edge Compose must not rebuild the API during deployment.');
 assertNotIncludes(edgeCompose, 'dockerfile: apps/web/Dockerfile', 'Production edge Compose must not rebuild the web app during deployment.');
 assertIncludes(publishReleaseImages, 'scan-container-images.sh', 'Release publishing must block unscanned images.');
+assertIncludes(publishReleaseImages, 'DRAPIXAI_CONTAINER_SCAN_EVIDENCE', 'Release publishing must persist exact-image scan evidence.');
+assertIncludes(containerScanScript, 'status --porcelain', 'Container-scan evidence must require a clean release checkout.');
+assertIncludes(containerScanScript, 'runtime/launch-evidence', 'Container-scan evidence must stay in the private evidence directory.');
+assertIncludes(containerScanScript, 'reportSha256', 'Container-scan evidence must bind retained raw reports by digest.');
+assertIncludes(containerScanScript, '"releaseCommit"', 'Container-scan evidence must identify the exact release commit.');
+assertIncludes(containerScanScript, 'org.opencontainers.image.revision', 'Container-scan evidence must inspect the embedded release revision.');
+assertIncludes(containerScanScript, 'imageRevision', 'Container-scan evidence must record the embedded image revision.');
 assertIncludes(publishReleaseImages, 'docker build --platform linux/amd64', 'Release publishing must build the approved Linux runtime architecture.');
 assertIncludes(publishReleaseImages, 'docker push', 'Release publishing must push approved artifacts to the registry.');
 assertIncludes(publishReleaseImages, 'docker buildx imagetools inspect', 'Release publishing must resolve registry digests after push.');
