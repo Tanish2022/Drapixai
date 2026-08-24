@@ -225,7 +225,8 @@ export default function DemoClient() {
                   className="mt-1 h-4 w-4 accent-[#183f32]"
                 />
                 <span>
-                  I confirm I have permission to upload this person photo. It is processed transiently, is not persistently stored, and is never used to train AI models.
+                  I confirm I have permission to upload this person photo. It is processed transiently, is not persistently stored, and is never used to train AI models.{' '}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="font-semibold text-[#183f32] underline">Privacy Policy</a>
                 </span>
               </label>
 

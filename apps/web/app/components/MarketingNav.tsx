@@ -15,12 +15,8 @@ export default function MarketingNav({ active }: MarketingNavProps) {
   return (
     <header className="border-b border-black/10 bg-[#fbfcf9]">
       <div className="mx-auto flex min-h-20 max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-3 sm:px-8 lg:px-12">
-        <Link href="/" className="flex items-center gap-3" aria-label="DrapixAI home">
-          <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
-          <div>
-            <span className="block text-lg font-bold leading-none text-[#101712]">DrapixAI</span>
-            <span className="mt-1 hidden text-[11px] font-medium uppercase text-[#667068] sm:block">Virtual try-on infrastructure</span>
-          </div>
+        <Link href="/" className="flex items-center" aria-label="DrapixAI home">
+          <img src="/drapixai_wordmark.webp" alt="DrapixAI" width={176} height={59} className="h-12 w-auto object-contain" />
         </Link>
 
         <nav className="order-3 flex w-full items-center justify-between border-t border-black/10 pt-3 sm:order-none sm:w-auto sm:gap-7 sm:border-0 sm:pt-0" aria-label="Primary navigation">

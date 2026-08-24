@@ -146,12 +146,8 @@ export default function Home() {
     <div className="min-h-screen bg-[#f7f8f5] text-[#172019]">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-[#fbfcf9]/95 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
-          <Link href="/" className="flex items-center gap-3" aria-label="DrapixAI home">
-            <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
-            <div>
-              <span className="block text-lg font-bold leading-none text-[#101712]">DrapixAI</span>
-              <span className="mt-1 hidden text-[11px] font-medium uppercase text-[#667068] sm:block">Virtual try-on infrastructure</span>
-            </div>
+          <Link href="/" className="flex items-center" aria-label="DrapixAI home">
+            <img src="/drapixai_wordmark.webp" alt="DrapixAI" width={176} height={59} className="h-12 w-auto object-contain" />
           </Link>
 
           <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary navigation">

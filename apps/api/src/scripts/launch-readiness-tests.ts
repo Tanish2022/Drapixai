@@ -1272,11 +1272,14 @@ assertIncludes(privacyPage, 'The launch app requests read_products only', 'Priva
 assertIncludes(privacyPage, 'does not request Shopify customer, order, payment, or checkout data', 'Privacy policy must disclose excluded Shopify protected data');
 assertIncludes(privacyPage, 'mandatory shop-redact request', 'Privacy policy must disclose Shopify uninstall and redaction cleanup');
 assertIncludes(sdkJs, 'is not persistently saved, and is never used to train AI models', 'SDK privacy copy must disclose transient-only processing and no training use');
+assertIncludes(sdkJs, "privacyUrl: sanitizeNavigationUrl(options.privacyUrl || 'https://drapixai.com/privacy')", 'SDK must allow brands to point shoppers to the current privacy policy');
+assertIncludes(sdkJs, 'Privacy Policy</a>', 'SDK consent text must link shoppers to the privacy policy');
 assertIncludes(sdkJs, "form.append('shopper_consent', 'true')", 'Browser SDK must submit explicit shopper consent');
 assertIncludes(sdkJs, "form.append('privacy_policy_version', '2026-08-04')", 'Browser SDK must bind consent to the current privacy policy');
 assertIncludes(demoClient, "form.append('shopper_consent', 'true')", 'Public demo must submit explicit shopper consent');
 assertIncludes(demoClient, "form.append('privacy_policy_version', '2026-08-04')", 'Public demo must bind consent to the current privacy policy');
 assertIncludes(demoClient, 'is never used to train AI models', 'Public demo must disclose no-training treatment before upload');
+assertIncludes(demoClient, 'href="/privacy"', 'Public demo consent text must link shoppers to the privacy policy');
 assertIncludes(sdkRoute, "error: 'SHOPPER_CONSENT_REQUIRED'", 'Try-on API must reject requests without current explicit shopper consent');
 assertIncludes(sdkRoute, 'personImageUrl: null', 'Try-on records must not persist shopper person photos');
 assertIncludes(sdkRoute, 'resultImageUrl: null', 'Try-on records must not persist generated shopper previews');
