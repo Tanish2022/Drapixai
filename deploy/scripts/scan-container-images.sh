@@ -4,13 +4,25 @@ set -euo pipefail
 TRIVY_IMAGE="aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e"
 TRIVY_DB_REPOSITORY="${DRAPIXAI_TRIVY_DB_REPOSITORY:-public.ecr.aws/aquasecurity/trivy-db:2}"
 TRIVY_CACHE_VOLUME="${DRAPIXAI_TRIVY_CACHE_VOLUME:-drapixai-trivy-cache}"
+TRIVY_TIMEOUT="${DRAPIXAI_TRIVY_TIMEOUT:-45m}"
 EVIDENCE_PATH="${DRAPIXAI_CONTAINER_SCAN_EVIDENCE:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+VEX_PATH="${DRAPIXAI_TRIVY_VEX_PATH:-${REPO_ROOT}/deploy/security/vex/openssl-3.0-cve-2026-14456.openvex.json}"
 
 if [[ "$#" -eq 0 ]]; then
   echo "Usage: $0 <image-ref> [image-ref ...]" >&2
   exit 2
 fi
+
+if [[ ! "${TRIVY_TIMEOUT}" =~ ^[1-9][0-9]*(s|m|h)$ ]]; then
+  echo "DRAPIXAI_TRIVY_TIMEOUT must be a positive bounded duration such as 45m or 1h." >&2
+  exit 2
+fi
+
+[[ -f "${VEX_PATH}" ]] || {
+  echo "The reviewed Trivy VEX document is missing: ${VEX_PATH}" >&2
+  exit 2
+}
 
 if ! docker info >/dev/null 2>&1; then
   echo "Docker daemon is required for container image scanning." >&2
@@ -103,15 +115,18 @@ PY
 
 write_evidence() {
   [[ -n "${EVIDENCE_PATH}" ]] || return 0
-  python3 - "${evidence_rows}" "${EVIDENCE_PATH}" "${release_commit}" "${scan_started_at}" "${TRIVY_IMAGE}" "${TRIVY_DB_REPOSITORY}" <<'PY'
+  python3 - "${evidence_rows}" "${EVIDENCE_PATH}" "${release_commit}" "${scan_started_at}" "${TRIVY_IMAGE}" "${TRIVY_DB_REPOSITORY}" "${TRIVY_TIMEOUT}" "${VEX_PATH}" "${REPO_ROOT}" <<'PY'
+import hashlib
 import json
 import os
 import pathlib
 import sys
 from datetime import datetime, timezone
 
-rows_path, output_name, release_commit, started_at, scanner_image, database_repository = sys.argv[1:]
+rows_path, output_name, release_commit, started_at, scanner_image, database_repository, scan_timeout, vex_name, repo_root = sys.argv[1:]
 rows_file = pathlib.Path(rows_path)
+vex_path = pathlib.Path(vex_name)
+vex_relative = vex_path.resolve().relative_to(pathlib.Path(repo_root).resolve()).as_posix()
 images = [json.loads(line) for line in rows_file.read_text(encoding="utf-8").splitlines() if line.strip()] if rows_file.exists() else []
 passed = bool(images) and all(
     image.get("status") == "PASS"
@@ -127,6 +142,9 @@ document = {
     "completedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "scannerImage": scanner_image,
     "vulnerabilityDatabaseRepository": database_repository,
+    "scanTimeout": scan_timeout,
+    "vexDocument": vex_relative,
+    "vexSha256": hashlib.sha256(vex_path.read_bytes()).hexdigest(),
     "severityGate": ["HIGH", "CRITICAL"],
     "status": "PASS" if passed else "FAIL",
     "images": images,
@@ -156,6 +174,7 @@ scan_image() {
   local archive="$1"
   local image="$2"
   local report="$3"
+  local scratch="$4"
   local attempt
   local parser_status
   local trivy_log
@@ -165,12 +184,15 @@ scan_image() {
     echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities (attempt ${attempt}/3)"
     trivy_log="${report}.attempt-${attempt}.log"
     rm -f "${report}" "${trivy_log}"
+    rm -rf "${scratch}"
+    mkdir -p "${scratch}"
     if docker run --rm \
       --read-only \
       --cap-drop ALL \
       --security-opt no-new-privileges \
-      --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+      --mount "type=bind,src=${scratch},dst=/tmp" \
       --mount "type=bind,src=${archive},dst=/scan/image.tar,readonly" \
+      --mount "type=bind,src=${VEX_PATH},dst=/scan/vex.openvex.json,readonly" \
       --mount "type=volume,src=${TRIVY_CACHE_VOLUME},dst=/root/.cache/" \
       "${TRIVY_IMAGE}" image \
       --input /scan/image.tar \
@@ -179,6 +201,8 @@ scan_image() {
       --severity HIGH,CRITICAL \
       --pkg-types os,library \
       --scanners vuln \
+      --vex /scan/vex.openvex.json \
+      --timeout "${TRIVY_TIMEOUT}" \
       --skip-version-check > "${report}" 2>"${trivy_log}"; then
       break
     fi
@@ -255,6 +279,7 @@ for image in "$@"; do
   index=$((index + 1))
   archive="${scan_dir}/image-${index}.tar"
   report="${scan_dir}/report-${index}.json"
+  scratch="${scan_dir}/scratch-${index}"
   image_id="$(docker image inspect --format '{{.Id}}' "${image}")"
   image_revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${image}")"
   retained_report=""
@@ -271,7 +296,7 @@ for image in "$@"; do
   chmod 0644 "${archive}"
 
   echo "Scanning ${image} for HIGH and CRITICAL vulnerabilities"
-  if scan_image "${archive}" "${image}" "${report}"; then
+  if scan_image "${archive}" "${image}" "${report}" "${scratch}"; then
     scanner_exit=0
     scan_status="PASS"
   else

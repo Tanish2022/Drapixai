@@ -114,7 +114,25 @@ DRAPIXAI_CONTAINER_SCAN_EVIDENCE="runtime/launch-evidence/release-record/contain
 
 The summary records the pinned scanner, exact local image IDs, embedded release
 revision labels, high/critical counts, retained report paths, and SHA-256
-digests. Evidence mode rejects an image whose
+digests. The default analysis timeout is 45 minutes so the CUDA/PyTorch image
+can be inspected completely; override it only with a bounded
+`DRAPIXAI_TRIVY_TIMEOUT` value and retain that value in the evidence summary.
+The scanner also applies the tracked, version-specific OpenVEX declaration in
+`deploy/security/vex/`. Its SHA-256 digest is retained in the summary. VEX may
+only mark a finding not affected when an upstream advisory proves the exact
+installed package cannot contain the vulnerable code; never use a broad CVE
+ignore to make this gate pass. For `CVE-2026-14456`, the
+[OpenSSL advisory](https://www.openssl-library.org/news/vulnerabilities-3.6/)
+states that the affected QUIC server implementation begins with OpenSSL 3.5,
+while the declared Debian runtime package is OpenSSL 3.0.20. Trivy documents
+local OpenVEX filtering in its
+[VEX guide](https://trivy.dev/docs/dev/docs/supply-chain/vex/file/).
+Large CUDA/PyTorch layers are unpacked only into a private per-image scratch
+directory created beneath the scanner's temporary work directory. The scanner
+container remains read-only, capability-free, and subject to
+`no-new-privileges`; the scratch directory is deleted by the scanner cleanup
+trap and is never retained as release evidence.
+Evidence mode rejects an image whose
 `org.opencontainers.image.revision` label differs from the release commit. A
 failed or incomplete scan writes `FAIL` evidence and keeps the release gate
 closed.

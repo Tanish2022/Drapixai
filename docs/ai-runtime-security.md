@@ -33,6 +33,14 @@ The currently proven CatVTON runtime uses Torch 2.4, TorchVision 0.19, xFormers 
 
 `drapixai_ai/requirements.security-candidate.txt` defines the isolated upgrade candidate. Its Linux/Python 3.11 dependency set uses PyTorch 2.12.1's official CUDA 12.6 build, FastAPI 0.139, Uvicorn 0.40, and a resolved Starlette 1.3.1 runtime. Its complete resolved dependency graph has no known reachable advisories as of July 22, 2026, subject to the four documented exceptions above. It must not replace the proven runtime until an A100 validation run proves all of these:
 
+The production RTX image removes `linux-libc-dev` and its dependent compiler
+headers after system package upgrades. It also deletes duplicate Pillow,
+MessagePack, urllib3, Setuptools, and uv distributions inherited from the base
+image, then fails its build unless the patched Pillow, MessagePack, and urllib3
+imports resolve from `/opt/drapixai-venv` at their exact approved versions.
+These removals do not change model weights, inference settings, masks, scoring,
+or image post-processing.
+
 Prepare it with `bash deploy/runpod/prepare-security-candidate.sh`. That command performs the same full dependency audit in an isolated audit environment, writes only under `runtime/security-candidate`, validates a real xFormers CUDA kernel, and leaves the production `.venv` unchanged.
 
 1. CatVTON loads without remote model fallback.
