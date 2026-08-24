@@ -40,6 +40,7 @@ deploy/staging/private/
 deploy/staging/certification.env
 output/
 outputs/
+*.inspect.ndjson
 deploy/staging/.images.env
 
 deploy/private/
