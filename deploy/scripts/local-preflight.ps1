@@ -94,7 +94,9 @@ function Test-DockerPublishedPort {
     if ($null -eq $property -or $null -eq $property.Value) {
       return $false
     }
-    $published = @($property.Value) | Where-Object { [int]$_.HostPort -eq $ExpectedHostPort }
+    $published = @($property.Value) | Where-Object {
+      $_.HostIp -eq "127.0.0.1" -and [int]$_.HostPort -eq $ExpectedHostPort
+    }
     return $published.Count -gt 0
   } catch {
     return $false
@@ -114,7 +116,7 @@ function Get-DockerPublishedPortDetail {
       return "$ContainerPort -> expected host $ExpectedHostPort, not published"
     }
     $actual = (@($property.Value) | ForEach-Object { "$($_.HostIp):$($_.HostPort)" }) -join ", "
-    return "$ContainerPort -> expected host $ExpectedHostPort, actual $actual"
+    return "$ContainerPort -> expected 127.0.0.1:$ExpectedHostPort, actual $actual"
   } catch {
     return "$ContainerPort -> expected host $ExpectedHostPort, inspect failed"
   }

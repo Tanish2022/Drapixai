@@ -1381,12 +1381,14 @@ assertIncludes(localPreflight, 'Get-LocalSetting', 'Local preflight must read lo
 assertIncludes(localPreflight, "(?m)^ Server:", 'Local preflight must require a reachable Docker Server rather than only the Docker client.');
 assertIncludes(localPreflight, 'Test-LocalPortOpen', 'Local preflight must accept IPv4 or IPv6 localhost bindings');
 assertIncludes(localPreflight, 'Test-DockerPublishedPort', 'Local preflight must verify Docker port bindings, not only open localhost ports');
+assertIncludes(localPreflight, '$_.HostIp -eq "127.0.0.1"', 'Local preflight must reject Docker data-service ports published on non-loopback interfaces');
 assertIncludes(localPreflight, 'Get-PortOwnerDetail', 'Local preflight must report which container owns an occupied port');
 assertIncludes(localPreflight, 'DRAPIXAI_POSTGRES_PORT=5433', 'Local preflight must show the operator how to recover from a Postgres port conflict');
 assertIncludes(localPreflight, 'Docker port publish: drapixai-postgres $postgresPort', 'Local preflight must catch Postgres port conflicts');
-assertIncludes(dockerCompose, '${DRAPIXAI_POSTGRES_PORT:-5432}:5432', 'Local compose must allow overriding Postgres host port');
-assertIncludes(dockerCompose, '${DRAPIXAI_REDIS_PORT:-6379}:6379', 'Local compose must allow overriding Redis host port');
-assertIncludes(dockerCompose, '${DRAPIXAI_MINIO_API_PORT:-9000}:9000', 'Local compose must allow overriding MinIO API host port');
+assertIncludes(dockerCompose, '127.0.0.1:${DRAPIXAI_POSTGRES_PORT:-5432}:5432', 'Local compose must keep overridable Postgres on loopback');
+assertIncludes(dockerCompose, '127.0.0.1:${DRAPIXAI_REDIS_PORT:-6379}:6379', 'Local compose must keep overridable Redis on loopback');
+assertIncludes(dockerCompose, '127.0.0.1:${DRAPIXAI_MINIO_API_PORT:-9000}:9000', 'Local compose must keep the overridable MinIO API on loopback');
+assertIncludes(dockerCompose, '127.0.0.1:${DRAPIXAI_MINIO_CONSOLE_PORT:-9001}:9001', 'Local compose must keep the MinIO console on loopback');
 assertIncludes(localPreflight, 'npm run dev:api', 'Local preflight must explain how to start the API after infra checks');
 assertIncludes(localPreflight, 'npm run dev:web', 'Local preflight must explain how to start the web app after infra checks');
 assertIncludes(localPreflight, 'prisma:migrate:deploy', 'Local preflight must explain how to repair a missing launch schema');
