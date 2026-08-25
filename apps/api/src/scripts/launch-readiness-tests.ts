@@ -1491,7 +1491,7 @@ assertIncludes(aiRtxSecurityCandidate, 'transformers==5.13.1', 'RTX security can
 assertIncludes(aiRtxSecurityCandidate, 'diffusers==0.39.0', 'RTX security candidate must use the reviewed Diffusers fix candidate');
 assertIncludes(aiRtxSecurityCandidate, 'click==8.4.2', 'RTX security candidate must satisfy the reviewed Hugging Face Hub dependency');
 assertIncludes(aiRtxRequirements, 'click==8.3.1', 'Quality-proven RTX image must remain reproducibly buildable against the immutable CUDA base tooling');
-assertIncludes(aiDockerfile, 'pip uninstall -y spin', 'RTX builder must remove the unused base-image CLI that conflicts with the candidate dependency graph');
+assertIncludes(aiDockerfile, '/usr/local/lib/python3.12/dist-packages/spin', 'RTX builder must remove the unused base-image CLI that conflicts with the candidate dependency graph');
 assertIncludes(aiDockerfile, '/usr/local/lib/python3.12/dist-packages/spin-*', 'RTX runtime must exclude the unused conflicting base-image CLI');
 assertNotIncludes(aiRtxRequirements, 'transformers==5.13.1', 'Quality-proven RTX requirements must remain unchanged until GPU certification');
 assertIncludes(gitignore, '*.rdb', 'Redis snapshots must never be exported from the source tree');
