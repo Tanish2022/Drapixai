@@ -43,6 +43,16 @@ or image post-processing.
 
 Prepare it with `bash deploy/runpod/prepare-security-candidate.sh`. That command performs the same full dependency audit in an isolated audit environment, writes only under `runtime/security-candidate`, validates a real xFormers CUDA kernel, and leaves the production `.venv` unchanged.
 
+The public-launch workstation uses a separate Blackwell-native candidate because
+its immutable base supplies Torch 2.11, TorchVision 0.26, and CUDA 12.8. Build it
+from a clean exact release checkout with
+`bash deploy/workstation/build-security-candidate.sh`. The Dockerfile continues
+to default to the quality-proven requirements; the candidate uses
+`requirements.rtx-pro-6000.security-candidate.txt`, receives a distinct tag and
+runtime-channel label, and cannot overwrite `latest`. Building or scanning it is
+not promotion. The exact candidate must pass the same direct/SDK, three-tenant,
+and strict 50-case GPU gates before it can replace the proven runtime.
+
 1. CatVTON loads without remote model fallback.
 2. The fixed launch pair matches or exceeds the current SDK visual result.
 3. Quality score remains at least `0.95` with no warnings.

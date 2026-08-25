@@ -4,8 +4,11 @@
 # not part of the production attack surface.
 ARG DRAPIXAI_AI_BUILD_IMAGE=pytorch/pytorch:2.11.0-cuda12.8-cudnn9-devel@sha256:53ab3de62f6101d1e42f9be28623ab7a468a24c070d632f211ed576e30b6abd3
 ARG DRAPIXAI_AI_BASE_IMAGE=pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime@sha256:eee11b3b3872a8c838e35ef48f08b2d5def2080902c7f666831310ca1a0ef2be
+ARG DRAPIXAI_AI_REQUIREMENTS_FILE=drapixai_ai/requirements.rtx-pro-6000.txt
 
 FROM ${DRAPIXAI_AI_BUILD_IMAGE} AS builder
+
+ARG DRAPIXAI_AI_REQUIREMENTS_FILE
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -20,7 +23,7 @@ RUN apt-get update \
 
 WORKDIR /workspace/drapixai
 
-COPY drapixai_ai/requirements.rtx-pro-6000.txt /tmp/requirements.txt
+COPY ${DRAPIXAI_AI_REQUIREMENTS_FILE} /tmp/requirements.txt
 
 RUN /usr/bin/python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
     && python -m pip install --upgrade pip setuptools wheel \
