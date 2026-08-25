@@ -127,6 +127,14 @@ states that the affected QUIC server implementation begins with OpenSSL 3.5,
 while the declared Debian runtime package is OpenSSL 3.0.20. Trivy documents
 local OpenVEX filtering in its
 [VEX guide](https://trivy.dev/docs/dev/docs/supply-chain/vex/file/).
+
+The container VEX also identifies two deleted Python distributions retained in
+the immutable CUDA base layer history: MessagePack 1.1.2 and Setuptools 70.3.0.
+Both statements are pinned to exact PURLs and exact advisories. They are valid
+only while final-filesystem inspection and Python distribution enumeration prove
+those versions are absent and the patched MessagePack 1.2.1 venv copy is the
+only importable MessagePack runtime. Any changed package version or advisory
+must remain a scan failure until it receives a separate review.
 Large CUDA/PyTorch layers are unpacked only into a private per-image scratch
 directory created beneath the scanner's temporary work directory. The scanner
 container remains read-only, capability-free, and subject to

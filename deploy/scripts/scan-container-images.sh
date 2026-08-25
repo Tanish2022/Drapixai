@@ -7,7 +7,7 @@ TRIVY_CACHE_VOLUME="${DRAPIXAI_TRIVY_CACHE_VOLUME:-drapixai-trivy-cache}"
 TRIVY_TIMEOUT="${DRAPIXAI_TRIVY_TIMEOUT:-45m}"
 EVIDENCE_PATH="${DRAPIXAI_CONTAINER_SCAN_EVIDENCE:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VEX_PATH="${DRAPIXAI_TRIVY_VEX_PATH:-${REPO_ROOT}/deploy/security/vex/openssl-3.0-cve-2026-14456.openvex.json}"
+VEX_PATH="${DRAPIXAI_TRIVY_VEX_PATH:-${REPO_ROOT}/deploy/security/vex/drapixai-container.openvex.json}"
 
 if [[ "$#" -eq 0 ]]; then
   echo "Usage: $0 <image-ref> [image-ref ...]" >&2

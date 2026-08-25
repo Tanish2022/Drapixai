@@ -1,0 +1,48 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://drapix.ai/security/vex/container-runtime-2026-08-25",
+  "author": "DrapixAI Security",
+  "timestamp": "2026-08-25T00:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-14456"
+      },
+      "products": [
+        {
+          "@id": "pkg:deb/debian/libssl3@3.0.20-1~deb12u2?arch=amd64&distro=debian-12.13"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "OpenSSL states that the vulnerable QUIC server implementation was introduced in 3.5. The declared Debian package is OpenSSL 3.0.20 and does not contain that code."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-6v7p-g79w-8964"
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/msgpack@1.1.2"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The immutable CUDA base layer contains deleted MessagePack 1.1.2 metadata, but the final runtime filesystem and Python distribution enumeration contain only MessagePack 1.2.1 from /opt/drapixai-venv. The vulnerable distribution cannot be imported or executed by the container."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-47273"
+      },
+      "products": [
+        {
+          "@id": "pkg:pypi/setuptools@70.3.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The immutable CUDA base layer contains deleted Setuptools 70.3.0 metadata, but the final runtime filesystem and Python distribution enumeration do not contain that distribution. DrapixAI performs no package installation or source-distribution build at runtime."
+    }
+  ]
+}
