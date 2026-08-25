@@ -1482,12 +1482,15 @@ assertIncludes(runpodSecurityCandidate, 'xops.memory_efficient_attention', 'Secu
 assertIncludes(runpodSecurityCandidate, '"production_environment_changed": False', 'Secure AI candidate report must state that production was not modified');
 assertIncludes(aiDockerfile, 'ARG DRAPIXAI_AI_REQUIREMENTS_FILE=drapixai_ai/requirements.rtx-pro-6000.txt', 'Production RTX image must default to the quality-proven requirements');
 assertIncludes(aiDockerfile, 'COPY ${DRAPIXAI_AI_REQUIREMENTS_FILE} /tmp/requirements.txt', 'RTX security candidate must be buildable without changing the production default');
+assertIncludes(aiDockerfile, 'pip==26.2.1 setuptools==81.0.0 wheel==0.48.0', 'RTX image builder tooling must be deterministic and Torch-compatible');
 assertIncludes(workstationSecurityCandidate, 'requirements.rtx-pro-6000.security-candidate.txt', 'RTX security candidate must use the isolated patched requirements');
 assertIncludes(workstationSecurityCandidate, 'rtx-security-candidate', 'RTX security candidate must receive a non-production runtime channel');
 assertIncludes(workstationSecurityCandidate, 'status --porcelain', 'RTX security candidate must require a clean exact checkout');
 assertIncludes(workstationSecurityCandidate, 'production_tag_modified', 'RTX candidate evidence must state that production tags were not modified');
 assertIncludes(aiRtxSecurityCandidate, 'transformers==5.13.1', 'RTX security candidate must use the reviewed Transformers fix candidate');
 assertIncludes(aiRtxSecurityCandidate, 'diffusers==0.39.0', 'RTX security candidate must use the reviewed Diffusers fix candidate');
+assertIncludes(aiRtxSecurityCandidate, 'click==8.3.1', 'RTX security candidate must remain compatible with the immutable CUDA base tooling');
+assertIncludes(aiRtxRequirements, 'click==8.3.1', 'Quality-proven RTX image must remain reproducibly buildable against the immutable CUDA base tooling');
 assertNotIncludes(aiRtxRequirements, 'transformers==5.13.1', 'Quality-proven RTX requirements must remain unchanged until GPU certification');
 assertIncludes(gitignore, '*.rdb', 'Redis snapshots must never be exported from the source tree');
 assertIncludes(runLaunchTryon, 'API_ENV_FILE=', 'RunPod launch try-on test must know where the API env file lives');

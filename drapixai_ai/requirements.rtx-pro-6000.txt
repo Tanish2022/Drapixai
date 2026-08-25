@@ -4,6 +4,7 @@
 # require it and the Standard quality baseline must be re-certified before enabling it.
 fastapi==0.139.0
 uvicorn[standard]==0.40.0
+click==8.3.1
 redis==5.0.8
 rq==1.16.2
 python-multipart==0.0.32
