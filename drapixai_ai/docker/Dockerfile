@@ -26,7 +26,7 @@ WORKDIR /workspace/drapixai
 COPY ${DRAPIXAI_AI_REQUIREMENTS_FILE} /tmp/requirements.txt
 
 RUN /usr/bin/python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
-    && /usr/local/bin/python -m pip uninstall -y spin \
+    && /usr/bin/python3 -m pip uninstall -y spin \
     && python -m pip install --upgrade pip==26.2.1 setuptools==81.0.0 wheel==0.48.0 \
     && python -m pip install -r /tmp/requirements.txt \
     && python -m pip check
