@@ -14,6 +14,12 @@
       "args": ["scripts/verify-no-tracked-secrets.mjs"]
     },
     {
+      "id": "shell-line-endings",
+      "label": "Tracked shell scripts use Linux-safe LF line endings",
+      "runner": "node",
+      "args": ["scripts/verify-shell-line-endings.mjs"]
+    },
+    {
       "id": "api-build",
       "label": "API production build",
       "runner": "npm",

@@ -132,6 +132,20 @@ PY
 COPY drapixai_ai /workspace/drapixai/drapixai_ai
 COPY deploy /workspace/drapixai/deploy
 
+RUN python - <<'PY'
+from pathlib import Path
+
+invalid = [
+    str(path)
+    for path in Path('/workspace/drapixai/deploy').rglob('*.sh')
+    if b'\r' in path.read_bytes()
+]
+if invalid:
+    raise SystemExit(f'Shell scripts contain non-LF line endings: {invalid}')
+PY
+
+RUN find /workspace/drapixai/deploy -type f -name '*.sh' -exec bash -n {} \;
+
 RUN mkdir -p /workspace/drapixai/models /workspace/drapixai/runtime/logs /workspace/drapixai/runtime/garments /workspace/.cache/huggingface \
     && groupadd --gid 10001 drapixai \
     && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin drapixai \
