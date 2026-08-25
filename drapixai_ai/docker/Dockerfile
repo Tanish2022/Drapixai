@@ -26,6 +26,7 @@ WORKDIR /workspace/drapixai
 COPY ${DRAPIXAI_AI_REQUIREMENTS_FILE} /tmp/requirements.txt
 
 RUN /usr/bin/python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
+    && /usr/local/bin/python -m pip uninstall -y spin \
     && python -m pip install --upgrade pip==26.2.1 setuptools==81.0.0 wheel==0.48.0 \
     && python -m pip install -r /tmp/requirements.txt \
     && python -m pip check
@@ -72,12 +73,15 @@ RUN apt-get update \
         /usr/local/cuda-*/libnvvp \
         /usr/local/bin/uv \
         /usr/local/bin/uvx \
+        /usr/local/bin/spin \
         /usr/local/lib/python3.12/dist-packages/PIL \
         /usr/local/lib/python3.12/dist-packages/pillow-* \
         /usr/local/lib/python3.12/dist-packages/msgpack \
         /usr/local/lib/python3.12/dist-packages/msgpack-* \
         /usr/local/lib/python3.12/dist-packages/setuptools \
         /usr/local/lib/python3.12/dist-packages/setuptools-* \
+        /usr/local/lib/python3.12/dist-packages/spin \
+        /usr/local/lib/python3.12/dist-packages/spin-* \
         /usr/local/lib/python3.12/dist-packages/urllib3 \
         /usr/local/lib/python3.12/dist-packages/urllib3-* \
         /usr/local/lib/python3.12/dist-packages/uv-*

@@ -4,7 +4,7 @@
 # after direct/SDK parity, three-tenant, and strict 50-case quality certification.
 fastapi==0.139.0
 uvicorn[standard]==0.40.0
-click==8.3.1
+click==8.4.2
 redis==5.0.8
 rq==1.16.2
 python-multipart==0.0.32
