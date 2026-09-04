@@ -13,6 +13,7 @@ The environment file must remain outside Git and provide:
   DRAPIXAI_EXPECTED_GIT_REF=<40-character release commit>
   DRAPIXAI_STAGING_IMAGES_ENV=/secure/drapixai-staging-images.env
   DRAPIXAI_THREE_TENANT_MANIFEST=/secure/three-tenant-manifest.json
+  DRAPIXAI_STRIX_EVIDENCE=/secure/drapixai-strix-evidence-summary.json
 
 It may also provide the live security-boundary test variables documented in
 `docs/security-release-gate.md`. This command does not retain result images.
@@ -103,6 +104,14 @@ grep -Fq "PASS: Staging ai services use expected release image digests" "$gpu_re
   echo "GPU release-image evidence does not prove the approved artifact is running." >&2
   exit 1
 }
+strix_evidence="${DRAPIXAI_STRIX_EVIDENCE:-}"
+[[ -f "$strix_evidence" ]] || {
+  echo "DRAPIXAI_STRIX_EVIDENCE must point to the redacted governed Strix summary." >&2
+  exit 2
+}
+python3 "$repo_root/deploy/scripts/run-strix-staging.py" \
+  --verify-evidence "$strix_evidence" \
+  --expected-commit "$current_commit" >/dev/null
 required_live_vars=(
   DRAPIXAI_SECURITY_TEST_API_URL
   DRAPIXAI_SECURITY_TEST_SERVER_KEY_A
@@ -177,6 +186,9 @@ run_and_record edge-release-images bash "$repo_root/deploy/staging/verify-releas
 run_and_record edge-private-listeners bash "$repo_root/deploy/scripts/verify-private-listeners.sh"
 run_and_record gpu-mtls-evidence cat "$gpu_mtls_evidence"
 run_and_record gpu-release-images-evidence cat "$gpu_release_image_evidence"
+run_and_record strix-staging-evidence python3 "$repo_root/deploy/scripts/run-strix-staging.py" \
+  --verify-evidence "$strix_evidence" \
+  --expected-commit "$current_commit"
 run_and_record live-security npm --prefix "$repo_root/apps/api" run test:security:live
 run_and_record audit-chain npm --prefix "$repo_root/apps/api" run security:audit:verify
 run_and_record shopper-media-privacy npm --prefix "$repo_root/apps/api" run privacy:verify-shopper-media

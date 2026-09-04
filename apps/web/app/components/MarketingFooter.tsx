@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import BrandLogo from './BrandLogo';
 
 export default function MarketingFooter() {
   return (
@@ -6,9 +7,8 @@ export default function MarketingFooter() {
       <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
         <div className="flex flex-col justify-between gap-8 border-b border-white/15 pb-10 md:flex-row md:items-end">
           <div>
-            <div className="flex items-center gap-3">
-              <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
-              <span className="text-xl font-bold">DrapixAI</span>
+            <div className="inline-flex bg-white px-2 py-1">
+              <BrandLogo className="h-10 w-auto" />
             </div>
             <p className="mt-4 max-w-md text-sm leading-6 text-[#9fac9f]">Standard upper-body AI try-on infrastructure for fashion commerce.</p>
           </div>

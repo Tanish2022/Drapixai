@@ -149,6 +149,12 @@
       "args": ["deploy/scripts/verify-staging-topology.py"]
     },
     {
+      "id": "strix-staging-policy",
+      "label": "Governed Strix staging authorization policy",
+      "runner": "python",
+      "args": ["deploy/scripts/run-strix-staging.py", "--self-test"]
+    },
+    {
       "id": "api-dependency-audit",
       "label": "API production dependency audit",
       "runner": "npm",

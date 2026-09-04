@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 
 type WorkspacePage = 'dashboard' | 'sdk' | 'subscription' | 'settings';
 
@@ -21,12 +22,9 @@ export default function WorkspaceHeader({ active, onLogout }: WorkspaceHeaderPro
   return (
     <header className="border-b border-black/10 bg-[#fbfcf9] text-[#172019]">
       <div className="mx-auto flex min-h-20 max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-3 sm:px-8 lg:px-12">
-        <Link href="/dashboard" className="flex items-center gap-3" aria-label="DrapixAI workspace">
-          <img src="/drapixai_emblem_64.webp" alt="" width={40} height={40} className="rounded-md" />
-          <div>
-            <span className="block text-lg font-bold leading-none">DrapixAI</span>
-            <span className="mt-1 block text-[11px] font-semibold uppercase text-[#748078]">Brand workspace</span>
-          </div>
+        <Link href="/dashboard" className="flex flex-col items-start gap-1" aria-label="DrapixAI workspace">
+          <BrandLogo className="h-9 w-auto" />
+          <span className="block text-[10px] font-semibold uppercase text-[#748078]">Brand workspace</span>
         </Link>
 
         <nav className="order-3 flex w-full items-center gap-1 overflow-x-auto border-t border-black/10 pt-3 sm:order-none sm:w-auto sm:border-0 sm:pt-0" aria-label="Workspace navigation">

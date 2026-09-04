@@ -1,4 +1,4 @@
-brand_name,website,contact_name,contact_email,segment,notes
+brand_name,website,contact_name,contact_email,segment,notes,contact_role,source_url,approved_to_contact,unsubscribed,template_key
 The Bear House,https://www.thebearhouse.com,,,Growth Store India,DTC menswear; likely faster pilot adoption
 Bonkers Corner,https://www.bonkerscorner.com,,,Growth Store India,Streetwear DTC; social-first audience
 Powerlook,https://www.powerlook.in,,,Growth Store India,Mens streetwear DTC; conversion-focused fit

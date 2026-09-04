@@ -12,8 +12,11 @@ declare module 'nodemailer' {
   interface SendMailOptions {
     from?: string;
     to?: string;
+    replyTo?: string;
     subject?: string;
     text?: string;
+    html?: string;
+    headers?: Record<string, string>;
   }
 
   interface Transporter {

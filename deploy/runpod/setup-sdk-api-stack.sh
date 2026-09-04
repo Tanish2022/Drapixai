@@ -185,7 +185,7 @@ SMTP_PORT=587
 SMTP_SECURE=0
 SMTP_USER=
 SMTP_PASS=
-SMTP_FROM=no-reply@drapixai.local
+SMTP_FROM="DrapixAI <no-reply@mail.drapixai.com>"
 EOF
 }
 

@@ -7,6 +7,7 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { GOOGLE_AUTH_ENABLED } from '@/app/lib/public-env';
 import { trackEvent } from '@/app/lib/analytics';
+import BrandLogo from '@/app/components/BrandLogo';
 
 function getSafeNextPath() {
   if (typeof window === 'undefined') return '/';
@@ -56,9 +57,8 @@ export default function LoginPage() {
     <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">
       <header className="border-b border-black/10">
         <div className="mx-auto flex min-h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
-          <Link href="/" className="flex items-center gap-3" aria-label="DrapixAI home">
-            <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
-            <span className="text-lg font-bold">DrapixAI</span>
+          <Link href="/" className="flex items-center" aria-label="DrapixAI home">
+            <BrandLogo className="h-10 w-auto sm:h-12" />
           </Link>
           <p className="text-sm text-[#68736b]"><span className="hidden sm:inline">New to DrapixAI? </span><Link href={`/auth/register?next=${encodeURIComponent(nextPath)}`} className="font-bold text-[#183f32] hover:text-[#31725b]">Start a trial</Link></p>
         </div>

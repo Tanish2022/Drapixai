@@ -10,7 +10,7 @@ import { verifyAdminTotp } from '../lib/admin-mfa';
 import { PASSWORD_HASH_ROUNDS, validatePasswordStrength } from '../lib/security';
 import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
-import { sendOtpEmail } from '../services/emailer';
+import { sendOtpEmail, sendWelcomeEmail } from '../services/emailer';
 import { appendSecurityAudit } from '../lib/audit-log';
 
 const router = Router();
@@ -196,6 +196,7 @@ router.post('/register', async (req, res) => {
     });
 
     const apiKey = await issueApiKeyForUser(prisma, user.id);
+    void sendWelcomeEmail(user.id, user.email, user.companyName).catch(() => undefined);
     res.json({
       apiKey,
       user: {

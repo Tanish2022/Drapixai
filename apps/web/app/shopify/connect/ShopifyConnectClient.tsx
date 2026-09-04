@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, CheckCircle2, ExternalLink, LoaderCircle, ShieldCheck, Store, TriangleAlert } from 'lucide-react';
+import BrandLogo from '@/app/components/BrandLogo';
 
 type Props = { installation: string; token: string; error: string };
 type ConnectState = 'checking' | 'linking' | 'complete' | 'error';
@@ -77,9 +78,9 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
     <main className="min-h-screen bg-[#f4f6f2] text-[#172019]">
       <header className="border-b border-black/10 bg-[#fbfcf9]">
         <div className="mx-auto flex min-h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
-          <Link href="/dashboard" className="flex items-center gap-3" aria-label="DrapixAI workspace">
-            <img src="/drapixai_emblem_64.webp" alt="" width={40} height={40} className="rounded-md" />
-            <div><span className="block text-lg font-bold leading-none">DrapixAI</span><span className="mt-1 block text-[11px] font-semibold uppercase text-[#748078]">Shopify connection</span></div>
+          <Link href="/dashboard" className="flex flex-col items-start gap-1" aria-label="DrapixAI workspace">
+            <BrandLogo className="h-9 w-auto" />
+            <span className="block text-[10px] font-semibold uppercase text-[#748078]">Shopify connection</span>
           </Link>
           <span className="inline-flex items-center gap-2 text-xs font-bold uppercase text-[#31725b]"><ShieldCheck className="h-4 w-4" />Secure handoff</span>
         </div>

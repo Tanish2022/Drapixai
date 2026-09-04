@@ -68,6 +68,57 @@ function Initialize-LocalRuntimeSecrets {
 
 Initialize-LocalRuntimeSecrets
 
+function Resolve-NodePackageManager {
+  $toolingRoot = Join-Path $repoRoot "runtime\tooling"
+  $nodeCandidates = @()
+
+  if (Test-Path -LiteralPath $toolingRoot) {
+    $nodeCandidates = @(
+      Get-ChildItem -LiteralPath $toolingRoot -Filter "node.exe" -File -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending
+    )
+  }
+
+  $pathNode = Get-Command "node.exe" -ErrorAction SilentlyContinue
+  if ($pathNode) {
+    $nodeCandidates += Get-Item -LiteralPath $pathNode.Source
+  }
+
+  foreach ($candidate in $nodeCandidates) {
+    $version = (& $candidate.FullName -p "process.versions.node" 2>$null).Trim()
+    if (-not $version) {
+      continue
+    }
+
+    $majorVersion = [int]($version.Split('.')[0])
+    if ($majorVersion -lt 22) {
+      continue
+    }
+
+    $nodeDirectory = $candidate.DirectoryName
+    $npmPath = Join-Path $nodeDirectory "npm.cmd"
+    if (-not (Test-Path -LiteralPath $npmPath)) {
+      continue
+    }
+
+    $processPath = [Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Process)
+    if (-not ($processPath -split ';' | Where-Object { $_ -eq $nodeDirectory })) {
+      [Environment]::SetEnvironmentVariable(
+        "Path",
+        "$nodeDirectory;$processPath",
+        [EnvironmentVariableTarget]::Process
+      )
+    }
+
+    Write-Host "[OK] Node.js $version selected from $nodeDirectory"
+    return $npmPath
+  }
+
+  throw "Node.js 22 or newer was not found. Install it or restore the bundled runtime under runtime\tooling."
+}
+
+$npmPath = Resolve-NodePackageManager
+
 function Test-PortListening {
   param([int]$Port)
   return [bool](Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue)
@@ -147,11 +198,11 @@ if (-not $SkipDocker) {
 }
 
 if (-not $SkipApi) {
-  Start-LoggedProcess -Name "local-api" -FilePath "npm.cmd" -ArgumentList @("--prefix", "apps/api", "run", "start") -Port 8000
+  Start-LoggedProcess -Name "local-api" -FilePath $npmPath -ArgumentList @("--prefix", "apps/api", "run", "start") -Port 8000
 }
 
 if (-not $SkipWeb) {
-  Start-LoggedProcess -Name "local-web" -FilePath "npm.cmd" -ArgumentList @("--prefix", "apps/web", "run", "start") -Port 3000
+  Start-LoggedProcess -Name "local-web" -FilePath $npmPath -ArgumentList @("--prefix", "apps/web", "run", "start") -Port 3000
 }
 
 if (-not $SkipAi) {

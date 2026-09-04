@@ -172,11 +172,17 @@ closed.
    export DRAPIXAI_ZAP_IMAGE=approved-zap-image@sha256:replace-with-64-hex-digest
    bash deploy/scripts/pentest-staging.sh https://staging.example.com
    ```
-5. Verify `npm --prefix apps/api run security:audit:verify` reports `valid: true`.
-6. Exercise retention with a short test window, confirm object deletion, database URL clearing, failure retry, and immutable audit evidence.
-7. Verify Redis, PostgreSQL, MinIO/S3 management, and the GPU worker have no public listener. Only HTTPS edge ports may be public. Save the GPU listener check plus an API-host mTLS test that proves no-client access is rejected and the dedicated API client certificate receives `/health` HTTP `200`.
-8. Verify backup restore, secret rotation, key revocation, alert delivery, and incident rollback.
-9. Run the three-tenant public API batch on the exact serving GPU image and release commit. It must form worker batches of three, retain at least 20% VRAM headroom, preserve tenant isolation, return no warnings, meet the approved Standard quality threshold, and report p95 total latency at or below 12 seconds. Attach the redacted `three-user-gpu-report.json` before launch.
+5. Run the governed Strix black-box assessment from a dedicated security runner
+   using `docs/strix-security-testing.md`. It must target only the exact staging
+   origins and live OpenAPI contract, use synthetic data, disable telemetry, use
+   a digest-pinned sandbox, and finish with `PASS_NO_VALIDATED_FINDINGS`. Strix is
+   active exploit validation, not load testing, and it does not replace the
+   independent penetration test.
+6. Verify `npm --prefix apps/api run security:audit:verify` reports `valid: true`.
+7. Exercise retention with a short test window, confirm object deletion, database URL clearing, failure retry, and immutable audit evidence.
+8. Verify Redis, PostgreSQL, MinIO/S3 management, and the GPU worker have no public listener. Only HTTPS edge ports may be public. Save the GPU listener check plus an API-host mTLS test that proves no-client access is rejected and the dedicated API client certificate receives `/health` HTTP `200`.
+9. Verify backup restore, secret rotation, key revocation, alert delivery, and incident rollback.
+10. Run the three-tenant public API batch on the exact serving GPU image and release commit. It must form worker batches of three, retain at least 20% VRAM headroom, preserve tenant isolation, return no warnings, meet the approved Standard quality threshold, and report p95 total latency at or below 12 seconds. Attach the redacted `three-user-gpu-report.json` before launch.
 
 ## Independent penetration test
 

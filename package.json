@@ -19,6 +19,7 @@
     "launch:report:repository": "node scripts/launch-gate-report.mjs --scope=repository",
     "launch:evidence:init": "node scripts/init-launch-evidence.mjs",
     "launch:certify:disposable-db": "node scripts/certify-disposable-db.mjs",
+    "security:strix:staging": "python deploy/scripts/run-strix-staging.py",
     "test:launch": "npm --prefix apps/api run test:launch",
     "test:shopify": "npm --prefix apps/api run test:shopify",
     "test:storefront-key-lifecycle": "npm --prefix apps/api run test:storefront-key-lifecycle"

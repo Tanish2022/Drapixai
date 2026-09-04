@@ -57,7 +57,8 @@ export async function proxy(req: NextRequest) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', policy);
-  if (pathname.startsWith('/admin')) {
+  const isProtectedAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  if (isProtectedAdminRoute) {
     const adminSession = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;
     if (!(await verifyAdminSessionToken(adminSession))) {
       const url = req.nextUrl.clone();

@@ -1,5 +1,11 @@
 import nodemailer from 'nodemailer';
 import { PrismaClient } from '@prisma/client';
+import {
+  buildGarmentDecisionEmail,
+  buildOtpEmail,
+  buildTrialReminderEmail,
+  buildWelcomeEmail,
+} from './email-templates';
 
 const prisma = new PrismaClient();
 
@@ -8,6 +14,12 @@ type EmailSendResult = {
   skipped: boolean;
   logId?: number;
   error?: string;
+};
+
+type EmailSendOptions = {
+  html?: string;
+  replyTo?: string;
+  headers?: Record<string, string>;
 };
 
 const getTransporter = () => nodemailer.createTransport({
@@ -25,7 +37,8 @@ export const sendEmail = async (
   to: string,
   event: string,
   subject: string,
-  text: string
+  text: string,
+  options: EmailSendOptions = {}
 ): Promise<EmailSendResult> => {
   if (!process.env.SMTP_HOST) {
     return { sent: false, skipped: true, error: 'SMTP_HOST_NOT_CONFIGURED' };
@@ -33,10 +46,16 @@ export const sendEmail = async (
 
   try {
     await getTransporter().sendMail({
-      from: process.env.SMTP_FROM || 'no-reply@drapixai.com',
+      from: process.env.SMTP_FROM || 'DrapixAI <no-reply@mail.drapixai.com>',
       to,
       subject,
-      text
+      text,
+      html: options.html,
+      replyTo: options.replyTo || process.env.SMTP_REPLY_TO || process.env.EMAIL_SUPPORT_ADDRESS || 'support@drapixai.com',
+      headers: {
+        'X-Auto-Response-Suppress': 'All',
+        ...options.headers,
+      },
     });
     if (userId) {
       const log = await prisma.emailLog.create({
@@ -46,7 +65,7 @@ export const sendEmail = async (
     }
     return { sent: true, skipped: false };
   } catch (err: any) {
-    const error = String(err?.message || err);
+    const error = String(err?.code || err?.name || 'SMTP_DELIVERY_FAILED').slice(0, 120);
     if (userId) {
       const log = await prisma.emailLog.create({
         data: { userId, email: to, event, status: 'failed', error }
@@ -63,22 +82,8 @@ export const sendOtpEmail = async (
   purpose: 'signup' | 'email_change_current' | 'email_change_new' | 'password_reset',
   userId?: number | null
 ) => {
-  const subjectMap = {
-    signup: 'Your DrapixAI sign-up verification code',
-    email_change_current: 'Verify your current DrapixAI email',
-    email_change_new: 'Verify your new DrapixAI email',
-    password_reset: 'Your DrapixAI password reset code',
-  } as const;
-
-  const introMap = {
-    signup: 'Use this code to complete your DrapixAI sign-up:',
-    email_change_current: 'Use this code to confirm your current account email before changing it:',
-    email_change_new: 'Use this code to verify your new account email address:',
-    password_reset: 'Use this code to reset your DrapixAI password:',
-  } as const;
-
-  const text = `${introMap[purpose]}\n\n${code}\n\nThis code expires in 10 minutes. If you did not request this, you can ignore this email.`;
-  await sendEmail(userId ?? null, to, purpose, subjectMap[purpose], text);
+  const content = buildOtpEmail(code, purpose);
+  return sendEmail(userId ?? null, to, purpose, content.subject, content.text, { html: content.html });
 };
 
 export const sendGarmentApprovalEmail = async (
@@ -88,12 +93,25 @@ export const sendGarmentApprovalEmail = async (
   status: 'approved' | 'rejected',
   reason?: string | null
 ) => {
-  const subject = status === 'approved'
-    ? `Garment approved: ${garmentId}`
-    : `Garment rejected: ${garmentId}`;
-  const text = status === 'approved'
-    ? `Your garment "${garmentId}" has been approved and is now ready for try-on.`
-    : `Your garment "${garmentId}" was rejected. Reason: ${reason || 'Not specified'}`;
+  const content = buildGarmentDecisionEmail(garmentId, status, reason);
   const event = status === 'approved' ? 'garment_approved' : 'garment_rejected';
-  await sendEmail(userId, email, event, subject, text);
+  return sendEmail(userId, email, event, content.subject, content.text, { html: content.html });
+};
+
+export const sendWelcomeEmail = async (
+  userId: number,
+  email: string,
+  companyName?: string | null
+) => {
+  const content = buildWelcomeEmail(companyName);
+  return sendEmail(userId, email, 'workspace_welcome', content.subject, content.text, { html: content.html });
+};
+
+export const sendTrialReminderEmail = async (
+  userId: number,
+  email: string,
+  daysLeft: number
+) => {
+  const content = buildTrialReminderEmail(daysLeft);
+  return sendEmail(userId, email, daysLeft <= 1 ? 'trial_end_today' : 'trial_ending_soon', content.subject, content.text, { html: content.html });
 };

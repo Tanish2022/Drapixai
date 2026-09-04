@@ -13,6 +13,9 @@ node scripts/send-brand-outreach.js
 - `OUTREACH_SMTP_USER`
 - `OUTREACH_SMTP_PASS`
 - `OUTREACH_FROM_EMAIL`
+- `OUTREACH_COMPANY_ADDRESS`
+- `OUTREACH_UNSUBSCRIBE_EMAIL`
+- `OUTREACH_CONFIRM_SEND` for live sending
 
 ## Recommended Variables
 - `OUTREACH_FROM_NAME` (default: `DrapixAI Partnerships`)
@@ -21,7 +24,9 @@ node scripts/send-brand-outreach.js
 - `OUTREACH_SUBJECT`
 - `OUTREACH_CTA_URL`
 - `OUTREACH_LEADS_CSV` (defaults to `marketing/brand-leads-template.csv`)
+- `OUTREACH_SUPPRESSION_CSV` (defaults to `marketing/outreach-suppression.csv`)
 - `OUTREACH_LIMIT` (send cap per run)
+- `OUTREACH_MIN_INTERVAL_MS` (minimum `1000`, default `2500`)
 - `OUTREACH_DRY_RUN` (`true` by default)
 
 ## Example Dry Run
@@ -33,17 +38,25 @@ node scripts/send-brand-outreach.js
 
 ## Example Live Send
 ```powershell
-$env:OUTREACH_SMTP_HOST='smtp.gmail.com'
+$env:OUTREACH_SMTP_HOST='smtp.your-outreach-provider.example'
 $env:OUTREACH_SMTP_PORT='587'
-$env:OUTREACH_SMTP_USER='you@yourdomain.com'
+$env:OUTREACH_SMTP_USER='partnerships@sales.drapixai.com'
 $env:OUTREACH_SMTP_PASS='app-password-or-smtp-secret'
-$env:OUTREACH_FROM_EMAIL='you@yourdomain.com'
+$env:OUTREACH_FROM_EMAIL='partnerships@sales.drapixai.com'
+$env:OUTREACH_REPLY_TO='sales@drapixai.com'
+$env:OUTREACH_COMPANY_ADDRESS='Replace with DrapixAI registered business address'
+$env:OUTREACH_UNSUBSCRIBE_EMAIL='privacy@drapixai.com'
+$env:OUTREACH_CONFIRM_SEND='I_HAVE_REVIEWED_EACH_RECIPIENT'
 $env:OUTREACH_DRY_RUN='false'
-$env:OUTREACH_LIMIT='25'
+$env:OUTREACH_LIMIT='10'
 node scripts/send-brand-outreach.js
 ```
 
 ## Safety Rules
 - Start with `OUTREACH_DRY_RUN=true`.
-- Send small batches first (`OUTREACH_LIMIT=10` to `25`).
+- Send only manually approved business contacts with a recorded public source URL.
+- Add every opt-out to `marketing/outreach-suppression.csv` immediately.
+- Start with no more than 10 reviewed recipients.
 - Verify deliverability and replies before larger sends.
+
+See `docs/email-operations.md` for sender-domain separation, DNS requirements, CSV fields, suppression handling, and the full launch gate.

@@ -126,7 +126,7 @@ Write-EnvFile `
         "BILLING_UPGRADE_URL" = "https://$Domain/pricing"
         "S3_BUCKET" = $S3Bucket
         "AWS_REGION" = $AwsRegion
-        "SMTP_FROM" = "no-reply@$Domain"
+        "SMTP_FROM" = "`"DrapixAI <no-reply@mail.$Domain>`""
     }
 
 Write-EnvFile `

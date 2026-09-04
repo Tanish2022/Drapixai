@@ -333,6 +333,9 @@ const auditMigration = read('apps/api/prisma/migrations/20260719170000_immutable
 const authorizationLib = read('apps/api/src/lib/authorization.ts');
 const securityReleaseGate = read('docs/security-release-gate.md');
 const stagingPentest = read('deploy/scripts/pentest-staging.sh');
+const strixStagingRunner = read('deploy/scripts/run-strix-staging.py');
+const strixAuthorizationTemplate = read('deploy/security/strix-staging-authorization.example.json');
+const strixSecurityGuide = read('docs/strix-security-testing.md');
 const stagingCertification = read('deploy/staging/certify-release.sh');
 const stagingCertificationTemplate = read('deploy/staging/certification.env.example');
 const mtlsApiHandshakeVerifier = read('deploy/workstation/internal-proxy/verify-mtls-api-handshake.sh');
@@ -472,7 +475,7 @@ assertIncludes(nodeRuntimeVerifier, 'UNSUPPORTED_NODE_RUNTIME', 'Node runtime ve
 assertIncludes(nodeRuntimeVerifier, 'NODE_ENGINE_RANGE_MISMATCH', 'Node runtime verifier must require one consistent engine range.');
 assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
 assertIncludes(launchGates, 'postgresql://schema_validation:local_only@127.0.0.1:5432/drapixai_schema_validation', 'Prisma validation must be reproducible without an ignored developer environment file.');
-assertIncludes(launchGateReport, '...(gate.env || {})', 'Launch gates must apply explicit per-gate environment values.');
+assertIncludes(launchGateReport, 'childProcessEnv(gate.env || {})', 'Launch gates must apply explicit per-gate environment values through the hardened child environment.');
 assert.ok('three-tenant-gpu' in launchEvidenceTemplate.gates, 'Launch-evidence template must include the three-tenant GPU certification artifact.');
 const requiredP0EvidenceGates = [
   'clean-release-commit',
@@ -1833,6 +1836,18 @@ assertIncludes(stagingPentest, 'DRAPIXAI_PENTEST_ENVIRONMENT', 'Staging pentest 
 assertIncludes(stagingPentest, 'DRAPIXAI_PENTEST_AUTHORIZATION_ID', 'Staging pentest helper must require a written authorization reference');
 assertIncludes(stagingPentest, '--pids-limit 512', 'Staging pentest helper must limit scanner process creation');
 assertIncludes(stagingPentest, '--memory 4g', 'Staging pentest helper must cap scanner memory use');
+assertIncludes(strixStagingRunner, 'EXPECTED_STRIX_VERSION = "1.5.3"', 'Strix staging runner must pin the reviewed CLI version');
+assertIncludes(strixStagingRunner, 'DRAPIXAI_STRIX_SANDBOX_IMAGE', 'Strix staging runner must require a digest-pinned sandbox image');
+assertIncludes(strixStagingRunner, 'DRAPIXAI_STRIX_ACTIVE_TEST_ACK', 'Strix staging runner must require an explicit active-test acknowledgement');
+assertIncludes(strixStagingRunner, 'STRIX_TELEMETRY', 'Strix staging runner must disable upstream telemetry');
+assertIncludes(strixStagingRunner, 'allowDenialOfService', 'Strix staging runner must reject denial-of-service authorization');
+assertIncludes(strixStagingRunner, 'allowThirdPartyTargets', 'Strix staging runner must reject third-party targets');
+assertIncludes(strixStagingRunner, 'syntheticDataOnly', 'Strix staging runner must require synthetic staging data');
+assertIncludes(strixStagingRunner, 'PASS_NO_VALIDATED_FINDINGS', 'Strix evidence must fail closed when validated findings remain');
+assertIncludes(strixAuthorizationTemplate, '"allowProductionTargets": false', 'Strix authorization template must forbid production targets');
+assertIncludes(strixAuthorizationTemplate, '"independentPentestReplacement": false', 'Strix authorization must not replace the independent penetration test');
+assertIncludes(strixSecurityGuide, 'must never be used as a stress or load', 'Strix operator guide must separate exploit testing from capacity testing');
+assertIncludes(strixSecurityGuide, 'zero-data-retention', 'Strix operator guide must cover LLM data handling');
 assertIncludes(stagingCertification, 'DRAPIXAI_STAGING_CERTIFICATION_ENVIRONMENT', 'Staging certification runner must require a staging environment guard');
 assertIncludes(stagingCertification, 'Refusing certification against a non-staging API host', 'Staging certification runner must refuse production targets');
 assertIncludes(stagingCertification, 'status --porcelain', 'Staging certification runner must require a clean release checkout');
@@ -1851,6 +1866,8 @@ assertIncludes(securityReleaseGate, 'no-client access is rejected', 'Security re
 assertIncludes(securityReleaseGate, 'certificate receives `/health` HTTP `200`', 'Security release gate must require a live dedicated-client GPU mTLS success.');
 assertIncludes(securityReleaseGate, 'three-tenant public API batch', 'Security release gate must require a three-tenant GPU certification run.');
 assertIncludes(stagingCertification, 'DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE', 'Staging certification must require separate GPU release-image evidence.');
+assertIncludes(stagingCertification, 'DRAPIXAI_STRIX_EVIDENCE', 'Staging certification must require governed Strix evidence.');
+assertIncludes(stagingCertification, '--verify-evidence', 'Staging certification must validate the Strix summary against the exact commit.');
 assertIncludes(stagingCertification, 'edge-release-images', 'Staging certification must verify the running edge image artifacts.');
 assertIncludes(stagingCertification, 'privacy:verify-shopper-media', 'Staging certification runner must execute the shopper-media privacy check');
 assertIncludes(stagingCertification, 'benchmark-three-tenant-public-api.py', 'Staging certification runner must execute the three-tenant public certification');

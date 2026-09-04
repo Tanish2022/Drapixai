@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import BrandLogo from '@/app/components/BrandLogo';
 
 interface AdminGarment {
   id: number;
@@ -256,15 +257,9 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#f4f6f2] text-[#172019]">
       <header className="border-b border-black/10 bg-[#fbfcf9]">
         <div className="mx-auto flex min-h-20 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-12">
-          <Link href="/" className="flex items-center gap-2">
-            <img
-              src="/drapixai_emblem_64.webp"
-              alt="DrapixAI"
-              width={40}
-              height={40}
-              className="rounded-md"
-            />
-            <div><span className="block text-lg font-bold leading-none">DrapixAI</span><span className="mt-1 block text-[11px] font-semibold uppercase text-[#748078]">Quality operations</span></div>
+          <Link href="/" className="flex flex-col items-start gap-1" aria-label="DrapixAI home">
+            <BrandLogo className="h-9 w-auto" />
+            <span className="block text-[10px] font-semibold uppercase text-[#748078]">Quality operations</span>
           </Link>
           <div className="flex items-center gap-4">
             <button

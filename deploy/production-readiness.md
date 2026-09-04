@@ -313,7 +313,7 @@ Fill these with your real values before launch:
 | `NEXT_PUBLIC_WEB_BASE_URL` | `https://<your-domain>` | `deploy/env/web.production.env` |
 | `NEXT_PUBLIC_API_BASE_URL` | `https://api.<your-domain>` | `deploy/env/web.production.env` |
 | `DRAPIXAI_AI_URL` | `https://ai.<private-domain>` over VPN/mTLS | `deploy/env/api.production.env` |
-| `SMTP_FROM` | `no-reply@<your-domain>` | `deploy/env/api.production.env` |
+| `SMTP_FROM` | `DrapixAI <no-reply@mail.drapixai.com>` | `deploy/env/api.production.env` |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client id | `deploy/env/web.production.env` |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth web client secret | `deploy/env/web.production.env` |
 
@@ -346,20 +346,27 @@ Values you will fill:
 - `SMTP_PORT=465` or `587`
 - `SMTP_USER=resend`
 - `SMTP_PASS=<resend-api-key>`
-- `SMTP_FROM=no-reply@<your-domain>`
+- `SMTP_FROM="DrapixAI <no-reply@mail.drapixai.com>"`
+- `SMTP_REPLY_TO=support@<your-domain>`
+- `EMAIL_PUBLIC_BASE_URL=https://<your-domain>`
+- `EMAIL_BRAND_LOGO_URL=https://<your-domain>/drapixai_wordmark.webp`
 
 Minimum verification before launch:
 
 1. Domain verified with SMTP provider
 2. SPF and DKIM records added for the sending domain
-3. A real DrapixAI account exists for the test recipient email
-4. One real test email sent from the API and confirmed in `EmailLog`:
+3. DMARC alignment reports reviewed for the transactional sending subdomain
+4. Transactional SMTP credentials are isolated from brand-outreach credentials
+5. A real DrapixAI account exists for the test recipient email
+6. One real test email sent from the API and confirmed in `EmailLog`:
 
 ```bash
 npm --prefix apps/api run email:send-test -- --to=admin@yourbrand.com
 ```
 
 The command fails if SMTP env vars are missing, the recipient is not an existing DrapixAI user, sending fails, or the `EmailLog` row is not written with `status="sent"`.
+
+See `docs/email-operations.md` for transactional templates, outreach isolation, suppression handling, dry-run commands, and sender-domain requirements.
 
 ## 5. Google OAuth Setup
 

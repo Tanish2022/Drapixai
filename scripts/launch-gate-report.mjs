@@ -12,6 +12,15 @@ const evidencePath = path.resolve(root, requestedEvidencePath || path.join("runt
 const evidenceRoot = path.join(root, "runtime", "launch-evidence");
 const validScopes = new Set(["repository", "all"]);
 
+const childProcessEnv = (overrides = {}) => {
+  const env = { ...process.env, ...overrides, CI: "1", NO_COLOR: "1" };
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
+  const currentPath = env[pathKey] || "";
+  env[pathKey] = `${path.dirname(process.execPath)}${path.delimiter}${currentPath}`;
+  env.NPM_CONFIG_CACHE ||= path.join(root, "runtime", ".npm-cache");
+  return env;
+};
+
 if (!validScopes.has(requestedScope)) {
   console.error("Usage: node scripts/launch-gate-report.mjs [--scope=repository|all]");
   process.exit(2);
@@ -116,7 +125,7 @@ const run = (gate) => {
     result = spawnSync(invocation.command, invocation.args, {
       cwd: root,
       encoding: "utf8",
-      env: { ...process.env, ...(gate.env || {}), CI: "1", NO_COLOR: "1" },
+      env: childProcessEnv(gate.env || {}),
       maxBuffer: 16 * 1024 * 1024,
       windowsHide: true
     });

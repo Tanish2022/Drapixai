@@ -305,7 +305,7 @@
         primaryGradient: options.primaryGradient || null,
         buyButtonText: options.buyButtonText || 'Buy this item',
         buyUrlAttribute: options.buyUrlAttribute || 'data-drapix-buy-url',
-        logoUrl: sanitizeAssetUrl(options.logoUrl || sdkAssetBaseUrl + '/drapixai_emblem_64.webp', sdkAssetBaseUrl + '/drapixai_emblem_64.webp')
+        logoUrl: sanitizeAssetUrl(options.logoUrl || sdkAssetBaseUrl + '/drapixai_wordmark.webp', sdkAssetBaseUrl + '/drapixai_wordmark.webp')
       };
 
       function reportStartupError(message, productId) {
@@ -369,7 +369,7 @@
         return [
           '<div style="font-family:', escapeHtml(theme.fontFamily), ';">',
           '  <button data-drapix-launcher="true" data-drapix-product-id="', escapeHtml(productId), '" style="display:inline-flex;align-items:center;gap:10px;background:', escapeHtml(theme.primaryGradient), ';color:#fff;border:none;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';cursor:pointer;font-weight:700;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">',
-          '    <img src="', escapeHtml(config.logoUrl), '" alt="" aria-hidden="true" style="width:26px;height:26px;object-fit:cover;border-radius:6px;" />',
+          '    <img src="', escapeHtml(config.logoUrl), '" alt="" aria-hidden="true" style="display:block;width:92px;height:31px;object-fit:contain;" />',
           '    ', escapeHtml(config.buttonText),
           '  </button>',
           '</div>'
@@ -403,9 +403,8 @@
           '  <button id="drapix-close" type="button" aria-label="Close DrapixAI try-on" style="position:absolute;z-index:3;top:16px;right:18px;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border-radius:999px;border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';cursor:pointer;font-size:22px;line-height:1;box-shadow:0 8px 22px rgba(15,23,42,0.08);font-family:', escapeHtml(theme.fontFamily), ';display:inline-flex;align-items:center;justify-content:center;text-align:center;">&times;</button>',
           '  <div style="position:relative;padding:26px;">',
           '    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">',
-          '      <img src="', escapeHtml(config.logoUrl), '" alt="DrapixAI" style="display:block;width:40px;height:40px;object-fit:cover;border-radius:', escapeHtml(theme.buttonRadius), ';" />',
+          '      <img src="', escapeHtml(config.logoUrl), '" alt="DrapixAI" style="display:block;width:132px;height:44px;object-fit:contain;object-position:left center;" />',
           '      <div>',
-          '        <div style="font-size:15px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:', escapeHtml(theme.primary), ';">DrapixAI</div>',
           '        <div style="font-size:12px;color:', escapeHtml(theme.mutedText), ';">Premium virtual try-on preview</div>',
           '      </div>',
           '    </div>',

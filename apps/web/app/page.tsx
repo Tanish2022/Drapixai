@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
+import BrandLogo from '@/app/components/BrandLogo';
 import {
   ArrowRight,
   BadgeCheck,
@@ -147,7 +148,7 @@ export default function Home() {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-[#fbfcf9]/95 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
           <Link href="/" className="flex items-center" aria-label="DrapixAI home">
-            <img src="/drapixai_wordmark.webp" alt="DrapixAI" width={176} height={59} className="h-12 w-auto object-contain" />
+            <BrandLogo />
           </Link>
 
           <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary navigation">
@@ -570,9 +571,8 @@ export default function Home() {
         <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
           <div className="flex flex-col justify-between gap-8 border-b border-white/15 pb-10 md:flex-row md:items-end">
             <div>
-              <div className="flex items-center gap-3">
-                <img src="/drapixai_emblem_64.webp" alt="" width={42} height={42} className="rounded-md" />
-                <span className="text-xl font-bold">DrapixAI</span>
+              <div className="inline-flex bg-white px-2 py-1">
+                <BrandLogo className="h-10 w-auto" />
               </div>
               <p className="mt-4 max-w-md text-sm leading-6 text-[#9fac9f]">Standard upper-body AI try-on infrastructure for fashion commerce.</p>
             </div>

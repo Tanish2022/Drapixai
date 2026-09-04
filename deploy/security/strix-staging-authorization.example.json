@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "authorizationId": "SEC-YYYY-STRIX-NNNN",
+  "environment": "staging",
+  "releaseCommit": "REPLACE_WITH_40_CHARACTER_RELEASE_COMMIT",
+  "approvedBy": "security-owner@example.com",
+  "incidentContact": "on-call@example.com",
+  "llmDataProcessingApprovalReference": "REPLACE_WITH_LOCAL_OR_ZERO_RETENTION_LLM_APPROVAL",
+  "validFrom": "2026-01-01T00:00:00Z",
+  "validUntil": "2026-01-01T08:00:00Z",
+  "apiOrigin": "https://api.staging.example.com",
+  "targetOrigins": [
+    "https://api.staging.example.com",
+    "https://web.staging.example.com"
+  ],
+  "allowedHosts": [
+    "api.staging.example.com",
+    "web.staging.example.com"
+  ],
+  "syntheticDataOnly": true,
+  "shortLivedCredentialsOnly": true,
+  "stagingRateLimitEnforced": true,
+  "llmDataProcessingApproved": true,
+  "allowProductionTargets": false,
+  "allowDenialOfService": false,
+  "allowDestructiveTesting": false,
+  "allowPersistence": false,
+  "allowSocialEngineering": false,
+  "allowThirdPartyTargets": false,
+  "independentPentestReplacement": false,
+  "maxRequestsPerSecond": 2
+}
