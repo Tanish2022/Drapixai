@@ -41,6 +41,7 @@ def main() -> int:
         )
 
     postgres_password = token()
+    api_database_password = token()
     redis_password = token()
     ai_redis_password = token()
     minio_user = f"drapixai-staging-{secrets.token_hex(6)}"
@@ -58,6 +59,7 @@ def main() -> int:
         )
 
     write_private(output_dir / "postgres_password", postgres_password)
+    write_private(output_dir / "api_database_password", api_database_password)
     write_private(output_dir / "redis_password", redis_password)
     write_private(output_dir / "ai_redis_password", ai_redis_password)
     write_private(output_dir / "minio_root_user", minio_user)
@@ -65,8 +67,8 @@ def main() -> int:
 
     api_secrets = {
         "DATABASE_URL": (
-            "postgresql://drapixai_staging:"
-            f"{quote(postgres_password, safe='')}@postgres:5432/drapixai_staging"
+            "postgresql://drapixai_staging_api:"
+            f"{quote(api_database_password, safe='')}@postgres:5432/drapixai_staging"
         ),
         "REDIS_URL": (
             "redis://default:"

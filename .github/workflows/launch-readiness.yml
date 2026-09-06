@@ -98,8 +98,14 @@ jobs:
       - name: Verify immutable audit database triggers
         env:
           DATABASE_URL: postgresql://drapixai_gate:ci-disposable-only@127.0.0.1:5432/drapixai_launch_gate
+          DRAPIXAI_DISPOSABLE_DB_APPROVAL: I_ACKNOWLEDGE_DISPOSABLE_DATABASE
         run: npm --prefix apps/api run test:audit-immutability
-      - name: Validate hardened Compose manifests
+      - name: Verify staging database privilege separation
+        # The role test creates and removes its own no-host-port database.
+        run: |
+          node scripts/verify-staging-database-role.mjs
+          python deploy/scripts/test-staging-secret-separation.py
+      - name: Validate hardened Compose configuration
         run: |
           set -euo pipefail
           cp deploy/env/api.production.example deploy/env/api.production.env

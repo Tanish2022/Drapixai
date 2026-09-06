@@ -11,6 +11,9 @@ services:
     volumes:
       - staging_postgres:/var/lib/postgresql/data
       - ./private/postgres_password:/run/secrets/postgres_password:ro
+      - ./private/api_database_password:/run/secrets/api_database_password:ro
+      - ./provision-database-role.sh:/opt/drapixai/provision-database-role.sh:ro
+      - ./verify-database-role.sql:/opt/drapixai/verify-database-role.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U drapixai_staging -d drapixai_staging"]
       interval: 5s

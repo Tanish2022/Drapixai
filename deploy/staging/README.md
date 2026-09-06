@@ -71,7 +71,31 @@ in plaintext.
      deploy/env/api.staging.env deploy/env/api.production.env
    ```
 
-8. Start the edge and GPU projects with different Compose project names:
+8. Start PostgreSQL first, apply all release migrations with the bootstrap/migration
+   credential through your secret manager, then provision the separate API role.
+   The API's mounted `DATABASE_URL` is intentionally not a migration credential.
+   Do not start the API until provisioning succeeds:
+
+   ```bash
+   docker compose --env-file deploy/staging/.images.env \
+     -f deploy/staging/docker-compose.edge.yml up -d postgres
+   # Apply the release's Prisma migrations with the restricted operator workflow.
+   docker compose --env-file deploy/staging/.images.env \
+     -f deploy/staging/docker-compose.edge.yml exec -T postgres \
+     bash /opt/drapixai/provision-database-role.sh
+   docker compose --env-file deploy/staging/.images.env \
+     -f deploy/staging/docker-compose.edge.yml exec -T postgres \
+     psql -X -U drapixai_staging -d drapixai_staging \
+     -f /opt/drapixai/verify-database-role.sql
+   ```
+
+   Re-run provisioning after migrations that add tables, and restart the API after
+   rotating `api_database_password` and its matching mounted `DATABASE_URL` together.
+   Existing installations must add this separate secret without changing the
+   retained PostgreSQL bootstrap password. Do not use the generator's `--force`
+   option as a database migration or rotation procedure.
+
+   Start the edge and GPU projects with different Compose project names:
 
    ```bash
    docker compose --env-file deploy/staging/.images.env \
@@ -97,7 +121,7 @@ in plaintext.
    bash deploy/staging/verify-release-images.sh ai deploy/staging/.images.env <release-commit>
    ```
 
-11. Apply the Prisma migration with backup evidence, then run the complete staging
+11. Preserve migration and backup evidence, then run the complete staging
     smoke and security suites. Never point staging at production to save setup time.
 
 ## Live security-boundary certification

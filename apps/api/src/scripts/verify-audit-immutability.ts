@@ -21,6 +21,15 @@ async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required and must target a disposable verification database');
   }
+  const target = new URL(process.env.DATABASE_URL);
+  const databaseName = target.pathname.slice(1);
+  const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(target.hostname);
+  const disposableName = /(?:^|[_-])(p0|test|disposable)(?:$|[_-])/i.test(databaseName)
+    || databaseName === 'drapixai_launch_gate';
+  if (!loopback || !disposableName
+    || process.env.DRAPIXAI_DISPOSABLE_DB_APPROVAL !== 'I_ACKNOWLEDGE_DISPOSABLE_DATABASE') {
+    throw new Error('Audit mutation tests require an explicitly approved loopback disposable database');
+  }
 
   const unique = crypto.randomUUID();
   const record = await prisma.securityAuditLog.create({
@@ -43,6 +52,9 @@ async function main() {
   await expectMutationRejected('DELETE', () => prisma.$executeRawUnsafe(
     'DELETE FROM "SecurityAuditLog" WHERE "id" = $1',
     record.id
+  ));
+  await expectMutationRejected('TRUNCATE', () => prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "SecurityAuditLog"'
   ));
 
   const preserved = await prisma.securityAuditLog.findUnique({ where: { id: record.id } });

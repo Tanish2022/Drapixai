@@ -91,7 +91,7 @@ digest.
 - Production dependency and container-image scans contain no unresolved critical or high findings.
 - `npm run launch:report:repository` reports no failed repository gate for the exact release commit.
 
-CI applies every migration to disposable PostgreSQL and then runs `npm --prefix apps/api run test:audit-immutability`. Never point that command at a retained development, staging, or production database because its verification row is intentionally append-only.
+CI applies every migration to disposable PostgreSQL and then runs `npm --prefix apps/api run test:audit-immutability`. The verifier attempts UPDATE, DELETE, and TRUNCATE. It requires a loopback database with a disposable name and `DRAPIXAI_DISPOSABLE_DB_APPROVAL=I_ACKNOWLEDGE_DISPOSABLE_DATABASE`. Never point that command at a retained development, staging, or production database. The verification row is intentionally append-only. These triggers do not protect against an administrator who can disable or drop them; the running API must use a separate non-owner, non-superuser role.
 
 For a local disposable loopback database whose name contains `p0`, `test`, or
 `disposable`, set `DRAPIXAI_DISPOSABLE_DB_APPROVAL=I_ACKNOWLEDGE_DISPOSABLE_DATABASE`

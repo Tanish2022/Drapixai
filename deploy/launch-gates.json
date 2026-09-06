@@ -32,6 +32,18 @@
       "args": ["--prefix", "apps/api", "run", "build"]
     },
     {
+      "id": "staging-database-role",
+      "label": "Disposable database proves least-privilege staging runtime role",
+      "runner": "node",
+      "args": ["scripts/verify-staging-database-role.mjs"]
+    },
+    {
+      "id": "staging-secret-separation",
+      "label": "Staging API database secret is separate from bootstrap credentials",
+      "runner": "python",
+      "args": ["deploy/scripts/test-staging-secret-separation.py"]
+    },
+    {
       "id": "web-build",
       "label": "Web production build",
       "runner": "npm",
