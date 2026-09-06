@@ -2,6 +2,12 @@
   "version": 1,
   "repository": [
     {
+      "id": "temporary-compose-env",
+      "label": "Failed Compose setup cleans placeholders and preserves operator configuration",
+      "runner": "node",
+      "args": ["--test", "scripts/temporary-compose-env.test.mjs"]
+    },
+    {
       "id": "node-runtime",
       "label": "Supported Node.js release runtime",
       "runner": "node",

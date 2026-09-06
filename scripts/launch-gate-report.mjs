@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { prepareComposeEnvFiles } from "./lib/temporary-compose-env.mjs";
 
 const root = process.cwd();
 const configPath = path.join(root, "deploy", "launch-gates.json");
@@ -101,27 +102,14 @@ const productionEnvTemplates = [
   ["deploy/env/ai.production.example", "deploy/env/ai.production.env"]
 ];
 
-const prepareComposeEnvFiles = (gate) => {
-  if (gate.runner !== "docker" || gate.args[0] !== "compose") return [];
-
-  const created = [];
-  for (const [template, destination] of productionEnvTemplates) {
-    const templatePath = path.join(root, template);
-    const destinationPath = path.join(root, destination);
-    if (fs.existsSync(destinationPath)) continue;
-    fs.copyFileSync(templatePath, destinationPath, fs.constants.COPYFILE_EXCL);
-    created.push(destinationPath);
-  }
-  return created;
-};
-
 const run = (gate) => {
   const startedAt = new Date();
   const started = Date.now();
   const invocation = commandFor(gate.runner, gate.args);
-  const temporaryEnvFiles = prepareComposeEnvFiles(gate);
+  let temporaryEnvFiles = [];
   let result;
   try {
+    temporaryEnvFiles = prepareComposeEnvFiles(root, gate, productionEnvTemplates);
     result = spawnSync(invocation.command, invocation.args, {
       cwd: root,
       encoding: "utf8",
@@ -129,6 +117,8 @@ const run = (gate) => {
       maxBuffer: 16 * 1024 * 1024,
       windowsHide: true
     });
+  } catch (error) {
+    result = { status: null, error };
   } finally {
     for (const temporaryEnvFile of temporaryEnvFiles) {
       fs.rmSync(temporaryEnvFile, { force: true });
