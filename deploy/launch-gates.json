@@ -167,6 +167,12 @@
       "args": ["--prefix", "apps/web", "audit", "--omit=dev", "--audit-level=high"]
     },
     {
+      "id": "web-build-dependency-audit",
+      "label": "Web build tooling and production dependency audit",
+      "runner": "npm",
+      "args": ["--prefix", "apps/web", "audit", "--include=dev", "--audit-level=high"]
+    },
+    {
       "id": "standard-release-profile",
       "label": "Immutable Standard CatVTON release profile",
       "runner": "python",

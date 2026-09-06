@@ -350,8 +350,13 @@ const launchEvidenceTemplate = JSON.parse(read('deploy/launch-evidence.example.j
   gates: Record<string, { evidence?: string; sha256?: string }>;
 };
 const launchGateConfig = JSON.parse(launchGates) as {
+  repository: Array<{ id: string; runner: string; args: string[] }>;
   releaseEvidence: Array<{ id: string }>;
 };
+const webBuildDependencyAudit = launchGateConfig.repository.find((gate) => gate.id === 'web-build-dependency-audit');
+assert.ok(webBuildDependencyAudit, 'Launch gates must audit website build tooling as well as production dependencies');
+assert.equal(webBuildDependencyAudit.runner, 'npm');
+assert.deepEqual(webBuildDependencyAudit.args, ['--prefix', 'apps/web', 'audit', '--include=dev', '--audit-level=high']);
 const rootPackageJson = read('package.json');
 const gitignore = read('.gitignore');
 const gitattributes = read('.gitattributes');
