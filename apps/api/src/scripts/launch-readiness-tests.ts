@@ -344,6 +344,7 @@ const liveSecurityBoundaryTest = read('apps/api/src/scripts/live-security-bounda
 const distributedSecurityTest = read('apps/api/src/scripts/distributed-security-control-tests.ts');
 const publicThreeTenantBenchmark = read('deploy/scripts/benchmark-three-tenant-public-api.py');
 const launchGateReport = read('scripts/launch-gate-report.mjs');
+const disposableDbCertifier = read('scripts/certify-disposable-db.mjs');
 const launchEvidenceRecorder = read('scripts/record-launch-evidence.mjs');
 const launchEvidenceTemplate = JSON.parse(read('deploy/launch-evidence.example.json')) as {
   gates: Record<string, { evidence?: string; sha256?: string }>;
@@ -476,6 +477,7 @@ assertIncludes(nodeRuntimeVerifier, 'NODE_ENGINE_RANGE_MISMATCH', 'Node runtime 
 assertIncludes(launchGates, 'three-tenant-gpu', 'Release evidence gates must require a three-tenant GPU certification artifact.');
 assertIncludes(launchGates, 'postgresql://schema_validation:local_only@127.0.0.1:5432/drapixai_schema_validation', 'Prisma validation must be reproducible without an ignored developer environment file.');
 assertIncludes(launchGateReport, 'childProcessEnv(gate.env || {})', 'Launch gates must apply explicit per-gate environment values through the hardened child environment.');
+assertIncludes(disposableDbCertifier, 'DRAPIXAI_NPM_CLI', 'Disposable database certification must support an npm CLI bound to the approved Node runtime.');
 assert.ok('three-tenant-gpu' in launchEvidenceTemplate.gates, 'Launch-evidence template must include the three-tenant GPU certification artifact.');
 const requiredP0EvidenceGates = [
   'clean-release-commit',

@@ -16,9 +16,15 @@ if (process.env.DRAPIXAI_DISPOSABLE_DB_APPROVAL !== 'I_ACKNOWLEDGE_DISPOSABLE_DA
   throw new Error('DISPOSABLE_DB_APPROVAL_REQUIRED');
 }
 
-const commandFor = (args) => process.platform === 'win32'
-  ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `npm.cmd ${args.join(' ')}`] }
-  : { command: 'npm', args };
+const commandFor = (args) => {
+  const npmCli = String(process.env.DRAPIXAI_NPM_CLI || process.env.npm_execpath || '').trim();
+  if (npmCli && fs.existsSync(npmCli)) {
+    return { command: process.execPath, args: [npmCli, ...args] };
+  }
+  return process.platform === 'win32'
+    ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `npm.cmd ${args.join(' ')}`] }
+    : { command: 'npm', args };
+};
 const run = (label, args) => {
   const invocation = commandFor(args);
   const result = spawnSync(invocation.command, invocation.args, {
