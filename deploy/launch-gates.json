@@ -173,6 +173,12 @@
       "args": ["deploy/scripts/test-staging-topology.py"]
     },
     {
+      "id": "docker-build-context-privacy",
+      "label": "Docker excludes generated credentials and shopper caches from build contexts",
+      "runner": "node",
+      "args": ["scripts/verify-docker-build-context.mjs"]
+    },
+    {
       "id": "strix-staging-policy",
       "label": "Governed Strix staging authorization policy",
       "runner": "python",

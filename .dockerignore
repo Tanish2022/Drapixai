@@ -1,4 +1,5 @@
 .git
+**/.git
 .gitignore
 .vscode
 .venv
@@ -21,3 +22,34 @@ docs
 deploy/env/*.production.env
 !**/*.example
 !**/*.sample
+
+# Generated deployment inputs must never reach a build layer or remote builder.
+# Keep these denials after example exceptions, including files inside private/.
+deploy/env/*.env
+deploy/staging/certification.env
+deploy/staging/.images.env
+deploy/**/private
+**/.ssh
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+.agents
+.codex
+
+# Runtime media and downloaded artifacts are mounted/provisioned separately.
+**/uploads
+**/.hf_cache
+drapixai_ai/garments
+drapixai_ai/runtime
+drapixai_ai/outputs
+**/*.safetensors
+**/*.ckpt
+**/*.pth
+**/*.pt
+**/*.onnx
+runpod_*.env
+drapixai_runpod_*.tar
+drapixai_runpod_*.patch
+tmp
+tmp_*

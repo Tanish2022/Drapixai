@@ -6,6 +6,22 @@ This document is the authoritative DrapixAI public-launch security gate. `deploy
 
 ## Automated evidence report
 
+The repository gate `docker-build-context-privacy` exercises Docker's own ignore
+matcher using synthetic files and a scratch image export. Generated deployment
+secrets, operator credentials, shopper caches and downloaded weights must be
+excluded, while application source, approved public assets and the immutable
+Standard profile remain included. It reads no real private files and does not
+replace scanning the final release images. Dockerfile-specific ignore overrides
+require separate review and are rejected by this gate.
+
+Before using an image built from a populated workstation checkout, verify that
+the build used the hardened `.dockerignore` or an approved source-only context.
+If an earlier build included real private files, investigate its layers, builder
+cache and registry exposure; revoke affected credentials and follow the incident
+procedure as appropriate. Removing a file in a later layer does not remove it
+from earlier layers. The synthetic regression demonstrates a risk, not evidence
+that any real credential was disclosed.
+
 Run every local repository gate and write a redacted JSON and Markdown report under the ignored `runtime/launch-evidence/` directory:
 
 ```bash
