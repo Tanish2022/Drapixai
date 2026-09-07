@@ -65,11 +65,25 @@ in plaintext.
 
 7. Verify source topology and environment separation:
 
+   The template verifier requires PyYAML 6.0.1 (already included in the reviewed
+   AI environment). For a separate staging-operations Python environment, install
+   it there with `python -m pip install PyYAML==6.0.1`. Use that same interpreter
+   for both checks below. The certification runner uses `python3`, so activate
+   the operations environment before invoking it.
+
    ```bash
    python deploy/scripts/verify-staging-topology.py
+   python deploy/scripts/test-staging-topology.py
    node deploy/scripts/verify-environment-isolation.mjs \
      deploy/env/api.staging.env deploy/env/api.production.env
    ```
+
+   These checks validate the repository templates and example policy settings,
+   not running containers, generated secrets, firewall rules or certificate
+   validity. Unsupported Compose overrides and alternate mount/port forms fail
+   review rather than silently passing. Do not use a source PASS to close the
+   live `private-services` or `environment-isolation` release gates; collect
+   resolved deployment configuration and live listener/mTLS evidence separately.
 
 8. Start PostgreSQL first, apply all release migrations with the bootstrap/migration
    credential through your secret manager, then provision the separate API role.

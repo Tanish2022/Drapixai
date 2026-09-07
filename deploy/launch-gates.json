@@ -167,6 +167,12 @@
       "args": ["deploy/scripts/verify-staging-topology.py"]
     },
     {
+      "id": "staging-topology-negative-controls",
+      "label": "Staging verifier rejects unsafe exposure and Standard overrides",
+      "runner": "python",
+      "args": ["deploy/scripts/test-staging-topology.py"]
+    },
+    {
       "id": "strix-staging-policy",
       "label": "Governed Strix staging authorization policy",
       "runner": "python",

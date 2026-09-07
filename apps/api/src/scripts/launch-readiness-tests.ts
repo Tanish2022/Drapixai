@@ -253,6 +253,7 @@ assertIncludes(stagingDatabaseRole, 'GRANT SELECT, INSERT ON TABLE public."Secur
 assertIncludes(stagingEdgeCompose, './private/api_database_password:/run/secrets/api_database_password:ro', 'Database provisioning requires the separate API password');
 const stagingImagesEnvExample = read('deploy/staging/.images.env.example');
 const stagingTopologyVerifier = read('deploy/scripts/verify-staging-topology.py');
+const stagingTopologyRules = read('deploy/scripts/staging_topology.py');
 const stagingReleaseImageVerifier = read('deploy/staging/verify-release-images.sh');
 const garmentCacheService = read('drapixai_ai/services/garment_cache.py');
 const garmentCacheDeleteValidation = read('drapixai_ai/scripts/validate_garment_cache_delete.py');
@@ -1824,7 +1825,8 @@ assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_RELEASE_COMMIT=', 'Staging ima
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_AI_RELEASE_IMAGE=', 'Staging image inputs must provide the immutable AI release artifact.');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:', 'Staging image inputs must retain the digest-pinned AI base-image provenance.');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_AI_BUILD_IMAGE=pytorch/pytorch:', 'Staging image inputs must retain the digest-pinned AI builder provenance.');
-assertIncludes(stagingTopologyVerifier, 'staging Compose must deploy immutable release artifacts without source builds', 'Staging topology verification must reject source builds.');
+assertIncludes(stagingTopologyVerifier, 'from staging_topology import load_compose, validate', 'Staging verification must use the structural rules.');
+assertIncludes(stagingTopologyRules, 'staging Compose must deploy immutable release artifacts without source builds', 'Staging topology verification must reject source builds.');
 assertIncludes(stagingReleaseImageVerifier, 'org.opencontainers.image.revision', 'Staging runtime verification must prove the image revision label.');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_POSTGRES_IMAGE=postgres:', 'Staging Compose must pin the PostgreSQL image before service startup.');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_REDIS_IMAGE=redis:', 'Staging Compose must pin the Redis image before service startup.');

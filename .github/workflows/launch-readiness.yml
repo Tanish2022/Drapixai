@@ -146,6 +146,7 @@ jobs:
           opencv-python-headless==4.10.0.84
           scipy==1.13.1
           scikit-image==0.24.0
+          PyYAML==6.0.1
       - name: Audit secure AI candidate pins
         run: >-
           pip-audit
@@ -157,6 +158,10 @@ jobs:
           --ignore-vuln GHSA-rrmf-rvhw-rf47
       - name: Verify immutable Standard release profile
         run: python deploy/scripts/verify-standard-release-profile.py
+      - name: Verify staging topology and negative controls
+        run: |
+          python deploy/scripts/verify-staging-topology.py
+          python deploy/scripts/test-staging-topology.py
       - name: Verify production and reference AI environment boundaries
         run: bash deploy/scripts/test-ai-env-profiles.sh
       - name: Compile production Python
