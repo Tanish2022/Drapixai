@@ -106,3 +106,63 @@ the release-evidence directory.
   policy.
 - Named privacy and incident-response owner plus an escalation contact.
 
+## Policy hardening review - 7 September 2026
+
+Status: preparation only; security certification and legal approval remain open.
+No production deployment, legal sign-off, commercial licence, or compliance
+certification is established by this review. Complete the security evidence
+first, then reconcile the final policies against the exact deployed release.
+
+### Immediate corrections made
+
+- Terms now limit shopper-image processing to the requested service and repeat
+  the no-training promise, instead of broadly licensing images to improve the
+  service. This wording still requires operational and vendor-contract proof.
+- Terms distinguish DrapixAI-owned materials from third-party models/software.
+- Removed the public drafting placeholder for a liability cap. Counsel must
+  still settle the actual commercial allocation of liability; no monetary cap
+  or governing court has been invented.
+- Clarified that generated previews do not guarantee sizing or physical fit.
+
+### Unresolved publication and commercial-launch blockers
+
+| Area | Required work and proof | Owner |
+| --- | --- | --- |
+| Entity identity | Registered legal name, address, registration identifiers as applicable, working legal/privacy contact and grievance escalation; consistent across policies, invoices and contracts. | Founder + counsel |
+| Commercial model rights | Verify rights for the exact deployed code, checkpoints, base model and preprocessing dependencies. CatVTON publicly states CC BY-NC-SA 4.0 for its code, checkpoints and demo. Obtain a sufficient written commercial grant from the relevant rights holders or approve a commercially permitted alternative before paid use; do not assume a free brand pilot is exempt. | Founder + IP counsel |
+| Privacy notice | Identify purposes, actual processing roles, legal basis, recipients, locations, withdrawal/request channels, applicable age handling and effective policy version. Replace the generic possible-vendor list with verified providers. | Privacy owner + counsel |
+| Retention | Prove the stated 15-minute interrupted-job cleanup across retries, crashes and temporary storage; cover backups, queue payloads and support attachments. Define separate schedules for consent, billing, account, garment and security records. Do not turn a no-training promise into a claim that no personal data is ever processed or retained. | Engineering + privacy owner |
+| Cookies and marketing | Inventory actual cookies/SDKs and lifetimes; remove future-tense drafting notes from public notices after implementation is verified. Establish applicable consent, unsubscribe and suppression handling, separate from OTP/security mail. | Engineering + counsel |
+| Merchant contracts | Finalize DPA, subprocessor schedule, security annex, incident assistance, termination/deletion, content rights, accepted use, SLA and liability terms. Confirm fiduciary/processor roles per activity, not solely by contract label. | Counsel + founder |
+| Billing | Match SDK/API prices, credits, failed-job charging, renewals, cancellation method, refunds, GST and export invoicing to tested checkout and ledger behaviour. | Founder + accountant + counsel |
+| Claims and assets | Verify published quality/latency claims against test conditions; distinguish targets from guarantees and roadmap from supported scope. Secure model releases and garment/demo image rights before public use. | Product + counsel |
+| Incident obligations | Determine applicable CERT-In reporting, designated contact, time synchronization and log requirements; document the on-call procedure and a timed drill. Reconcile these with deletion and legal-hold rules. | Security owner + counsel |
+
+### India-specific review boundaries
+
+- The official MeitY publication includes final DPDP Rules, a corrigendum and
+  enforcement timeline. Review the Act and Rules commencement separately for
+  the actual launch date; do not treat every DPDP requirement as already in
+  force, or assume phased commencement removes existing obligations.
+- CERT-In's 28 April 2022 directions include reporting specified incidents
+  within six hours of noticing them or being informed, a designated contact,
+  clock synchronization and rolling 180-day ICT log retention in India for
+  covered entities. Counsel must confirm applicability and current amendments.
+  Required security logs are not permission to log shopper images, credentials
+  or unrestricted request bodies. Preserve necessary metadata with access
+  controls and an approved retention schedule.
+- Counsel should assess the applicable IT Act/rules, consumer/e-commerce and
+  advertising obligations, electronic contracting, IP, and cross-border
+  requirements for the actual service. The accountant should assess GST and
+  invoicing. Indian company registration alone does not establish compliance.
+
+### Official and upstream sources checked
+
+- [MeitY: DPDP Rules, corrigendum and enforcement timeline](https://www.meity.gov.in/documents/act-and-policies/digital-personal-data-protection-rules-2025-gDOxUjMtQWa?pageTitle=Digit)
+- [CERT-In: directions and FAQs](https://www.cert-in.org.in/Directions70B.jsp)
+- [CERT-In: 28 April 2022 directions](https://www.cert-in.org.in/PDF/CERT-In_Directions_70B_28.04.2022.pdf)
+- [CatVTON: published licence statement](https://github.com/Zheng-Chong/CatVTON#license)
+
+Keep confidential licence agreements and counsel correspondence in restricted
+company storage. Reference redacted approval evidence in the release record.
+Do not close `legal-privacy-approval` based on this checklist or policy edits.

@@ -30,8 +30,8 @@ export default function TermsPage() {
         {
           heading: 'Customer Content and Platform Rights',
           body: [
-            'You retain ownership of your uploaded images, brand assets, and other customer content. You grant DrapixAI the limited rights needed to host, process, transform, transmit, and store that content solely to operate and improve the service.',
-            'DrapixAI retains ownership of the platform, models, software, APIs, documentation, trademarks, and all related intellectual property, except for rights expressly granted to customers.',
+            'You retain your rights in uploaded images, brand assets, and other customer content. You must have the permissions needed to submit that content and authorize its processing. You grant DrapixAI only the rights needed to process and transmit shopper images for the requested try-on, and to host and process merchant catalog assets to provide the service, subject to the Privacy Policy. Shopper photos and generated previews are not used to train DrapixAI or third-party AI models.',
+            'DrapixAI retains its rights in the software, APIs, documentation, trademarks, and other platform materials it owns. Third-party software, models, and other materials remain subject to their respective owners\' rights and applicable licences. These terms do not transfer ownership of third-party materials to DrapixAI or its customers.',
           ],
         },
         {
@@ -46,7 +46,8 @@ export default function TermsPage() {
           heading: 'Disclaimers and Liability',
           body: [
             'DrapixAI is provided on an as-available basis. While we work to maintain reliability and output quality, we do not guarantee uninterrupted service, error-free operation, or that every generated output will meet a specific commercial purpose.',
-            'To the maximum extent permitted by law, DrapixAI will not be liable for indirect, incidental, special, consequential, or punitive damages. Direct liability should be capped in your final legal version.',
+            'Try-on images are generated visual previews, not measurements or guarantees of physical fit, sizing, fabric behaviour, or exact product appearance. Review the actual product details and size chart before purchasing.',
+            'To the maximum extent permitted by law, DrapixAI will not be liable for indirect, incidental, special, consequential, or punitive damages. Nothing in these terms excludes rights, remedies, or liability that applicable law does not allow to be excluded. Any additional liability arrangements must be set out in an applicable written agreement.',
           ],
         },
       ]}
