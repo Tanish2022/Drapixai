@@ -125,6 +125,8 @@ jobs:
         run: npm --prefix apps/api run build
       - name: Web production build
         run: npm --prefix apps/web run build
+      - name: Verify production HTML CSP nonces
+        run: node scripts/verify-production-csp-runtime.mjs
       - name: Production dependency audit
         run: |
           npm --prefix apps/api audit --omit=dev --audit-level=high

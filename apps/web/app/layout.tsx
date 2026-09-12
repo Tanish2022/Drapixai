@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import './globals.css';
 import Providers from './providers';
 import SupportAssistant from './components/SupportAssistant';
@@ -63,11 +64,14 @@ export const metadata: Metadata = {
   manifest: '/site.webmanifest',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // The proxy creates a fresh CSP nonce per request. Prerendered HTML cannot
+  // attach that nonce to Next.js bootstrap scripts and would block hydration.
+  await connection();
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body className="bg-background text-foreground antialiased">

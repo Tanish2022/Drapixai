@@ -261,6 +261,12 @@
       "label": "Nonce-based production CSP source validation",
       "runner": "node",
       "args": ["scripts/verify-production-csp.mjs"]
+    },
+    {
+      "id": "csp-runtime",
+      "label": "Production HTML receives fresh CSP nonces on every bootstrap script",
+      "runner": "node",
+      "args": ["scripts/verify-production-csp-runtime.mjs"]
     }
   ],
   "releaseEvidence": [
