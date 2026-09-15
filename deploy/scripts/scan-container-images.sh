@@ -186,6 +186,10 @@ scan_image() {
     rm -f "${report}" "${trivy_log}"
     rm -rf "${scratch}"
     mkdir -p "${scratch}"
+    # With all capabilities dropped, container root cannot bypass the Linux
+    # runner's ownership of this bind mount. Give this disposable /tmp normal
+    # sticky-directory permissions; its mktemp parent stays private on the host.
+    chmod 1777 "${scratch}"
     if docker run --rm \
       --read-only \
       --cap-drop ALL \

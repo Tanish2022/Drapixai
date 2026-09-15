@@ -29,6 +29,24 @@ PyTorch 2.12.1 requires `setuptools<82`, while `PYSEC-2026-3447` is fixed only i
 
 ## Core runtime migration gate
 
+### Open finding from September 15, 2026 CI
+
+The exact-commit CI audit of `c5c48bd37df31650deb57453ffc23969e3ad6c34`
+reports `PYSEC-2026-3804` (`CVE-2026-69112`, `GHSA-4j2p-28q2-5m79`)
+in `accelerate==1.11.0`. The advisory describes path traversal and blocking
+non-regular files through sharded-checkpoint `weight_map` entries. The audit
+lists no fixed release. See the [advisory](https://osv.dev/vulnerability/PYSEC-2026-3804)
+and [upstream proposed fix](https://github.com/huggingface/accelerate/pull/4138).
+
+This finding remains open and is not added to the exception list. The older
+clean-audit statement below is historical evidence, not the current result.
+Pinned local models reduce exposure but do not by themselves prove this loader
+path safe. Closure requires reviewing the exact model-loading paths and artifacts,
+testing a reviewed fix against traversal and non-regular shard files, and
+certifying the resulting exact AI image for Standard SDK/direct quality,
+three-tenant concurrency and the 50-case matrix. Do not promote an unverified
+dependency upgrade or weaken quality thresholds to make the audit green.
+
 The currently proven CatVTON runtime uses Torch 2.4, TorchVision 0.19, xFormers 0.0.27, Transformers 4.46, and Diffusers 0.31. Several later advisories concern loading attacker-controlled checkpoints, custom model repositories, conversion utilities, or training paths that DrapixAI does not expose. Immutable local model loading reduces that exposure, but it does not make the old runtime a permanent security baseline.
 
 `drapixai_ai/requirements.security-candidate.txt` defines the isolated upgrade candidate. Its Linux/Python 3.11 dependency set uses PyTorch 2.12.1's official CUDA 12.6 build, FastAPI 0.139, Uvicorn 0.40, and a resolved Starlette 1.3.1 runtime. Its complete resolved dependency graph has no known reachable advisories as of July 22, 2026, subject to the four documented exceptions above. It must not replace the proven runtime until an A100 validation run proves all of these:
