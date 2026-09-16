@@ -1,9 +1,11 @@
+import type { Prisma } from '@prisma/client';
+
 type OriginCachePrisma = {
   apiKey: {
-    findMany(args: any): Promise<Array<{ domainWhitelist: string | null }>>;
+    findMany(args: Prisma.ApiKeyFindManyArgs): Promise<Array<{ domainWhitelist: string }>>;
   };
   shopifyInstallation: {
-    findMany(args: any): Promise<Array<{ shopDomain: string; primaryDomain: string | null }>>;
+    findMany(args: Prisma.ShopifyInstallationFindManyArgs): Promise<Array<{ shopDomain: string; primaryDomain: string | null }>>;
   };
 };
 
@@ -38,7 +40,7 @@ export const createVerifiedStorefrontOriginCache = (
           where: {
             kind: 'manual',
             isActive: true,
-            domainWhitelist: { not: null },
+            domainWhitelist: { not: '' },
             user: { storeVerifiedAt: { not: null } },
           },
           select: { domainWhitelist: true },

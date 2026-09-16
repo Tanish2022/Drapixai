@@ -187,8 +187,13 @@ export const removeLocalStoredFile = (storedUrl: string | null | undefined, requ
     if (!normalizedRelative.startsWith(`${normalizedPrefix}/`)) return false;
   }
 
-  if (!fs.existsSync(localPath)) return false;
-  fs.unlinkSync(localPath);
+  try {
+    fs.unlinkSync(localPath);
+  } catch (error: any) {
+    // A prior attempt may have removed the file before its database update.
+    // Only absence is success; permission and other storage errors must retry.
+    if (error?.code !== 'ENOENT') throw error;
+  }
   return true;
 };
 

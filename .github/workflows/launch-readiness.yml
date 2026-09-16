@@ -95,6 +95,13 @@ jobs:
         env:
           DATABASE_URL: postgresql://drapixai_gate:ci-disposable-only@127.0.0.1:5432/drapixai_launch_gate
         run: npm --prefix apps/api run prisma:migrate:deploy
+      - name: Verify CORS and retention against disposable PostgreSQL
+        env:
+          DATABASE_URL: postgresql://drapixai_gate:ci-disposable-only@127.0.0.1:5432/drapixai_launch_gate
+          DRAPIXAI_DISPOSABLE_DB_APPROVAL: I_ACKNOWLEDGE_DISPOSABLE_DATABASE
+          AWS_EC2_METADATA_DISABLED: "true"
+          AWS_REGION: us-east-1
+        run: npm --prefix apps/api run test:p0-database
       - name: Verify immutable audit database triggers
         env:
           DATABASE_URL: postgresql://drapixai_gate:ci-disposable-only@127.0.0.1:5432/drapixai_launch_gate

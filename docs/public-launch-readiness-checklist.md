@@ -1,6 +1,6 @@
 # DrapixAI Public Launch Readiness Checklist
 
-Last updated: 2026-07-30
+Last updated: 2026-09-16
 
 This is the final go/no-go checklist for the first DrapixAI public release. The
 launch scope is **Standard upper-body virtual try-on only**. A checked
@@ -74,8 +74,20 @@ Required commands:
 
 ```bash
 npm run launch:report:repository
+npm --prefix apps/api run test:p0-database
 npm --prefix apps/api run test:audit-immutability
 ```
+
+The non-GPU database suite exercises the real Prisma storefront CORS query,
+revoked/unverified-origin rejection, retention dry-run and physical deletion,
+recovery after deletion but before URL clearing, path boundaries, and audit
+chain integrity. It requires a migrated, loopback disposable database with no
+try-on rows and `DRAPIXAI_DISPOSABLE_DB_APPROVAL=I_ACKNOWLEDGE_DISPOSABLE_DATABASE`.
+Use a database name containing a `p0`, `test`, or `disposable` component, or the
+CI name `drapixai_launch_gate`. Run it before `test:audit-immutability`, whose
+deliberately invalid hash fixture remains in the append-only audit table.
+These local tests do not certify staging retention, SDK image quality, GPU
+concurrency, legal approval, pilot results, or an independent penetration test.
 
 ## 4. AI Quality And Target GPU
 

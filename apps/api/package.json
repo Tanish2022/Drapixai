@@ -37,6 +37,7 @@
     "test:tryon-intake": "ts-node src/scripts/tryon-intake-tests.ts",
     "test:billing-security": "ts-node src/scripts/billing-security-tests.ts",
     "test:billing-database": "ts-node src/scripts/billing-database-tests.ts",
+    "test:p0-database": "ts-node src/scripts/p0-database-tests.ts",
     "billing:verify-catalog": "ts-node src/scripts/verify-stripe-catalog.ts",
     "test:input-validation": "ts-node src/scripts/input-validation-tests.ts",
     "security:audit:verify": "ts-node src/scripts/verify-security-audit.ts",
