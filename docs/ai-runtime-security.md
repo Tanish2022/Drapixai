@@ -47,6 +47,25 @@ certifying the resulting exact AI image for Standard SDK/direct quality,
 three-tenant concurrency and the 50-case matrix. Do not promote an unverified
 dependency upgrade or weaken quality thresholds to make the audit green.
 
+Both CatVTON service launch scripts now run
+`deploy/scripts/verify-model-artifacts.py` against the local attention, base and
+VAE directories before importing the application. It refuses traversal or
+absolute shard paths, links/reparse points, missing or non-regular shards,
+duplicate/malformed index maps, and excessive index sizes. The deployment
+requires materialized `local_dir` downloads; hub-cache symlink layouts must be
+materialized during provisioning rather than permitted across the model mount.
+No checkpoint bytes are deserialized or changed by this check.
+
+This reduces exposure at the deployment boundary but does not patch Accelerate,
+authenticate weight contents, cover direct Python invocations that bypass the
+launch scripts, or stop a privileged host writer from replacing files after
+validation. Keep model mounts read-only and restrict provisioning access.
+The Linux CI test suite requires real FIFO/symlink rejection and both service
+scripts to stop before application imports for unsafe indexes in each of the
+three roots. A passing run must be recorded before treating this as verified.
+GPU parity and an independent remediation review are still required; this check
+does not authorize an audit exception or close the image/pentest gates.
+
 The currently proven CatVTON runtime uses Torch 2.4, TorchVision 0.19, xFormers 0.0.27, Transformers 4.46, and Diffusers 0.31. Several later advisories concern loading attacker-controlled checkpoints, custom model repositories, conversion utilities, or training paths that DrapixAI does not expose. Immutable local model loading reduces that exposure, but it does not make the old runtime a permanent security baseline.
 
 `drapixai_ai/requirements.security-candidate.txt` defines the isolated upgrade candidate. Its Linux/Python 3.11 dependency set uses PyTorch 2.12.1's official CUDA 12.6 build, FastAPI 0.139, Uvicorn 0.40, and a resolved Starlette 1.3.1 runtime. Its complete resolved dependency graph has no known reachable advisories as of July 22, 2026, subject to the four documented exceptions above. It must not replace the proven runtime until an A100 validation run proves all of these:

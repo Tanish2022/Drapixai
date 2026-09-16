@@ -209,6 +209,12 @@
       "args": ["deploy/scripts/verify-standard-release-profile.py"]
     },
     {
+      "id": "model-artifact-layout",
+      "label": "Reject unsafe checkpoint layouts before AI service startup",
+      "runner": "python",
+      "args": ["deploy/scripts/test-model-artifacts.py"]
+    },
+    {
       "id": "python-compile",
       "label": "Production Python compile validation",
       "runner": "python",

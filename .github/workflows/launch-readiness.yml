@@ -141,6 +141,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - name: Check checkpoint layouts and fail-closed service startup
+        run: timeout 60s python deploy/scripts/test-model-artifacts.py
       - name: Install CPU validation dependencies
         run: >-
           python -m pip install
