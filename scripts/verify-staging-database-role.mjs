@@ -53,7 +53,13 @@ try {
   let ready = false;
   for (let attempt = 0; attempt < 30; attempt++) {
     try {
-      docker(["exec", name, "pg_isready", "-U", "drapixai_staging", "-d", "drapixai_staging"]);
+      // The entrypoint's temporary Unix-socket server accepts pg_isready even
+      // before POSTGRES_DB exists. Require the final TCP server and real login.
+      const database = docker([
+        "exec", "-e", "PGPASSWORD", name, "psql", "-X", "-t", "-A", "-h", "127.0.0.1",
+        "-U", "drapixai_staging", "-d", "drapixai_staging", "-c", "SELECT current_database();",
+      ], { env: { ...process.env, PGPASSWORD: adminPassword } });
+      assert.equal(database, "drapixai_staging");
       ready = true;
       break;
     } catch { await delay(1000); }

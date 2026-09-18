@@ -73,7 +73,11 @@ try {
   created = true;
   let ready = false;
   for (let attempt = 0; attempt < 30; attempt++) {
-    if (invoke(['exec', name, 'pg_isready', '-U', 'postgres', '-d', database]).status === 0) { ready = true; break; }
+    // Wait for the final TCP server, not the entrypoint's temporary socket server.
+    const probe = invoke(['exec', '-e', 'PGPASSWORD', name, 'psql', '-X', '-t', '-A',
+      '-h', '127.0.0.1', '-U', 'postgres', '-d', database, '-c', 'SELECT current_database();'],
+    { env: { ...process.env, PGPASSWORD: password } });
+    if (probe.status === 0 && probe.output === database) { ready = true; break; }
     await delay(1000);
   }
   assert.ok(ready, 'Disposable PostgreSQL must become ready');
