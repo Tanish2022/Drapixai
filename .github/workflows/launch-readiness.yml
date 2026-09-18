@@ -86,7 +86,10 @@ jobs:
       - name: Distributed security controls
         env:
           REDIS_URL: redis://127.0.0.1:6379
-        run: npm --prefix apps/api run test:distributed-security
+          DRAPIXAI_DISPOSABLE_REDIS_APPROVAL: I_ACKNOWLEDGE_DISPOSABLE_REDIS
+        run: |
+          node --test scripts/disposable-redis-guard.test.mjs
+          npm --prefix apps/api run test:distributed-security
       - name: Validate Prisma schema
         env:
           DATABASE_URL: postgresql://drapixai_gate:ci-disposable-only@127.0.0.1:5432/drapixai_launch_gate
@@ -112,6 +115,9 @@ jobs:
         run: |
           node scripts/verify-staging-database-role.mjs
           python deploy/scripts/test-staging-secret-separation.py
+      - name: Verify backup restore and failure rollback
+        # Uses its own PostgreSQL container with no network or host ports.
+        run: node scripts/verify-postgres-restore.mjs
       - name: Validate hardened Compose configuration
         run: |
           set -euo pipefail

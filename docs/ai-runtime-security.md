@@ -40,6 +40,17 @@ and [upstream proposed fix](https://github.com/huggingface/accelerate/pull/4138)
 
 This finding remains open and is not added to the exception list. The older
 clean-audit statement below is historical evidence, not the current result.
+
+Rechecked September 19, 2026: Accelerate 1.15.0 exists, but its
+[checkpoint loader](https://github.com/huggingface/accelerate/blob/v1.15.0/src/accelerate/utils/modeling.py#L1786-L1794)
+still joins index values directly onto the checkpoint directory without the
+proposed shard-path validation. The follow-up
+[PR #4214](https://github.com/huggingface/accelerate/pull/4214), covering both
+escaping paths and non-regular files, was closed without merging. The OSV
+record's last-affected version of 1.14.0 is therefore not proof that 1.15.0 fixes
+this loading behavior. Do not upgrade merely to move outside that scanner
+version range; review and test the actual loader before claiming remediation.
+
 Pinned local models reduce exposure but do not by themselves prove this loader
 path safe. Closure requires reviewing the exact model-loading paths and artifacts,
 testing a reviewed fix against traversal and non-regular shard files, and

@@ -48,6 +48,7 @@ pg_restore \
   --if-exists \
   --no-owner \
   --no-acl \
+  --single-transaction \
   --exit-on-error \
   "$backup_path"
 echo "Restore completed. Run application readiness, tenant-isolation, and audit-chain verification before reopening traffic."

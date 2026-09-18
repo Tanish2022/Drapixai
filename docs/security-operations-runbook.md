@@ -54,6 +54,12 @@ not increase candidate count, inference steps, or GPU concurrency during recover
 
 ## Backup and restore
 
+Local/CI distributed security tests delete concurrency keys. Run them only
+against a disposable loopback Redis endpoint explicitly supplied as `REDIS_URL`,
+with `DRAPIXAI_DISPOSABLE_REDIS_APPROVAL=I_ACKNOWLEDGE_DISPOSABLE_REDIS`. The
+test refuses to connect without both controls. Never point it at a live Redis
+instance or a forwarded production endpoint.
+
 1. Production migrations must use `deploy/scripts/migrate-with-evidence.sh`. The script creates a custom-format PostgreSQL backup, verifies its catalog, hashes it, records migration status, and points to the guarded restore command.
 
    Before a migration, the release operator must set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the exact database name returned by `SELECT current_database()` and set `DRAPIXAI_CHANGE_APPROVAL_ID` to the approved change record. The script connects first and stops before a backup or schema change if the identity differs.
@@ -61,6 +67,21 @@ not increase candidate count, inference steps, or GPU concurrency during recover
 3. Quarterly, restore the newest backup into an isolated recovery environment with `deploy/scripts/restore-postgres-backup.sh`.
 
    Set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the isolated recovery database, `DRAPIXAI_RESTORE_APPROVAL_ID` to the incident/recovery approval record, and the environment-specific destructive confirmation. The restore tool checks the live database identity before issuing `pg_restore --clean`.
+
+   Restore runs in one transaction: a database error rolls back the replacement
+   schema and data together. `--exit-on-error` alone is insufficient because
+   earlier restore statements would already be committed. Keep traffic closed
+   for the entire transaction, and measure lock/resource use and recovery time
+   against a production-sized backup before approving the operational gate.
+   Do not add parallel restore jobs, which are incompatible with this guarantee.
+
+   `node scripts/verify-postgres-restore.mjs` rehearses wrong-target/approval
+   refusals, invalid backup rejection, rollback after an injected post-data
+   failure, successful recovery of two synthetic tenants, and surviving audit
+   UPDATE/DELETE/TRUNCATE protections. It creates and removes its own isolated
+   PostgreSQL container. This local test does not prove off-host encrypted
+   backup availability, audit hash-chain validity, production recovery times,
+   object restoration, application readiness, or Standard try-on quality.
 4. Verify Prisma migration status, audit-chain validity, tenant counts, object references, login, product cache state, and a Standard try-on.
 5. Record recovery point objective and measured recovery time. A backup that has not passed restore testing is not launch evidence.
 

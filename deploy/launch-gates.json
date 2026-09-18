@@ -44,6 +44,12 @@
       "args": ["deploy/scripts/test-staging-secret-separation.py"]
     },
     {
+      "id": "postgres-restore-recovery",
+      "label": "Disposable backup restore is atomic and preserves audit protections",
+      "runner": "node",
+      "args": ["scripts/verify-postgres-restore.mjs"]
+    },
+    {
       "id": "web-build",
       "label": "Web production build",
       "runner": "npm",

@@ -3,17 +3,28 @@ import { createClient } from 'redis';
 import { claimWebhookDelivery } from '../services/webhooks';
 
 const main = async () => {
+  // This suite deletes concurrency keys. Never infer a disposable target from
+  // localhost defaults or from an application's normal Redis configuration.
+  const redisUrl = process.env.REDIS_URL || '';
+  let loopback = false;
+  try {
+    const target = new URL(redisUrl);
+    loopback = ['redis:', 'rediss:'].includes(target.protocol)
+      && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname);
+  } catch { /* Reject missing or invalid endpoints below without logging secrets. */ }
+  if (!loopback || process.env.DRAPIXAI_DISPOSABLE_REDIS_APPROVAL !== 'I_ACKNOWLEDGE_DISPOSABLE_REDIS') {
+    throw new Error('Distributed security tests require an explicitly approved loopback disposable REDIS_URL');
+  }
   process.env.NODE_ENV = 'test';
   process.env.DRAPIXAI_MAX_CONCURRENT_TRYONS = '3';
   process.env.DRAPIXAI_TENANT_MAX_CONCURRENT_TRYONS = '1';
   process.env.DRAPIXAI_TRYON_SLOT_LEASE_MS = '30000';
 
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
   const controlRedis = createClient({ url: redisUrl });
   try {
     await controlRedis.connect();
   } catch {
-    throw new Error(`DISTRIBUTED_SECURITY_REDIS_UNAVAILABLE: start Redis or set REDIS_URL to a reachable isolated test instance (${redisUrl}).`);
+    throw new Error('DISTRIBUTED_SECURITY_REDIS_UNAVAILABLE: start the approved isolated test instance.');
   }
   const keys = await controlRedis.keys('drapixai:tryon-concurrency:*');
   if (keys.length > 0) await controlRedis.del(keys);
