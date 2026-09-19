@@ -2,6 +2,9 @@
 
 Last updated: 2026-09-16
 
+For the current execution order and GPU dependencies, see the
+[non-GPU-first P0 plan](p0-execution-plan.md).
+
 This is the final go/no-go checklist for the first DrapixAI public release. The
 launch scope is **Standard upper-body virtual try-on only**. A checked
 implementation item means the control exists in the repository; it does not

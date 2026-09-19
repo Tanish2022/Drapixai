@@ -166,15 +166,6 @@ jobs:
           scipy==1.13.1
           scikit-image==0.24.0
           PyYAML==6.0.1
-      - name: Audit secure AI candidate pins
-        run: >-
-          pip-audit
-          --requirement drapixai_ai/requirements.security-candidate.txt
-          --progress-spinner off
-          --ignore-vuln PYSEC-2026-2274
-          --ignore-vuln GHSA-55v6-g8pm-pw4c
-          --ignore-vuln PYSEC-2026-3447
-          --ignore-vuln GHSA-rrmf-rvhw-rf47
       - name: Verify immutable Standard release profile
         run: python deploy/scripts/verify-standard-release-profile.py
       - name: Verify staging topology and negative controls
@@ -188,6 +179,8 @@ jobs:
           python -m compileall -q drapixai_ai deploy/runpod
       - name: AI ingress security regression
         run: python -m drapixai_ai.scripts.validate_ai_ingress_security
+      - name: AI log privacy regression
+        run: python -m drapixai_ai.scripts.validate_log_privacy
       - name: Garment cache expiry regression
         run: python -m drapixai_ai.scripts.validate_garment_cache_expiry
       - name: Validate transient image spool
@@ -200,6 +193,19 @@ jobs:
       - name: Deployment shell syntax
         run: |
           find deploy -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      # Keep the audit blocking in this same job, after the independent CPU
+      # checks so an open advisory does not suppress their evidence. Run it
+      # even if a preceding regression failed, but never after cancellation.
+      - name: Audit secure AI candidate pins
+        if: ${{ !cancelled() }}
+        run: >-
+          pip-audit
+          --requirement drapixai_ai/requirements.security-candidate.txt
+          --progress-spinner off
+          --ignore-vuln PYSEC-2026-2274
+          --ignore-vuln GHSA-55v6-g8pm-pw4c
+          --ignore-vuln PYSEC-2026-3447
+          --ignore-vuln GHSA-rrmf-rvhw-rf47
 
   container-scan:
     runs-on: ubuntu-22.04
