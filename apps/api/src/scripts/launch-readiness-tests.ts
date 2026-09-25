@@ -2020,7 +2020,9 @@ assertIncludes(restoreWrapper, 'DRAPIXAI_RESTORE_APPROVAL_ID', 'Restore tooling 
 assertIncludes(restoreWrapper, 'SELECT current_database()', 'Restore tooling must prove the connected database identity before destructive restore');
 assertIncludes(securityOperations, 'DRAPIXAI_CHANGE_APPROVAL_ID', 'Recovery runbook must document migration approval evidence');
 assertIncludes(securityOperations, 'DRAPIXAI_RESTORE_APPROVAL_ID', 'Recovery runbook must document restore approval evidence');
-assertIncludes(privateListenerVerifier, 'private service port', 'Deployment must verify private services are not on wildcard listeners');
+assertIncludes(privateListenerVerifier, 'verify-private-listeners.py', 'Deployment must invoke the strict numeric listener verifier');
+assertIncludes(privateListenerVerifier, 'ss -H -lnt', 'Deployment must collect the actual host TCP listener snapshot');
+assertIncludes(read('.github/workflows/launch-readiness.yml'), 'bash deploy/scripts/test-private-listeners.sh', 'CI must exercise public/wildcard bind rejection and malformed listener snapshots');
 assertIncludes(apiServer, "requireExact('DRAPIXAI_AI_MTLS_ENABLED', '1')", 'Production API must require API-to-GPU mTLS.');
 assertIncludes(aiClient, 'cert: fs.readFileSync(certPath)', 'AI client must load its dedicated client certificate.');
 assertIncludes(aiClient, 'key: fs.readFileSync(keyPath)', 'AI client must load its dedicated client private key.');

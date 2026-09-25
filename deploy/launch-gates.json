@@ -2,6 +2,24 @@
   "version": 1,
   "repository": [
     {
+      "id": "shopper-media-inventory",
+      "label": "Privacy inventory detects current and historical shopper media and incomplete listings",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:shopper-media-inventory"]
+    },
+    {
+      "id": "staging-image-evidence",
+      "label": "GPU image evidence rejects stale commits and mismatched artifacts (requires Bash)",
+      "runner": "python",
+      "args": ["deploy/scripts/test-staging-certification.py"]
+    },
+    {
+      "id": "private-listener-negative-controls",
+      "label": "Host listener verifier rejects explicit public binds and malformed snapshots (requires Bash and Python 3)",
+      "runner": "bash",
+      "args": ["deploy/scripts/test-private-listeners.sh"]
+    },
+    {
       "id": "temporary-compose-env",
       "label": "Failed Compose setup cleans placeholders and preserves operator configuration",
       "runner": "node",

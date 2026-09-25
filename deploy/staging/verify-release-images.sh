@@ -44,6 +44,7 @@ case "$role" in
     ;;
 esac
 
+service_identities=""
 for index in "${!services[@]}"; do
   service="${services[$index]}"
   variable="${variables[$index]}"
@@ -67,6 +68,12 @@ for index in "${!services[@]}"; do
     echo "Staging service $service image revision does not match the expected release commit." >&2
     exit 1
   }
+  # The service names, digest references and revision have restricted alphabets,
+  # so they can safely form the versioned JSON evidence without shell escaping.
+  [[ -z "$service_identities" ]] || service_identities+=","
+  service_identities+="\"$service\":{\"image\":\"$actual_image\",\"revision\":\"$revision\"}"
 done
 
+printf 'DRAPIXAI_RELEASE_IMAGE_EVIDENCE_V1={"schema_version":1,"role":"%s","release_commit":"%s","services":{%s}}\n' \
+  "$role" "$expected_commit" "$service_identities"
 echo "PASS: Staging $role services use expected release image digests and revision $expected_commit"

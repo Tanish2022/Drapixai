@@ -260,7 +260,32 @@ These are hard launch gates, not recommendations:
 - Public privacy copy and SDK consent text must match the launch policy: shopper person photos and generated previews are transient-only, are excluded from logs and training, and are not persisted in the database or object storage. Interrupted AI jobs have a 15-minute failsafe spool cleanup. Brand garment assets stay while the brand account uses DrapixAI; metadata-only security, billing, consent, quality, and audit records may be retained under the published policy.
 - Operators must run `npm --prefix apps/api run tryon:purge-review-retention -- --dry-run` to find legacy shopper review images and `npm --prefix apps/api run tryon:purge-review-retention -- --confirm` to delete them immediately under the zero-day retention policy.
 - Before the first staging or production certification, run `npm --prefix apps/api run privacy:purge-legacy-media` to inspect historical disabled `/sdk/render` media, then run `npm --prefix apps/api run privacy:purge-legacy-media -- --confirm` after approval. This clears legacy `Render` URLs and `session/` or `outputs/` storage objects before the no-retention verifier runs.
-- After one consented staging try-on, run `npm --prefix apps/api run privacy:verify-shopper-media`. The command must report zero database image references, zero shopper-media objects, and at least one immutable consent and non-retention event before Gate 3 may pass.
+- After one consented staging try-on, run `npm --prefix apps/api run privacy:verify-shopper-media`. The command must report zero database image references, zero current or historical shopper/legacy media, no unclassified review objects, and at least one consent and non-retention event. Verify audit-chain integrity and tie these events to the tested jobs separately before Gate 3 may pass.
+
+### Privacy inventory and versioned storage
+
+The read-only privacy inventory lists current objects and all object versions under
+`tryon-review/`, `session/` and `outputs/`, including when current listings are empty.
+Its storage identity needs `s3:ListBucket` and `s3:ListBucketVersions` on the configured
+bucket for these prefixes. Missing permission, unsupported version listing, incomplete
+pagination or malformed responses fail verification; they do not imply empty storage.
+Reports contain aggregate counts, not object keys, version IDs or image bytes.
+
+An ordinary object delete can create a delete marker while leaving recoverable old
+bytes. Existing purge commands issue ordinary deletes and must not be treated as
+version-aware erasure. If historical media is found, the authorized storage operator
+must inventory and remove the applicable versions under the retention policy, account
+for Object Lock/legal holds and replicas, then rerun verification. This verifier does
+not delete anything. Delete markers alone are counted separately from retained bytes.
+See the AWS documentation for [delete markers](https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeleteMarker.html)
+and [version listing permissions and pagination](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html).
+
+This inventory does not prove training-use policy, backup/replica erasure, local
+fallback cleanup, AI spool/cache cleanup, or consent for every job. Its audit-event
+counts do not validate chain integrity or establish that the tested job generated
+those events. Capture those separate checks and a quiescent post-drain inventory
+on the exact live release before approving retention. `trainingUse` is explicitly
+reported as `not_assessed_by_this_check`.
 
 Minimum security verification before launch:
 

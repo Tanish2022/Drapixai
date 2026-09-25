@@ -135,6 +135,15 @@ in plaintext.
    bash deploy/staging/verify-release-images.sh ai deploy/staging/.images.env <release-commit>
    ```
 
+   Save exactly the GPU command's two stdout lines from a successful invocation:
+   the `DRAPIXAI_RELEASE_IMAGE_EVIDENCE_V1` JSON record and its matching PASS line.
+   Certification compares both AI service digests and revisions with the current
+   commit and `.images.env`. Old single-line logs, stale releases, mixed failure
+   output and concatenated runs are rejected. Regenerate the record after changing
+   the release or its image digest. This format checks artifact identity; it is not
+   a signature or proof of host identity or freshness. The operator must retain
+   dated host/deployment evidence alongside it.
+
 11. Preserve migration and backup evidence, then run the complete staging
     smoke and security suites. Never point staging at production to save setup time.
 
@@ -188,6 +197,22 @@ shopper-media privacy, and three-tenant API reports. It retains no output images
 run the GPU private-listener verifier and the API-host mTLS handshake verifier, append both redacted outputs to the same evidence file, and attach it to the release record.
 
 ## Promotion rule
+
+The listener verifier requires Python 3 and `ss`. It protects ports 5432, 6379,
+8080, 9000, 9001, 13000, 18000 and 18080 by default. Loopback is accepted;
+separate private data hosts must explicitly set `DRAPIXAI_PRIVATE_BIND_IPS` to
+their exact RFC1918, CGNAT/VPN or ULA addresses. Public and wildcard binds cannot
+be allowlisted. Set `DRAPIXAI_PRIVATE_PORTS` to the complete deployment-specific
+port list when custom ports are used. A successful snapshot does not verify Docker
+forwarding, security groups, firewall rules, VPN ACLs or external reachability.
+
+Privacy inventory requires both current-object and all-version listing permission
+for `tryon-review/`, `session/` and `outputs/`; see the
+[privacy verification limits](../production-readiness.md#privacy-inventory-and-versioned-storage).
+Local verifier regressions run with `npm --prefix apps/api run test:shopper-media-inventory`,
+`python3 deploy/scripts/test-staging-certification.py` and
+`bash deploy/scripts/test-private-listeners.sh`. The deployment shell tests require
+Bash and Python 3 and run on Linux CI; they do not certify live hosts.
 
 Passing this source check does not mean staging is deployed. Gate 2 closes only
 when the live host evidence proves distinct identities, private listeners, HTTPS

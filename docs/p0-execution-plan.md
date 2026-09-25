@@ -1,6 +1,6 @@
 # P0 execution plan: non-GPU first
 
-Updated: 2026-09-20. Public scope: Standard upper-body CatVTON only.
+Updated: 2026-09-26. Public scope: Standard upper-body CatVTON only.
 
 This plan separates executable work from release approval. Local tests, source
 checks and simulated failures do not certify a live deployment. The authoritative
@@ -19,6 +19,19 @@ open. Earlier local verification passed all 46 repository checks; that does not
 override the separate failing dependency audit.
 
 ## Work now, without a GPU
+
+The September 26 hardening covers three evidence boundaries without modifying inference:
+privacy inventory includes historical object versions and fails on incomplete
+enumeration; GPU image evidence must match the exact current commit and both
+service digests; host listener checks reject explicit public IPs as well as
+wildcards. Local verification passed 17 synthetic S3 cases, 12 GPU evidence tests
+and 93 listener cases. These regressions are now required in CI and the repository
+gate manifest. Shell regressions require Bash/Python 3 on Linux (or a compatible
+environment); missing Bash must not silently skip a gate. A disposable local MinIO
+probe also detected a version hidden by an ordinary delete and confirmed removal
+after deletion of that specific version; it used synthetic bytes and never touched
+the project's existing buckets. Actual versioned-media
+cleanup, live host validation and final GPU evidence remain outstanding.
 
 1. **Preserve evidence and restore CPU CI coverage.** Record the baseline CI
    evidence. Run CPU security/privacy/quality regressions before the blocking AI

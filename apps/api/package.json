@@ -33,6 +33,7 @@
     "test:public-api": "ts-node src/scripts/public-api-v1-tests.ts",
     "test:distributed-security": "ts-node src/scripts/distributed-security-control-tests.ts",
     "test:log-privacy": "ts-node src/scripts/log-privacy-tests.ts",
+    "test:shopper-media-inventory": "ts-node src/scripts/shopper-media-inventory-tests.ts",
     "test:admin-mfa": "ts-node src/scripts/admin-mfa-tests.ts",
     "test:tryon-intake": "ts-node src/scripts/tryon-intake-tests.ts",
     "test:billing-security": "ts-node src/scripts/billing-security-tests.ts",

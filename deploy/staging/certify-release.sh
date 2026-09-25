@@ -100,10 +100,10 @@ gpu_release_image_evidence="${DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE:-}"
   echo "DRAPIXAI_GPU_RELEASE_IMAGE_EVIDENCE must point to redacted GPU release-image verifier output." >&2
   exit 2
 }
-grep -Fq "PASS: Staging ai services use expected release image digests" "$gpu_release_image_evidence" || {
-  echo "GPU release-image evidence does not prove the approved artifact is running." >&2
-  exit 1
-}
+python3 "$repo_root/deploy/staging/verify-gpu-image-evidence.py" \
+  --evidence "$gpu_release_image_evidence" \
+  --images-env "$images_env" \
+  --expected-commit "$current_commit" >/dev/null
 strix_evidence="${DRAPIXAI_STRIX_EVIDENCE:-}"
 [[ -f "$strix_evidence" ]] || {
   echo "DRAPIXAI_STRIX_EVIDENCE must point to the redacted governed Strix summary." >&2
@@ -185,7 +185,10 @@ run_and_record topology python3 "$repo_root/deploy/scripts/verify-staging-topolo
 run_and_record edge-release-images bash "$repo_root/deploy/staging/verify-release-images.sh" edge "$images_env" "$current_commit"
 run_and_record edge-private-listeners bash "$repo_root/deploy/scripts/verify-private-listeners.sh"
 run_and_record gpu-mtls-evidence cat "$gpu_mtls_evidence"
-run_and_record gpu-release-images-evidence cat "$gpu_release_image_evidence"
+run_and_record gpu-release-images-evidence python3 "$repo_root/deploy/staging/verify-gpu-image-evidence.py" \
+  --evidence "$gpu_release_image_evidence" \
+  --images-env "$images_env" \
+  --expected-commit "$current_commit"
 run_and_record strix-staging-evidence python3 "$repo_root/deploy/scripts/run-strix-staging.py" \
   --verify-evidence "$strix_evidence" \
   --expected-commit "$current_commit"
