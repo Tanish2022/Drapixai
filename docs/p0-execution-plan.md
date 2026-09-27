@@ -1,6 +1,6 @@
 # P0 execution plan: non-GPU first
 
-Updated: 2026-09-26. Public scope: Standard upper-body CatVTON only.
+Updated: 2026-09-27. Public scope: Standard upper-body CatVTON only.
 
 This plan separates executable work from release approval. Local tests, source
 checks and simulated failures do not certify a live deployment. The authoritative
@@ -32,6 +32,17 @@ probe also detected a version hidden by an ordinary delete and confirmed removal
 after deletion of that specific version; it used synthetic bytes and never touched
 the project's existing buckets. Actual versioned-media
 cleanup, live host validation and final GPU evidence remain outstanding.
+
+The September 27 retention change adds version-aware erasure to review cleanup
+and the legacy-render purge, plus conditional database URL clearing. It requires
+enabled bucket versioning: the pinned MinIO build ignored conditional-delete
+headers in a real concurrent-replacement test. The staging initializer enables
+versioning, and erasure refuses disabled/suspended buckets. Future writes then
+receive distinct version IDs; a new version survives deletion of an old null
+version and prevents false success. The fixture drill also checks real Object
+Lock rejection, dry runs, retry, orphaned legacy versions and a valid audit chain.
+Existing deployments still require a controlled versioning transition and live
+retention verification; no local test closes that gate.
 
 1. **Preserve evidence and restore CPU CI coverage.** Record the baseline CI
    evidence. Run CPU security/privacy/quality regressions before the blocking AI

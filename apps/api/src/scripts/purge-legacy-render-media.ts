@@ -1,10 +1,10 @@
 import 'dotenv/config';
-import { DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { PrismaClient } from '@prisma/client';
 import { appendSecurityAudit } from '../lib/audit-log';
 import { loadExternalSecrets } from '../lib/external-secrets';
 import { formatLogError, removeLocalStoredFile } from '../lib/security';
 import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import { eraseStoredObjectVersions, listStoredObjectVersions } from '../lib/storage-erasure';
 
 const LEGACY_PREFIXES = ['session/', 'outputs/'];
 const confirmed = process.argv.includes('--confirm');
@@ -36,9 +36,19 @@ const main = async () => {
       renderReferencesCleared: 0,
       legacyObjectsScanned: 0,
       legacyObjectsDeleted: 0,
+      legacyVersionsScanned: 0,
       failures: 0,
     };
 
+    // Include historical objects hidden by delete markers. Finish inventory
+    // before any mutation, and keep dry runs read-only.
+    const orphanKeys = new Set<string>();
+    for (const prefix of LEGACY_PREFIXES) {
+      const versions = await listStoredObjectVersions(storage, STORAGE_BUCKET, prefix);
+      summary.legacyVersionsScanned += versions.length;
+      for (const version of versions) orphanKeys.add(version.key);
+    }
+    summary.legacyObjectsScanned = orphanKeys.size;
     if (!confirmed) {
       console.log(JSON.stringify(summary, null, 2));
       console.log('Dry run only. Re-run with --confirm to delete legacy render media.');
@@ -46,7 +56,6 @@ const main = async () => {
     }
 
     for (const render of renders) {
-      const update: { inputUrl?: null; outputUrl?: null } = {};
       for (const field of ['inputUrl', 'outputUrl'] as const) {
         const storedUrl = render[field];
         if (!storedUrl) continue;
@@ -57,41 +66,41 @@ const main = async () => {
           } else {
             const key = legacyKeyFromUrl(storedUrl);
             if (!key) throw new Error('UNRECOGNIZED_LEGACY_MEDIA_URL');
-            await storage.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: key }));
+            await eraseStoredObjectVersions(storage, STORAGE_BUCKET, key);
           }
-          update[field] = null;
+          const cleared = await prisma.render.updateMany({
+            where: { id: render.id, [field]: storedUrl }, data: { [field]: null },
+          });
+          if (cleared.count !== 1) throw new Error('LEGACY_MEDIA_REFERENCE_CHANGED');
           summary.renderReferencesCleared += 1;
         } catch (error) {
           summary.failures += 1;
           console.error(`Legacy render ${render.id} ${field} cleanup failed:`, formatLogError(error));
         }
       }
-      if (Object.keys(update).length > 0) {
-        await prisma.render.update({ where: { id: render.id }, data: update });
+    }
+
+    for (const key of orphanKeys) {
+      try {
+        await eraseStoredObjectVersions(storage, STORAGE_BUCKET, key);
+        summary.legacyObjectsDeleted += 1;
+      } catch (error) {
+        summary.failures += 1;
+        console.error('Legacy render object cleanup failed:', formatLogError(error));
       }
     }
 
+    // A successful per-key delete does not prove the prefix stayed empty.
+    // Refuse a success audit if a concurrent writer or retained version remains.
     for (const prefix of LEGACY_PREFIXES) {
-      let continuationToken: string | undefined;
-      do {
-        const page = await storage.send(new ListObjectsV2Command({
-          Bucket: STORAGE_BUCKET,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        }));
-        for (const object of page.Contents || []) {
-          if (!object.Key) continue;
-          summary.legacyObjectsScanned += 1;
-          try {
-            await storage.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: object.Key }));
-            summary.legacyObjectsDeleted += 1;
-          } catch (error) {
-            summary.failures += 1;
-            console.error('Legacy render object cleanup failed:', formatLogError(error));
-          }
+      try {
+        if ((await listStoredObjectVersions(storage, STORAGE_BUCKET, prefix)).length > 0) {
+          throw new Error('LEGACY_MEDIA_VERSIONS_REMAIN');
         }
-        continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
-      } while (continuationToken);
+      } catch (error) {
+        summary.failures += 1;
+        console.error('Legacy render final inventory failed:', formatLogError(error));
+      }
     }
 
     await appendSecurityAudit(prisma, {
@@ -104,6 +113,7 @@ const main = async () => {
     console.log(JSON.stringify(summary, null, 2));
     if (summary.failures > 0) process.exitCode = 2;
   } finally {
+    storage.destroy();
     await prisma.$disconnect();
   }
 };

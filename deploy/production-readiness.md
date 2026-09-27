@@ -272,13 +272,46 @@ pagination or malformed responses fail verification; they do not imply empty sto
 Reports contain aggregate counts, not object keys, version IDs or image bytes.
 
 An ordinary object delete can create a delete marker while leaving recoverable old
-bytes. Existing purge commands issue ordinary deletes and must not be treated as
-version-aware erasure. If historical media is found, the authorized storage operator
-must inventory and remove the applicable versions under the retention policy, account
-for Object Lock/legal holds and replicas, then rerun verification. This verifier does
-not delete anything. Delete markers alone are counted separately from retained bytes.
+bytes. Review retention and the confirmed legacy-render purge now enumerate and
+delete specific data versions, retain delete markers, and verify absence before
+conditionally clearing an unchanged database URL. The legacy purge also finds
+historical `session/` and `outputs/` objects with no database reference. Its dry run
+lists the version count without deleting. Failures, Object Lock, a changed URL or
+surviving versions retain the reference for retry and produce failure evidence.
+The read-only privacy verifier itself does not delete anything. Delete markers
+alone are counted separately from retained bytes.
 See the AWS documentation for [delete markers](https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeleteMarker.html)
 and [version listing permissions and pagination](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html).
+
+Erasure requires bucket versioning to remain **Enabled**. The pinned MinIO build
+ignores conditional-delete `If-Match` headers; they cannot protect mutable null
+versions against concurrent replacement. Enabling versioning preserves existing
+null versions while giving future writes distinct version IDs, so cleanup can
+delete the old version and reject success if a newer one remains. See
+[AWS versioning semantics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html)
+and [MinIO issue 21677](https://github.com/minio/minio/issues/21677). Staging bucket
+initialization enables versioning. Existing deployments need an operator-managed
+transition with writes drained and versioning propagation verified before cleanup.
+Runtime writers must not be allowed to suspend bucket versioning; versioning must
+not change during a cleanup run. There is no automatic bypass for disabled or
+suspended versioning, Object Lock, legal holds, or MFA Delete.
+
+The erasure identity needs bucket-level `s3:GetBucketVersioning`, and
+`s3:ListBucketVersions` / `s3:ListBucket` restricted to the cleanup prefixes.
+Grant object-level `s3:GetObject`, `s3:DeleteObject` and `s3:DeleteObjectVersion`
+only within those prefixes; it does not need governance-bypass permission. IAM and
+provider semantics must be verified on staging. The bounded preflight refuses
+more than 100,000 entries or 1,000 pages per listing rather than partially assuming
+completeness. Keep keys immutable or drain writers, then run the privacy inventory
+after cleanup. Orphaned review images without a database URL and unclassified
+objects still need separately scoped operator review; these commands do not sweep
+the entire review prefix or erase merchant garment assets.
+
+Run `npm --prefix apps/api run test:storage-erasure` for synthetic protocol/race
+regressions and `node scripts/verify-versioned-retention.mjs` for the disposable
+PostgreSQL/MinIO drill. The latter creates its own loopback services and synthetic
+objects, records source/image identities, and removes only its test containers.
+Neither command uses an operator's configured database or bucket.
 
 This inventory does not prove training-use policy, backup/replica erasure, local
 fallback cleanup, AI spool/cache cleanup, or consent for every job. Its audit-event

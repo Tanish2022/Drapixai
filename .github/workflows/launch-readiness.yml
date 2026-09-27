@@ -74,7 +74,9 @@ jobs:
       - name: Launch contract tests
         run: npm --prefix apps/api run test:launch
       - name: Shopper-media inventory and historical deletion regression
-        run: npm --prefix apps/api run test:shopper-media-inventory
+        run: |
+          npm --prefix apps/api run test:shopper-media-inventory
+          npm --prefix apps/api run test:storage-erasure
       - name: Shopify foundation tests
         run: npm --prefix apps/api run test:shopify
       - name: Authorization and storefront token tests
@@ -120,6 +122,9 @@ jobs:
       - name: Verify backup restore and failure rollback
         # Uses its own PostgreSQL container with no network or host ports.
         run: node scripts/verify-postgres-restore.mjs
+      - name: Verify versioned retention against disposable storage and database
+        # Creates its own loopback-only containers and uses no operator data.
+        run: node scripts/verify-versioned-retention.mjs
       - name: Validate hardened Compose configuration
         run: |
           set -euo pipefail

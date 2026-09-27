@@ -2,6 +2,18 @@
   "version": 1,
   "repository": [
     {
+      "id": "versioned-retention-drill",
+      "label": "Disposable PostgreSQL and MinIO prove version erasure, lock denial and retained-reference retry",
+      "runner": "node",
+      "args": ["scripts/verify-versioned-retention.mjs"]
+    },
+    {
+      "id": "storage-erasure",
+      "label": "Retention erases historical object versions before clearing database references",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:storage-erasure"]
+    },
+    {
       "id": "shopper-media-inventory",
       "label": "Privacy inventory detects current and historical shopper media and incomplete listings",
       "runner": "npm",

@@ -209,6 +209,11 @@ forwarding, security groups, firewall rules, VPN ACLs or external reachability.
 Privacy inventory requires both current-object and all-version listing permission
 for `tryon-review/`, `session/` and `outputs/`; see the
 [privacy verification limits](../production-readiness.md#privacy-inventory-and-versioned-storage).
+The bucket initializer enables versioning for version-aware erasure. Before
+updating an existing bucket, drain writers and verify versioning propagation and
+the retention identity's permissions. Runtime writers must not suspend versioning.
+Disabled/suspended buckets and locked versions cause cleanup to fail and retain
+database references; they cannot be counted as erased.
 Local verifier regressions run with `npm --prefix apps/api run test:shopper-media-inventory`,
 `python3 deploy/scripts/test-staging-certification.py` and
 `bash deploy/scripts/test-private-listeners.sh`. The deployment shell tests require

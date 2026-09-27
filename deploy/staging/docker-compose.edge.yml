@@ -78,6 +78,7 @@ services:
       "$$(cat /run/secrets/minio_root_user)"
       "$$(cat /run/secrets/minio_root_password)"; do sleep 2; done;
       mc mb --ignore-existing staging/drapixai-staging;
+      mc version enable staging/drapixai-staging;
       mc anonymous set none staging/drapixai-staging
     volumes:
       - ./private/minio_root_user:/run/secrets/minio_root_user:ro

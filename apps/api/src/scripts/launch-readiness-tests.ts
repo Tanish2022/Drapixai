@@ -1282,9 +1282,10 @@ assertIncludes(read('apps/api/package.json'), 'privacy:verify-shopper-media', 'A
 assertIncludes(read('apps/api/package.json'), 'privacy:purge-legacy-media', 'API package must expose legacy media purge command');
 assertIncludes(retentionPurgeScript, 'DEFAULT_RETENTION_DAYS = 0', 'Retention purge must default to immediate legacy-media deletion');
 assertIncludes(retentionPurgeScript, '--confirm', 'Retention purge must require explicit confirmation before deleting');
-assertIncludes(reviewRetentionService, 'DeleteObjectCommand', 'Retention service must delete S3 review images');
+assertIncludes(reviewRetentionService, 'eraseStoredObjectVersions', 'Retention service must verify erasure of S3 review image versions before clearing references');
 assertIncludes(reviewRetentionService, 'removeLocalStoredFile(storedUrl, REVIEW_PREFIX)', 'Retention service must guard local review image deletion');
-assertIncludes(reviewRetentionService, "updates[field] = null", 'Retention service must clear only successfully deleted review URLs');
+assertBefore(reviewRetentionService, 'await deleteStoredReviewImage(storedUrl);', 'await prisma.tryOnResult.updateMany(', 'Retention service must verify deletion before clearing a URL');
+assertIncludes(reviewRetentionService, 'where: { id: result.id, [field]: storedUrl }', 'Retention service must preserve concurrently changed review URLs');
 assertIncludes(apiServer, "cron.schedule('*/15 * * * *'", 'Legacy shopper-media cleanup must run automatically every 15 minutes');
 assertIncludes(reviewRetentionService, "action: 'retention.tryon_review.completed'", 'Automatic retention must append deletion evidence to the audit chain');
 assertIncludes(securityHelpers, 'removeLocalStoredFile', 'Security helper must support guarded local retention deletion');

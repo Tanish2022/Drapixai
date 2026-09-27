@@ -1,7 +1,7 @@
-import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaClient } from '@prisma/client';
 import { appendSecurityAudit } from '../lib/audit-log';
-import { createStorageClient } from '../lib/storage';
+import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
+import { eraseStoredObjectVersions } from '../lib/storage-erasure';
 import { formatLogError, removeLocalStoredFile } from '../lib/security';
 
 const REVIEW_PREFIX = 'tryon-review/';
@@ -14,7 +14,7 @@ const parseS3Url = (storedUrl: string) => {
   const rest = storedUrl.replace('s3://', '');
   const [bucket, ...keyParts] = rest.split('/');
   const key = keyParts.join('/');
-  if (!bucket || !key.startsWith(REVIEW_PREFIX)) return null;
+  if (bucket !== STORAGE_BUCKET || !key.startsWith(REVIEW_PREFIX) || key.length <= REVIEW_PREFIX.length) return null;
   return { bucket, key };
 };
 
@@ -25,7 +25,7 @@ const deleteStoredReviewImage = async (storedUrl: string) => {
   }
   const s3Url = parseS3Url(storedUrl);
   if (!s3Url) throw new Error('UNRECOGNIZED_REVIEW_STORAGE_URL');
-  await s3.send(new DeleteObjectCommand({ Bucket: s3Url.bucket, Key: s3Url.key }));
+  await eraseStoredObjectVersions(s3, s3Url.bucket, s3Url.key);
 };
 
 export const runTryOnReviewRetention = async (
@@ -57,22 +57,23 @@ export const runTryOnReviewRetention = async (
   if (options.dryRun) return summary;
 
   for (const result of expiredResults) {
-    const updates: Partial<Record<StoredUrlKind, null>> = {};
+    let rowUpdated = false;
     for (const field of ['personImageUrl', 'resultImageUrl'] as StoredUrlKind[]) {
       const storedUrl = result[field];
       if (!storedUrl) continue;
       try {
         await deleteStoredReviewImage(storedUrl);
-        updates[field] = null;
+        const cleared = await prisma.tryOnResult.updateMany({
+          where: { id: result.id, [field]: storedUrl }, data: { [field]: null },
+        });
+        if (cleared.count !== 1) throw new Error('REVIEW_MEDIA_REFERENCE_CHANGED');
+        rowUpdated = true;
         summary.imagesDeleted += 1;
       } catch (error) {
         summary.failures.push({ resultId: result.id, field, code: formatLogError(error) });
       }
     }
-    if (Object.keys(updates).length > 0) {
-      await prisma.tryOnResult.update({ where: { id: result.id }, data: updates });
-      summary.rowsUpdated += 1;
-    }
+    if (rowUpdated) summary.rowsUpdated += 1;
   }
 
   await appendSecurityAudit(prisma, {
