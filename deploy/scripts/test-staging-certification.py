@@ -140,8 +140,9 @@ class EvidenceTests(EvidenceFixture):
 
     def test_quoted_exported_image_record_and_crlf_supported(self):
         self.images.write_text(f"# Non-secret images\nexport DRAPIXAI_RELEASE_COMMIT='{COMMIT}'\nDRAPIXAI_AI_RELEASE_IMAGE=\"{IMAGE}\" # approved\n")
-        result = self.verify(render().replace("\n", "\r\n"))
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.log.write_text(render().replace("\n", "\r\n"), encoding="utf-8", newline="")
+        result = self.verify()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class CertificationIntegrationTests(EvidenceFixture):
@@ -151,6 +152,12 @@ class CertificationIntegrationTests(EvidenceFixture):
         super().setUp()
         self.bash = os.environ.get("DRAPIXAI_TEST_BASH") or shutil.which("bash")
         self.assertTrue(self.bash, "Bash is required for offline shell integration tests; run this gate on Linux")
+        try:
+            probe = subprocess.run([self.bash, "--version"], capture_output=True, text=True, timeout=5)
+        except OSError as error:
+            self.skipTest(f"Bash is unavailable for offline shell integration tests: {error}")
+        if probe.returncode != 0:
+            self.skipTest("Bash is unavailable for offline shell integration tests; run this gate on Linux")
         self.repo = self.directory / "repo"
         staging = self.repo / "deploy/staging"
         staging.mkdir(parents=True)
@@ -219,7 +226,7 @@ esac
 
     def test_current_producer_output_is_accepted_until_next_certification_obligation(self):
         producer = self.run_shell(self.repo / "deploy/staging/verify-release-images.sh", "ai", self.images, COMMIT)
-        self.assertEqual(producer.returncode, 0, producer.stderr)
+        self.assertEqual(producer.returncode, 0, producer.stdout + producer.stderr)
         self.log.write_text(producer.stdout)
         self.trace.unlink()
         result = self.certify()

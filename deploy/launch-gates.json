@@ -3,7 +3,7 @@
   "repository": [
     {
       "id": "versioned-retention-drill",
-      "label": "Disposable PostgreSQL and MinIO prove version erasure, lock denial and retained-reference retry",
+      "label": "Disposable PostgreSQL and S3 compatibility tests prove version erasure, lock denial and retained-reference retry",
       "runner": "node",
       "args": ["scripts/verify-versioned-retention.mjs"]
     },

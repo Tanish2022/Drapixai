@@ -255,6 +255,7 @@ const stagingImagesEnvExample = read('deploy/staging/.images.env.example');
 const stagingTopologyVerifier = read('deploy/scripts/verify-staging-topology.py');
 const stagingTopologyRules = read('deploy/scripts/staging_topology.py');
 const stagingReleaseImageVerifier = read('deploy/staging/verify-release-images.sh');
+const storageBucketInitializer = read('apps/api/src/scripts/initialize-storage-bucket.ts');
 const garmentCacheService = read('drapixai_ai/services/garment_cache.py');
 const garmentCacheDeleteValidation = read('drapixai_ai/scripts/validate_garment_cache_delete.py');
 const garmentCacheExpiryValidation = read('drapixai_ai/scripts/validate_garment_cache_expiry.py');
@@ -295,6 +296,7 @@ const validateProductionEnvSet = read('deploy/scripts/validate-production-env-se
 const validateProductionEnvSetPowerShell = read('deploy/scripts/validate-production-env-set.ps1');
 const aiProductionExample = read('deploy/env/ai.production.example');
 const apiProductionExample = read('deploy/env/api.production.example');
+const apiStagingExample = read('deploy/env/api.staging.example');
 const webProductionExample = read('deploy/env/web.production.example');
 const nextConfig = read('apps/web/next.config.js');
 const webProxy = read('apps/web/proxy.ts');
@@ -1781,6 +1783,12 @@ assertNotIncludes(validateEnv, 'fi  require_equals', 'AI environment validation 
 assertIncludes(validateEnv, 'DRAPIXAI_GPU_PRESET:-}" == "rtx-pro-6000-blackwell', 'Digest pinning must apply to the RTX production preset without breaking the legacy reference runtime');
 assertIncludes(publishReleaseImages, 'DRAPIXAI_AI_RUNTIME_IMAGE', 'Release publishing must use the digest-pinned Blackwell AI base image.');
 assertIncludes(publishReleaseImages, 'DRAPIXAI_AI_BUILD_IMAGE', 'Release publishing must pin the matching Blackwell AI builder image.');
+assertIncludes(storageBucketInitializer, 'PutBucketVersioningCommand', 'Storage initialization must enable bucket versioning before staging traffic.');
+assertIncludes(storageBucketInitializer, 'loadExternalSecrets()', 'Storage initialization must load the mounted staging credential set before creating an S3 client.');
+assertIncludes(storageBucketInitializer, 'PutPublicAccessBlockCommand', 'Managed S3 provisioning must block every public-access mode before staging traffic.');
+assertIncludes(storageBucketInitializer, "return code === 'BucketAlreadyOwnedByYou';", 'Storage provisioning must never accept a bucket owned by another account.');
+assertBefore(storageBucketInitializer, 'await loadExternalSecrets()', 'const storageBucket = await initializeStorageBucket()', 'Storage provisioning must load mounted credentials before initializing the bucket.');
+assertNotIncludes(stagingEdgeCompose, 'minio:', 'Staging must use a separately provisioned managed S3 bucket rather than a MinIO service.');
 assertIncludes(edgeCompose, 'DRAPIXAI_API_RELEASE_IMAGE', 'Production edge Compose must deploy the immutable API release image.');
 assertIncludes(edgeCompose, 'DRAPIXAI_WEB_RELEASE_IMAGE', 'Production edge Compose must deploy the immutable web release image.');
 assertIncludes(aiCompose, 'DRAPIXAI_AI_RELEASE_IMAGE', 'Production AI Compose must deploy the immutable Standard CatVTON release image.');
@@ -1831,6 +1839,9 @@ assertIncludes(stagingTopologyRules, 'staging Compose must deploy immutable rele
 assertIncludes(stagingReleaseImageVerifier, 'org.opencontainers.image.revision', 'Staging runtime verification must prove the image revision label.');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_POSTGRES_IMAGE=postgres:', 'Staging Compose must pin the PostgreSQL image before service startup.');
 assertIncludes(stagingImagesEnvExample, 'DRAPIXAI_REDIS_IMAGE=redis:', 'Staging Compose must pin the Redis image before service startup.');
+assertNotIncludes(stagingImagesEnvExample, 'DRAPIXAI_MINIO_IMAGE=', 'Staging Compose must not deploy an unmaintained self-hosted object-storage artifact.');
+assertIncludes(apiStagingExample, 'S3_FORCE_PATH_STYLE=0', 'Staging must use managed S3 rather than a path-style local emulator.');
+assertNotIncludes(apiStagingExample, 'S3_ENDPOINT=http://', 'Staging must not route object storage to a local HTTP endpoint.');
 assertIncludes(gitignore, 'deploy/staging/.images.env', 'The real staging Compose input file must remain out of Git');
 assertIncludes(aiProductionExample, 'DRAPIXAI_AI_RUNTIME_IMAGE=pytorch/pytorch:', 'Production AI environment must pin an official PyTorch runtime image');
 assertIncludes(aiProductionExample, 'DRAPIXAI_AI_BUILD_IMAGE=pytorch/pytorch:', 'Production AI environment must pin an official PyTorch builder image');

@@ -1,0 +1,15 @@
+# Test-only S3 compatibility provider. It is never published, scanned as a
+# release artifact, or included in staging/production Compose topology.
+FROM golang:1.25.13-alpine@sha256:1e0126852075c9c60731c8ba49088448b91f63e2aed97ca9d1a9791622a05946 AS build
+
+ARG MINIO_RELEASE=RELEASE.2025-10-15T17-29-55Z
+
+RUN CGO_ENABLED=0 GOBIN=/out go install -trimpath github.com/minio/minio@${MINIO_RELEASE} \
+    && test -x /out/minio
+
+FROM scratch
+
+COPY --from=build /out/minio /usr/local/bin/minio
+
+ENTRYPOINT ["/usr/local/bin/minio"]
+CMD ["server", "/data"]

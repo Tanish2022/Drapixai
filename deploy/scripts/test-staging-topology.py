@@ -41,7 +41,7 @@ class TopologyTests(unittest.TestCase):
         self.assertTrue(all(report["controls"].values()))
 
     def test_every_private_service_rejects_published_ports(self):
-        for topology, names in ((self.edge, ("postgres", "redis", "minio", "minio-init")),
+        for topology, names in ((self.edge, ("postgres", "redis")),
                                 (self.ai, ("redis", "ai-worker"))):
             for name in names:
                 with self.subTest(service=name, topology=topology["name"]):

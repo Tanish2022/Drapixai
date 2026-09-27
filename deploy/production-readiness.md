@@ -30,7 +30,7 @@ Do not approve public quality from Windows/local smoke images or from a differen
 
 ## 1B. Immutable Release Artifact Promotion
 
-Production hosts must never rebuild DrapixAI source during a rollout. Build and scan the API, web, and Standard CatVTON runtime from the exact tagged release commit, then deploy only their registry digests. This preserves the approved Standard quality configuration while making rollback and forensic review deterministic.
+Production hosts must never rebuild DrapixAI source during a rollout. Build and scan the API, web, and Standard CatVTON runtime from the exact tagged release commit, then deploy only their registry digests. Provision object storage separately as a managed S3 bucket. This preserves the approved Standard quality configuration while making rollback and forensic review deterministic.
 
 1. On an isolated trusted builder with registry login, check out the exact release commit with a clean worktree.
 2. Set `DRAPIXAI_RELEASE_REGISTRY` to the private registry namespace and `DRAPIXAI_EXPECTED_GIT_REF` to that 40-character commit, then run:
@@ -43,7 +43,7 @@ bash deploy/scripts/publish-release-images.sh deploy/env/ai.production.env
 
 The script builds linux/amd64 artifacts, scans each saved image for HIGH/CRITICAL vulnerabilities, pushes only passing images, resolves their registry digests, and writes a private `runtime/release-images/<release-commit>.env` record. Its registry credentials remain in Docker's credential helper, never in source or env templates.
 
-3. Copy the three generated digest references into the ignored production env files. Keep `DRAPIXAI_WEB_RELEASE_IMAGE` identical in both `api.production.env` and `web.production.env`; the API env provides both edge Compose image inputs before any service env file is loaded.
+3. Copy the three generated digest references into the ignored production env files. Keep `DRAPIXAI_WEB_RELEASE_IMAGE` identical in both `api.production.env` and `web.production.env`; the API env provides both edge Compose image inputs before any service env file is loaded. Provision object storage separately as a managed S3 bucket with a restricted runtime IAM role; do not deploy a self-hosted MinIO server.
 4. On the matching clean edge and GPU checkouts, validate the env files, then start only prebuilt artifacts:
 
 ```bash
@@ -155,7 +155,7 @@ Required for storage:
 - `DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION=aws:kms`
 - `DRAPIXAI_S3_KMS_KEY_ID`
 
-The live API must not receive `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`. Grant its runtime identity only the required Secrets Manager, S3, and KMS permissions. Custom S3/MinIO endpoints and static credentials are staging-only.
+The live API must not receive `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY`. Grant its runtime identity only the required Secrets Manager, S3, and KMS permissions. Custom S3-compatible endpoints and static credentials are limited to disposable local tests and must never be used by staging or production services.
 
 Required for email:
 
@@ -283,15 +283,14 @@ alone are counted separately from retained bytes.
 See the AWS documentation for [delete markers](https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeleteMarker.html)
 and [version listing permissions and pagination](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectVersions.html).
 
-Erasure requires bucket versioning to remain **Enabled**. The pinned MinIO build
-ignores conditional-delete `If-Match` headers; they cannot protect mutable null
-versions against concurrent replacement. Enabling versioning preserves existing
-null versions while giving future writes distinct version IDs, so cleanup can
-delete the old version and reject success if a newer one remains. See
-[AWS versioning semantics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html)
-and [MinIO issue 21677](https://github.com/minio/minio/issues/21677). Staging bucket
-initialization enables versioning. Existing deployments need an operator-managed
-transition with writes drained and versioning propagation verified before cleanup.
+Erasure requires bucket versioning to remain **Enabled**. Staging and production
+use managed S3, where the provisioning identity enables versioning and all public
+access blocks before the restricted runtime identity is issued. Enabling versioning
+preserves existing null versions while giving future writes distinct version IDs,
+so cleanup can delete the old version and reject success if a newer one remains.
+See [AWS versioning semantics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html).
+Existing deployments need an operator-managed transition with writes drained and
+versioning propagation verified before cleanup.
 Runtime writers must not be allowed to suspend bucket versioning; versioning must
 not change during a cleanup run. There is no automatic bypass for disabled or
 suspended versioning, Object Lock, legal holds, or MFA Delete.
@@ -309,8 +308,10 @@ the entire review prefix or erase merchant garment assets.
 
 Run `npm --prefix apps/api run test:storage-erasure` for synthetic protocol/race
 regressions and `node scripts/verify-versioned-retention.mjs` for the disposable
-PostgreSQL/MinIO drill. The latter creates its own loopback services and synthetic
-objects, records source/image identities, and removes only its test containers.
+PostgreSQL/S3-compatibility drill. The latter uses an isolated test-only provider,
+creates its own loopback services and synthetic objects, records source/image identities, and
+removes only its test containers. It is protocol evidence only; it never certifies
+the managed S3 bucket or serves staging traffic.
 Neither command uses an operator's configured database or bucket.
 
 This inventory does not prove training-use policy, backup/replica erasure, local

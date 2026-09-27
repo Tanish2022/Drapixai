@@ -16,16 +16,18 @@ const password = crypto.randomBytes(40).toString('hex');
 const accessKey = `fixture-${crypto.randomBytes(8).toString('hex')}`;
 const database = 'drapixai_retention_test';
 const bucket = 'disposable-retention';
-const storageImage = fs.readFileSync(path.join(root, 'deploy/staging/.images.env.example'), 'utf8')
-  .replace(/\r\n/g, '\n').match(/^DRAPIXAI_MINIO_IMAGE=(minio\/minio@sha256:[a-f0-9]{64})$/m)?.[1];
-assert.ok(storageImage, 'The drill requires the reviewed digest-pinned staging MinIO image');
+const storageDockerfile = path.join(root, 'deploy/test/Dockerfile.minio-test');
+assert.ok(fs.existsSync(storageDockerfile), 'The drill requires the reviewed disposable S3 compatibility Dockerfile');
+const storageBuildSha256 = crypto.createHash('sha256').update(fs.readFileSync(storageDockerfile)).digest('hex');
+const storageImage = `drapixai-retention-minio:${storageBuildSha256.slice(0, 20)}`;
 const containers = [];
 const checks = [];
 const imageIds = {};
 const sourcePaths = [
   'apps/api/package-lock.json', 'apps/api/src/lib/storage-erasure.ts',
   'apps/api/src/services/review-retention.ts', 'apps/api/src/scripts/purge-legacy-render-media.ts',
-  'scripts/verify-versioned-retention.mjs', 'deploy/staging/.images.env.example',
+  'apps/api/src/scripts/initialize-storage-bucket.ts', 'scripts/verify-versioned-retention.mjs',
+  'deploy/test/Dockerfile.minio-test', 'deploy/staging/.images.env.example',
   ...fs.readdirSync(path.join(root, 'apps/api/prisma/migrations')).sort()
     .filter(entry => fs.existsSync(path.join(root, 'apps/api/prisma/migrations', entry, 'migration.sql')))
     .map(entry => `apps/api/prisma/migrations/${entry}/migration.sql`),
@@ -54,6 +56,9 @@ let storage;
 let prisma;
 let failure = null;
 try {
+  docker(['build', '--pull=false', '--label', 'drapixai.purpose=disposable-versioned-retention',
+    '-f', storageDockerfile, '-t', storageImage, root], { timeout: 900000 });
+  imageIds.storageBuild = docker(['image', 'inspect', '--format', '{{.Id}}', storageImage]);
   const db = start('db', ['--tmpfs', '/var/lib/postgresql/data:rw', '-p', '127.0.0.1::5432',
     '-e', 'POSTGRES_PASSWORD', '-e', `POSTGRES_DB=${database}`, 'postgres:16-alpine'], { POSTGRES_PASSWORD: password });
   const minio = start('storage', ['--tmpfs', '/data:rw,size=128m', '-p', '127.0.0.1::9000',
@@ -81,6 +86,7 @@ try {
     AWS_ACCESS_KEY_ID: accessKey, AWS_SECRET_ACCESS_KEY: password, AWS_SESSION_TOKEN: '', AWS_MAX_ATTEMPTS: '1',
     AWS_EC2_METADATA_DISABLED: 'true', DRAPIXAI_SECRETS_PROVIDER: 'env',
     DRAPIXAI_AUDIT_LOG_SECRET: password, DRAPIXAI_AUDIT_LOG_PREVIOUS_SECRETS: '',
+    DRAPIXAI_STORAGE_OBJECT_LOCK_ENABLED: '1',
     DOTENV_CONFIG_PATH: path.join(evidenceDir, 'empty.env'),
   };
   fs.writeFileSync(config.DOTENV_CONFIG_PATH, '# Disposable test; configuration is passed in memory.\n');
@@ -95,6 +101,13 @@ try {
   prisma = new PrismaClient();
   storage = new sdk.S3Client({ endpoint, forcePathStyle: true, region: 'us-east-1', maxAttempts: 1,
     credentials: { accessKeyId: accessKey, secretAccessKey: password } });
+  const initializer = spawnSync(process.execPath, [path.join(root, 'apps/api/node_modules/ts-node/dist/bin.js'),
+    '--project', path.join(root, 'apps/api/tsconfig.json'),
+    path.join(root, 'apps/api/src/scripts/initialize-storage-bucket.ts')], { cwd: root, env: { ...process.env, ...config },
+    encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  assert.equal(initializer.status, 0, redact(initializer.stderr || initializer.error?.message || initializer.stdout));
+  assert.equal((await storage.send(new sdk.GetBucketVersioningCommand({ Bucket: bucket }))).Status, 'Enabled');
+  checks.push('the storage initializer creates the disposable bucket with versioning enabled');
   // Force real pagination without generating thousands of disposable objects.
   let versionPages = 0;
   let replaceNullBeforeDelete = false;
@@ -113,7 +126,6 @@ try {
   const hidden = async Key => {
     await put(Key); await put(Key); await storage.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key }));
   };
-  await storage.send(new sdk.CreateBucketCommand({ Bucket: bucket, ObjectLockEnabledForBucket: true }));
   const user = await prisma.user.create({ data: { email: 'retention-fixture@example.invalid', passwordHash: 'not-a-login' } });
   const key = 'tryon-review/test/person.png';
   await hidden(key);
@@ -166,7 +178,7 @@ try {
   replaceNullBeforeDelete = true;
   await assert.rejects(eraseStoredObjectVersions(storage, 'disposable-unversioned', key), /VERSIONS_REMAIN/);
   assert.equal((await listStoredObjectVersions(storage, 'disposable-unversioned', key)).length, 1);
-  checks.push('concurrent new version survives deletion of the old null version and prevents false erasure success even when MinIO ignores If-Match');
+  checks.push('concurrent new version survives deletion of the old null version and prevents false erasure success when the S3 compatibility provider ignores If-Match');
 
   // Test the actual legacy purge CLI, including a hidden orphan with no DB row.
   const apiKey = await prisma.apiKey.create({ data: { userId: user.id, keyHash: crypto.randomBytes(32).toString('hex'), domainWhitelist: 'fixture.example.invalid' } });
@@ -219,7 +231,7 @@ try {
 const report = { releaseCommit: invoke('git', ['rev-parse', 'HEAD']),
   dirtyCheckout: Boolean(invoke('git', ['status', '--porcelain'])),
   sourceSha256, imageIds,
-  scope: 'disposable local PostgreSQL and MinIO, synthetic fixtures only; not live retention certification',
+  scope: 'disposable local PostgreSQL and S3 compatibility provider, synthetic fixtures only; not live retention certification',
   passed: !failure, checks, failure };
 fs.writeFileSync(path.join(evidenceDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));

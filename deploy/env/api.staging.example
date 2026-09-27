@@ -24,8 +24,8 @@ DRAPIXAI_AI_MTLS_KEY_FILE=/run/secrets/drapixai-ai-client.key
 NODE_EXTRA_CA_CERTS=/run/secrets/drapixai-internal-ca.pem
 S3_BUCKET=drapixai-staging
 AWS_REGION=ap-south-1
-S3_ENDPOINT=http://minio:9000
-S3_FORCE_PATH_STYLE=1
+# Use the staging AWS S3 endpoint and its VPC endpoint policy; do not set a local S3-compatible endpoint.
+S3_FORCE_PATH_STYLE=0
 DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION=AES256
 DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK=0
 DRAPIXAI_REQUIRE_GARMENT_CACHE=1

@@ -1,6 +1,6 @@
 # Isolated staging deployment
 
-This topology keeps staging PostgreSQL, Redis, object storage, and GPU services
+This topology keeps staging PostgreSQL, Redis, and GPU services
 off the public internet. It is intentionally separate from every production
 database, Redis database, bucket, secret record, queue, volume, and AI endpoint.
 
@@ -16,7 +16,8 @@ limits, bot controls, rate limits, TLS 1.2 or newer, and origin authentication.
 The AI API remains at `127.0.0.1:18080` on the GPU workstation. A private reverse
 proxy exposes it only on the Tailscale or WireGuard address with an internal TLS
 certificate. Permit API-host-to-GPU TCP 443 and administrator VPN SSH; deny public
-GPU ingress and GPU access to the edge PostgreSQL, Redis, and MinIO services.
+GPU ingress and GPU access to the edge PostgreSQL and Redis services. The staging
+bucket is a separate managed S3 resource restricted by IAM and its VPC endpoint policy.
 The shopper-image spool is placed under `/dev/shm`, never the persistent model or
 runtime volume. Disable swap or use encrypted swap, and enable full-disk encryption
 for every host so crash dumps and operating-system artifacts cannot persist photos
@@ -33,7 +34,7 @@ in plaintext.
    cp deploy/staging/.images.env.example deploy/staging/.images.env
    ```
 
-2. Keep the non-secret Compose image inputs beside the staging files. Copy the exact `DRAPIXAI_RELEASE_COMMIT` and all three application release-image digests from the scanned artifact record; `DRAPIXAI_AI_BUILD_IMAGE` and `DRAPIXAI_AI_RUNTIME_IMAGE` record approved builder and final-stage provenance. Compose reads `.images.env` before service `env_file` values exist.
+2. Keep the non-secret Compose image inputs beside the staging files. Copy the exact `DRAPIXAI_RELEASE_COMMIT` and API, web, and AI release-image digests from the scanned artifact record; `DRAPIXAI_AI_BUILD_IMAGE` and `DRAPIXAI_AI_RUNTIME_IMAGE` record approved builder and final-stage provenance. Compose reads `.images.env` before service `env_file` values exist. Staging object storage is a separately provisioned managed S3 bucket, never a MinIO container.
 
 3. Create test-mode Stripe products and prices, register the staging webhook at
    `https://api.staging.drapixai.com/billing/webhooks/stripe`, and put the three
@@ -85,7 +86,16 @@ in plaintext.
    live `private-services` or `environment-isolation` release gates; collect
    resolved deployment configuration and live listener/mTLS evidence separately.
 
-8. Start PostgreSQL first, apply all release migrations with the bootstrap/migration
+8. Before starting Compose, use the separate S3 provisioning identity to create
+   `S3_BUCKET`, enable versioning, and block all public access. The runtime API
+   identity must have only the prefix-scoped read/write/list/version-delete
+   permissions documented in `deploy/production-readiness.md`; it must not have
+   bucket creation, versioning, public-access-block, or policy administration.
+   Run `dist/scripts/initialize-storage-bucket.js` only from the isolated
+   provisioning job with the staging S3 credentials, then retain its redacted
+   output and `GetBucketVersioning`/`GetPublicAccessBlock` evidence.
+
+9. Start PostgreSQL first, apply all release migrations with the bootstrap/migration
    credential through your secret manager, then provision the separate API role.
    The API's mounted `DATABASE_URL` is intentionally not a migration credential.
    Do not start the API until provisioning succeeds:
@@ -118,7 +128,7 @@ in plaintext.
      -f deploy/staging/docker-compose.ai.yml up -d
    ```
 
-9. Run `deploy/scripts/verify-private-listeners.sh` on the API/data host and
+10. Run `deploy/scripts/verify-private-listeners.sh` on the API/data host and
    `deploy/workstation/internal-proxy/verify-mtls-proxy.sh` on the GPU host. From
    the API host, run `deploy/workstation/internal-proxy/verify-mtls-api-handshake.sh`
    with the private GPU URL, internal CA, and dedicated API-client certificate/key.
@@ -126,7 +136,7 @@ in plaintext.
    requires proof that no-client access was rejected and the dedicated client
    certificate received `HTTP 200`; confirm router or cloud firewall rules separately.
 
-10. Prove the running containers, not only the Compose source, use the exact release
+11. Prove the running containers, not only the Compose source, use the exact release
     artifacts. Run the first command on the edge host and the second on the GPU host;
     keep the GPU output as redacted certification evidence:
 
@@ -135,7 +145,7 @@ in plaintext.
    bash deploy/staging/verify-release-images.sh ai deploy/staging/.images.env <release-commit>
    ```
 
-   Save exactly the GPU command's two stdout lines from a successful invocation:
+   Save exactly each command's two stdout lines from a successful invocation:
    the `DRAPIXAI_RELEASE_IMAGE_EVIDENCE_V1` JSON record and its matching PASS line.
    Certification compares both AI service digests and revisions with the current
    commit and `.images.env`. Old single-line logs, stale releases, mixed failure
@@ -144,7 +154,7 @@ in plaintext.
    a signature or proof of host identity or freshness. The operator must retain
    dated host/deployment evidence alongside it.
 
-11. Preserve migration and backup evidence, then run the complete staging
+12. Preserve migration and backup evidence, then run the complete staging
     smoke and security suites. Never point staging at production to save setup time.
 
 ## Live security-boundary certification
@@ -209,7 +219,8 @@ forwarding, security groups, firewall rules, VPN ACLs or external reachability.
 Privacy inventory requires both current-object and all-version listing permission
 for `tryon-review/`, `session/` and `outputs/`; see the
 [privacy verification limits](../production-readiness.md#privacy-inventory-and-versioned-storage).
-The bucket initializer enables versioning for version-aware erasure. Before
+The separately-run S3 provisioning initializer enables versioning and all four S3
+public-access blocks for version-aware erasure. Before
 updating an existing bucket, drain writers and verify versioning propagation and
 the retention identity's permissions. Runtime writers must not suspend versioning.
 Disabled/suspended buckets and locked versions cause cleanup to fail and retain

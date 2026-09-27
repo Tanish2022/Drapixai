@@ -49,47 +49,6 @@ services:
     networks:
       - data
 
-  minio:
-    image: ${DRAPIXAI_MINIO_IMAGE:?set DRAPIXAI_MINIO_IMAGE}
-    restart: unless-stopped
-    command: server /data
-    environment:
-      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
-      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
-      MINIO_BROWSER: "off"
-    volumes:
-      - staging_minio:/data
-      - ./private/minio_root_user:/run/secrets/minio_root_user:ro
-      - ./private/minio_root_password:/run/secrets/minio_root_password:ro
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - data
-
-  minio-init:
-    image: ${DRAPIXAI_MINIO_MC_IMAGE:?set DRAPIXAI_MINIO_MC_IMAGE}
-    restart: "no"
-    depends_on:
-      - minio
-    entrypoint: ["/bin/sh", "-c"]
-    command: >-
-      set -eu;
-      until mc alias set staging http://minio:9000
-      "$$(cat /run/secrets/minio_root_user)"
-      "$$(cat /run/secrets/minio_root_password)"; do sleep 2; done;
-      mc mb --ignore-existing staging/drapixai-staging;
-      mc version enable staging/drapixai-staging;
-      mc anonymous set none staging/drapixai-staging
-    volumes:
-      - ./private/minio_root_user:/run/secrets/minio_root_user:ro
-      - ./private/minio_root_password:/run/secrets/minio_root_password:ro
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - data
-
   api:
     image: ${DRAPIXAI_API_RELEASE_IMAGE:?set DRAPIXAI_API_RELEASE_IMAGE}
     restart: unless-stopped
@@ -107,8 +66,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${DRAPIXAI_STAGING_API_PORT:-18000}:8000"
     read_only: true
@@ -145,7 +102,6 @@ services:
 
 volumes:
   staging_postgres:
-  staging_minio:
 
 networks:
   edge:

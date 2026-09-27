@@ -10,14 +10,12 @@ PYTORCH_IMAGE = re.compile(r"pytorch/pytorch:[A-Za-z0-9._-]+@sha256:[a-f0-9]{64}
 PROFILE = "../release/standard-catvton-rc1.env"
 IMAGES = {
     "edge": {"postgres": "DRAPIXAI_POSTGRES_IMAGE", "redis": "DRAPIXAI_REDIS_IMAGE",
-             "minio": "DRAPIXAI_MINIO_IMAGE", "minio-init": "DRAPIXAI_MINIO_MC_IMAGE",
              "api": "DRAPIXAI_API_RELEASE_IMAGE", "web": "DRAPIXAI_WEB_RELEASE_IMAGE"},
     "ai": {"redis": "DRAPIXAI_REDIS_IMAGE", "ai-api": "DRAPIXAI_AI_RELEASE_IMAGE",
            "ai-worker": "DRAPIXAI_AI_RELEASE_IMAGE"},
 }
 NETWORKS = {
-    "edge": {"postgres": {"data"}, "redis": {"data"}, "minio": {"data"},
-             "minio-init": {"data"}, "api": {"edge", "data"}, "web": {"edge"}},
+    "edge": {"postgres": {"data"}, "redis": {"data"}, "api": {"edge", "data"}, "web": {"edge"}},
     "ai": {"redis": {"ai-private"}, "ai-api": {"ai-private"}, "ai-worker": {"ai-private"}},
 }
 PORTS = {
@@ -28,8 +26,6 @@ PORTS = {
 REQUIRED_PRIVATE_MOUNTS = {
     ("edge", "postgres"): {"postgres_password", "api_database_password"},
     ("edge", "redis"): {"redis_password"},
-    ("edge", "minio"): {"minio_root_user", "minio_root_password"},
-    ("edge", "minio-init"): {"minio_root_user", "minio_root_password"},
     ("ai", "redis"): {"ai_redis_password"},
 }
 
