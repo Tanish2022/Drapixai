@@ -1,6 +1,6 @@
 # P0 execution plan: non-GPU first
 
-Updated: 2026-09-27. Public scope: Standard upper-body CatVTON only.
+Updated: 2026-10-03. Public scope: Standard upper-body CatVTON only.
 
 This plan separates executable work from release approval. Local tests, source
 checks and simulated failures do not certify a live deployment. The authoritative
@@ -27,17 +27,19 @@ service digests; host listener checks reject explicit public IPs as well as
 wildcards. Local verification passed 17 synthetic S3 cases, 12 GPU evidence tests
 and 93 listener cases. These regressions are now required in CI and the repository
 gate manifest. Shell regressions require Bash/Python 3 on Linux (or a compatible
-environment); missing Bash must not silently skip a gate. A disposable local MinIO
-probe also detected a version hidden by an ordinary delete and confirmed removal
+environment); missing Bash must fail the integration gate rather than silently
+skip it. A disposable local S3-compatibility probe also detected a version hidden
+by an ordinary delete and confirmed removal
 after deletion of that specific version; it used synthetic bytes and never touched
 the project's existing buckets. Actual versioned-media
 cleanup, live host validation and final GPU evidence remain outstanding.
 
 The September 27 retention change adds version-aware erasure to review cleanup
 and the legacy-render purge, plus conditional database URL clearing. It requires
-enabled bucket versioning: the pinned MinIO build ignored conditional-delete
-headers in a real concurrent-replacement test. The staging initializer enables
-versioning, and erasure refuses disabled/suspended buckets. Future writes then
+enabled bucket versioning: the disposable S3-compatibility provider ignored
+conditional-delete headers in a real concurrent-replacement test. The managed-S3
+staging provisioning initializer enables versioning and all public-access blocks,
+and erasure refuses disabled/suspended buckets. Future writes then
 receive distinct version IDs; a new version survives deletion of an old null
 version and prevents false success. The fixture drill also checks real Object
 Lock rejection, dry runs, retry, orphaned legacy versions and a valid audit chain.

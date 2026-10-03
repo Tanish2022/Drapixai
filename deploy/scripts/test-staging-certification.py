@@ -155,9 +155,9 @@ class CertificationIntegrationTests(EvidenceFixture):
         try:
             probe = subprocess.run([self.bash, "--version"], capture_output=True, text=True, timeout=5)
         except OSError as error:
-            self.skipTest(f"Bash is unavailable for offline shell integration tests: {error}")
+            self.fail(f"Bash is unavailable for offline shell integration tests: {error}")
         if probe.returncode != 0:
-            self.skipTest("Bash is unavailable for offline shell integration tests; run this gate on Linux")
+            self.fail("Bash is unavailable for offline shell integration tests; run this gate on Linux")
         self.repo = self.directory / "repo"
         staging = self.repo / "deploy/staging"
         staging.mkdir(parents=True)
