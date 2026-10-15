@@ -98,7 +98,7 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               {state === 'complete' && themeEditorUrl ? <a href={themeEditorUrl} className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]">Add try-on block <ExternalLink className="h-4 w-4" /></a> : null}
-              <Link href="/dashboard" className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]"><Store className="h-4 w-4" />Open workspace</Link>
+              <Link href="/onboarding" className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]"><Store className="h-4 w-4" />Continue setup</Link>
               <Link href="/sdk-install" className="inline-flex h-12 items-center justify-center gap-2 border border-black/15 bg-white px-5 text-sm font-bold hover:bg-[#eef2ed]">Storefront setup <ArrowRight className="h-4 w-4" /></Link>
             </div>
           </div>

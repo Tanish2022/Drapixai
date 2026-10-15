@@ -8,6 +8,7 @@ import { ArrowRight, CheckCircle2, Copy, ExternalLink, KeyRound, Sparkles, Store
 import { PUBLIC_API_BASE_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 import { useThemePreference } from '@/app/lib/theme-client';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
+import { useWorkspaceAnchor } from '@/app/lib/use-workspace-anchor';
 
 interface UsageData {
   email?: string | null;
@@ -179,8 +180,9 @@ export default function Dashboard() {
   const [previewError, setPreviewError] = useState('');
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const router = useRouter();
+  useWorkspaceAnchor(Boolean(usage));
   const previewProductId = useMemo(
-    () => garments.find((garment) => garment.status === 'ready' && garment.cacheKey && garment.confirmedProductId)?.confirmedProductId || '',
+    () => garments.find((garment) => (garment.garmentType || 'upper') === 'upper' && garment.status === 'ready' && garment.cacheKey && garment.confirmedProductId)?.confirmedProductId || '',
     [garments]
   );
 
@@ -710,6 +712,7 @@ export default function Dashboard() {
           <p className={`max-w-3xl text-base ${mutedTextClass}`}>
             The launch story is now: upload garments, discover products, review suggested matches, confirm the right pairings, then let the SDK use only those confirmed mappings on the storefront.
           </p>
+          <Link href="/onboarding" className={`mt-5 inline-flex items-center gap-2 ${actionClass}`}>Use step-by-step setup <ArrowRight className="h-4 w-4" /></Link>
         </div>
 
         {isQuotaExhausted ? (

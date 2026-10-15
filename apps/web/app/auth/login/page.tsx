@@ -10,9 +10,9 @@ import { trackEvent } from '@/app/lib/analytics';
 import BrandLogo from '@/app/components/BrandLogo';
 
 function getSafeNextPath() {
-  if (typeof window === 'undefined') return '/';
+  if (typeof window === 'undefined') return '/onboarding';
   const requested = new URLSearchParams(window.location.search).get('next');
-  return requested?.startsWith('/') && !requested.startsWith('//') ? requested : '/';
+  return requested?.startsWith('/') && !requested.startsWith('//') && !requested.includes('\\') ? requested : '/onboarding';
 }
 
 export default function LoginPage() {
@@ -21,7 +21,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [nextPath, setNextPath] = useState('/');
+  const [nextPath, setNextPath] = useState('/onboarding');
   const router = useRouter();
 
   useEffect(() => setNextPath(getSafeNextPath()), []);

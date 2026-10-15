@@ -14,6 +14,8 @@ const privateNoIndexSources = [
   '/admin-access',
   '/dashboard',
   '/dashboard/:path*',
+  '/onboarding',
+  '/onboarding/:path*',
   '/settings',
   '/settings/:path*',
   '/sdk-install',

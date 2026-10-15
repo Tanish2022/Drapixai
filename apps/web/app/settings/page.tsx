@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
+import { useWorkspaceAnchor } from '@/app/lib/use-workspace-anchor';
 
 type UsageData = {
   email?: string | null;
@@ -72,6 +73,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [toast, setToast] = useState('');
+  useWorkspaceAnchor(Boolean(profile));
 
   const [companyName, setCompanyName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
@@ -101,15 +103,14 @@ export default function SettingsPage() {
           return;
         }
 
-        const sessionPayload = (await sessionResponse.json().catch(() => null)) as { apiKey?: string } | null;
-        const nextApiKey = sessionPayload?.apiKey?.trim() || '';
-        if (!nextApiKey) {
+        const sessionPayload = (await sessionResponse.json().catch(() => null)) as { ok?: boolean } | null;
+        if (!sessionPayload?.ok) {
           router.replace('/auth/login?next=/settings');
           return;
         }
 
         if (!active) return;
-        setApiKey(nextApiKey);
+        setApiKey('dashboard-session');
 
         const [summaryResponse, profileResponse, keyStatusResponse] = await Promise.all([
           fetch(dashboardApiPath('analytics/summary')),
@@ -760,7 +761,7 @@ export default function SettingsPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
-          <div className={cardClass}>
+          <div id="store-basics" className={cardClass}>
             <div className="flex items-center gap-3 mb-4">
               <Store className={`w-6 h-6 ${usage.storeConnected ? 'text-emerald-400' : 'text-amber-300'}`} />
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Store basics</h2>

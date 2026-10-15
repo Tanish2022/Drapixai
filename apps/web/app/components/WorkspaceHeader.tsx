@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import BrandLogo from './BrandLogo';
 
-type WorkspacePage = 'dashboard' | 'sdk' | 'subscription' | 'settings';
+type WorkspacePage = 'onboarding' | 'dashboard' | 'sdk' | 'subscription' | 'settings';
 
 type WorkspaceHeaderProps = {
   active: WorkspacePage;
@@ -12,6 +12,7 @@ type WorkspaceHeaderProps = {
 };
 
 const links: Array<{ href: string; label: string; id: WorkspacePage }> = [
+  { href: '/onboarding', label: 'Get started', id: 'onboarding' },
   { href: '/dashboard', label: 'Workspace', id: 'dashboard' },
   { href: '/sdk-install', label: 'Install', id: 'sdk' },
   { href: '/subscription', label: 'Usage', id: 'subscription' },

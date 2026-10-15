@@ -67,7 +67,7 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/settings') || pathname.startsWith('/subscription') || pathname.startsWith('/sdk-install')) {
+  if (pathname.startsWith('/onboarding') || pathname.startsWith('/dashboard') || pathname.startsWith('/settings') || pathname.startsWith('/subscription') || pathname.startsWith('/sdk-install')) {
     const dashboardSession = req.cookies.get(DASHBOARD_SESSION_COOKIE)?.value;
     const hasDashboardSession = await verifyDashboardSessionToken(dashboardSession);
     if (!hasDashboardSession) {

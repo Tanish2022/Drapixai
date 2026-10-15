@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Check, Lock, Mail, Phone, ShieldCheck, User } from 'lucide-react';
+import { ArrowRight, Check, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -16,14 +16,13 @@ const formatSelectedPlan = (value: string | null) => {
 };
 
 const getSafeNextPath = (value: string | null) =>
-  value?.startsWith('/') && !value.startsWith('//') ? value : '/';
+  value?.startsWith('/') && !value.startsWith('//') && !value.includes('\\') ? value : '/onboarding';
 
 const fieldClass = 'h-12 w-full border border-black/15 bg-white pl-12 pr-4 text-[#172019] outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b] disabled:bg-[#eef1ed] disabled:text-[#78837b]';
 
 function RegisterPageContent() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -69,7 +68,7 @@ function RegisterPageContent() {
       const response = await fetch('/api/dashboard/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'register', email, password, otp, mobileNumber, companyName: name.trim(), selectedPlan }),
+        body: JSON.stringify({ mode: 'register', email, password, otp, companyName: name.trim(), selectedPlan }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -112,7 +111,7 @@ function RegisterPageContent() {
         <section className="px-5 py-14 sm:px-8 lg:px-12 lg:py-20">
           <div className="w-full max-w-xl">
             <p className="text-xs font-bold uppercase text-[#31725b]">Brand workspace</p>
-            <h1 className="mt-4 font-serif text-5xl leading-none text-[#101712]">Start with real products.</h1>
+            <h1 className="mt-4 font-serif text-4xl leading-tight text-[#101712] sm:text-5xl">{otpRequested ? 'Check your email.' : 'Let’s start with your brand.'}</h1>
             <p className="mt-4 max-w-lg leading-7 text-[#68736b]">Create a trial workspace with up to 300 try-ons over 12 days. No credit card required.</p>
 
             {selectedPlanLabel ? (
@@ -122,6 +121,8 @@ function RegisterPageContent() {
             ) : null}
 
             <form className="mt-10 grid gap-6 sm:grid-cols-2" onSubmit={handleSubmit}>
+              <p className="text-xs font-bold uppercase tracking-widest text-[#31725b] sm:col-span-2">Step {otpRequested ? '2 of 2 · Verify email' : '1 of 2 · Create account'}</p>
+              {!otpRequested ? <>
               <label className="block sm:col-span-2">
                 <span className="mb-2 block text-sm font-bold">Brand or company name</span>
                 <span className="relative block"><User className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" /><input type="text" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Your brand" className={fieldClass} /></span>
@@ -133,38 +134,32 @@ function RegisterPageContent() {
               </label>
 
               <label className="block sm:col-span-2">
-                <span className="mb-2 block text-sm font-bold">Mobile number <span className="font-normal text-[#7f8982]">(optional)</span></span>
-                <span className="relative block"><Phone className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" /><input type="tel" autoComplete="tel" value={mobileNumber} onChange={(event) => setMobileNumber(event.target.value)} placeholder="+91 98765 43210" className={fieldClass} /></span>
-              </label>
-
-              <label className="block sm:col-span-2">
                 <span className="mb-2 block text-sm font-bold">Password</span>
                 <span className="relative block">
                   <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
                   <input type={showPassword ? 'text' : 'password'} required autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Create a strong password" disabled={otpRequested} className={`${fieldClass} pr-16`} />
                   <button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-2 top-1/2 inline-flex h-10 min-w-10 -translate-y-1/2 items-center justify-center px-2 text-xs font-bold text-[#667169] hover:text-[#183f32]">{showPassword ? 'Hide' : 'Show'}</button>
                 </span>
-                <span className="mt-2 grid grid-cols-3 gap-1" aria-label="Password strength">
-                  <span className={`h-1 ${password.length >= 1 ? 'bg-[#b8584f]' : 'bg-[#dce1dc]'}`} />
-                  <span className={`h-1 ${password.length >= 8 ? 'bg-[#c29b3b]' : 'bg-[#dce1dc]'}`} />
-                  <span className={`h-1 ${password.length >= 12 ? 'bg-[#31725b]' : 'bg-[#dce1dc]'}`} />
-                </span>
+                <span className="mt-2 block text-xs text-[#68736b]">Use at least 8 characters. A longer, unique password is better.</span>
               </label>
+              </> : null}
 
               {otpRequested ? (
                 <div className="border border-[#a8bbae] bg-[#edf3ee] p-5 sm:col-span-2">
+                  <p className="mb-4 break-words text-sm text-[#415047]">Enter the code sent to <strong>{email}</strong>.</p>
                   <label className="block">
                     <span className="mb-2 block text-sm font-bold text-[#183f32]">Email verification code</span>
-                    <span className="relative block"><ShieldCheck className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#31725b]" /><input type="text" required inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="Enter the 6-digit code" className={fieldClass} /></span>
+                    <span className="relative block"><ShieldCheck className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#31725b]" /><input autoFocus type="text" required pattern="[0-9]{6}" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))} placeholder="Enter the 6-digit code" className={fieldClass} /></span>
                   </label>
                   <button type="button" onClick={resendOtp} disabled={isSubmitting} className="mt-3 text-sm font-bold text-[#183f32] hover:text-[#31725b] disabled:opacity-50">Resend verification code</button>
+                  <button type="button" disabled={isSubmitting} onClick={() => { setOtpRequested(false); setOtp(''); setStatus(''); }} className="mt-3 block text-sm font-bold text-[#183f32] underline underline-offset-4 disabled:opacity-50">Change email or account details</button>
                 </div>
               ) : null}
 
-              <label className="flex items-start gap-3 text-sm leading-6 text-[#68736b] sm:col-span-2">
+              {!otpRequested ? <label className="flex items-start gap-3 text-sm leading-6 text-[#68736b] sm:col-span-2">
                 <input type="checkbox" checked={agreeTerms} onChange={(event) => setAgreeTerms(event.target.checked)} className="mt-1 h-4 w-4 accent-[#183f32]" />
                 <span>I agree to the <Link href="/terms" className="font-bold text-[#183f32]">Terms of Service</Link> and <Link href="/privacy" className="font-bold text-[#183f32]">Privacy Policy</Link>.</span>
-              </label>
+              </label> : null}
 
               <button type="submit" disabled={!agreeTerms || isSubmitting} className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48] disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2">
                 {isSubmitting ? (otpRequested ? 'Verifying...' : 'Sending code...') : (otpRequested ? 'Verify and create workspace' : 'Send verification code')}
@@ -174,7 +169,7 @@ function RegisterPageContent() {
 
             {status ? <p role="status" className="mt-4 border border-[#b7c4ba] bg-[#f0f3ef] p-3 text-sm text-[#415047]">{status}</p> : null}
 
-            {GOOGLE_AUTH_ENABLED ? (
+            {GOOGLE_AUTH_ENABLED && !otpRequested ? (
               <div className="mt-8 border-t border-black/10 pt-8">
                 <button type="button" onClick={() => signIn('google', { callbackUrl: nextPath })} onMouseDown={() => trackEvent('cta_click', { metadata: { target: 'google_signup' } })} className="flex h-12 w-full items-center justify-center gap-3 border border-black/15 bg-white text-sm font-bold hover:bg-[#f1f4f0]">
                   <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 0 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -187,11 +182,11 @@ function RegisterPageContent() {
 
         <aside className="bg-[#eaf0e9] px-5 py-14 sm:px-8 lg:px-14 lg:py-20">
           <div className="sticky top-10">
-            <p className="text-xs font-bold uppercase text-[#31725b]">The trial is operational</p>
-            <h2 className="mt-5 font-serif text-4xl leading-tight text-[#101712]">Prepare, review, then publish.</h2>
-            <p className="mt-5 leading-7 text-[#5d6961]">DrapixAI does not put an unreviewed garment directly in front of shoppers. Each product follows a visible readiness path.</p>
+            <p className="text-xs font-bold uppercase text-[#31725b]">One step at a time</p>
+            <h2 className="mt-5 font-serif text-4xl leading-tight text-[#101712]">Start with one product.</h2>
+            <p className="mt-5 leading-7 text-[#5d6961]">We’ll guide you through a private preview before you set up anything on your store.</p>
             <ol className="mt-10 border-t border-black/10">
-              {['Import products', 'Prepare garment cache', 'Approve product quality', 'Install storefront block'].map((item, index) => (
+              {['Add one product and its photo', 'Preview and review the result', 'Connect your store when ready'].map((item, index) => (
                 <li key={item} className="grid grid-cols-[3rem_1fr] border-b border-black/10 py-5 text-sm font-semibold"><span className="text-[#8d9890]">0{index + 1}</span>{item}</li>
               ))}
             </ol>

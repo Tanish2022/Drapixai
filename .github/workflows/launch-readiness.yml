@@ -145,6 +145,8 @@ jobs:
         run: npm --prefix apps/api run build
       - name: Web production build
         run: npm --prefix apps/web run build
+      - name: Merchant onboarding readiness checks
+        run: node --experimental-strip-types apps/web/scripts/merchant-onboarding-tests.cjs
       - name: Verify production HTML CSP nonces
         run: node scripts/verify-production-csp-runtime.mjs
       - name: Production dependency audit
