@@ -76,7 +76,7 @@ export default function LoginPage() {
                 <span className="mb-2 block text-sm font-bold">Email</span>
                 <span className="relative block">
                   <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
-                  <input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 text-[#172019] outline-none placeholder:text-[#9ca49e] focus:border-[#31725b]" />
+                  <input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 text-[#172019] outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b]" />
                 </span>
               </label>
 
@@ -84,7 +84,7 @@ export default function LoginPage() {
                 <span className="mb-2 block text-sm font-bold">Password</span>
                 <span className="relative block">
                   <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
-                  <input type={showPassword ? 'text' : 'password'} required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="h-12 w-full border border-black/15 bg-white pl-12 pr-16 text-[#172019] outline-none placeholder:text-[#9ca49e] focus:border-[#31725b]" />
+                  <input type={showPassword ? 'text' : 'password'} required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="h-12 w-full border border-black/15 bg-white pl-12 pr-16 text-[#172019] outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b]" />
                   <button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-2 top-1/2 inline-flex h-10 min-w-10 -translate-y-1/2 items-center justify-center px-2 text-xs font-bold text-[#667169] hover:text-[#183f32]">{showPassword ? 'Hide' : 'Show'}</button>
                 </span>
               </label>

@@ -1,6 +1,6 @@
 # P0 execution plan: non-GPU first
 
-Updated: 2026-10-03. Public scope: Standard upper-body CatVTON only.
+Updated: 2026-10-16. Public scope: Standard upper-body CatVTON only.
 
 This plan separates executable work from release approval. Local tests, source
 checks and simulated failures do not certify a live deployment. The authoritative
@@ -8,7 +8,49 @@ checks and simulated failures do not certify a live deployment. The authoritativ
 lack of a GPU. Keep dated, redacted evidence bound to the exact tested commit and
 artifact digest under ignored `runtime/launch-evidence/`.
 
+## Agreed 15 work packages
+
+The owner confirmed these packages on 2026-10-16 as the execution goal. They
+organize the original 22 gates and the additional four-request requirement;
+they do not replace or waive those gates. No package is complete merely because
+code, a checklist or a local test exists. Final closure requires evidence for the
+actual deployed release and any named external approval.
+
+| # | Work package | Completion evidence still required |
+| --- | --- | --- |
+| 1 | Dependency security remediation | Current resolved audits and exact API/web/AI image scans; reviewed AI remediation and GPU parity |
+| 2 | Reliable CI and release evidence | Required Linux/source/service tests pass on the final clean commit; artifacts and evidence bind matching digests |
+| 3 | Live CPU staging | Isolated API/web/PostgreSQL/Redis/managed S3, HTTPS and domains verified live; intake disabled until GPU certification |
+| 4 | Infrastructure and operator security | Live WAF/firewall/VPN/MFA, least privilege, offboarding, isolation, GPU mTLS and listener proof |
+| 5 | Live application security | Actual tenant denial, auth lifecycle, uploads, CORS, rate limits and webhook replay results |
+| 6 | Privacy, retention and audit integrity | Live all-version deletion/retry/reference clearing, immutable audit chain, log privacy, backup schedules and GPU spool cleanup |
+| 7 | Billing and quota correctness | Provider test flows, subscriptions/refunds, replay/idempotency, real job accounting, tax/invoice approval |
+| 8 | Operational drills and monitoring | Measured live restore/rollback, revocation, operator alert delivery, dependency/GPU failures and emergency disable |
+| 9 | Legal/privacy and commercial model rights | Qualified approval for exact models, assets, purposes, vendors, terms, consent, DPA and policies |
+| 10 | Independent penetration test | Explicit scope authorization, independent deployed assessment, remediation and independent retest |
+| 11 | Workstation and deployment readiness | Inspect delivered ordered hardware, exact runtime, thermal/RAM/storage/GPU/UPS acceptance, encrypted storage and independent backup |
+| 12 | Controlled pilot | Approved participants/catalog/rights, measured outcomes, support/stop criteria and exact-release founder approval |
+| 13 | Quality consistency and improvement | Rights-cleared 50-case matrix, scoring calibration, named visual reviews, single-reference parity and every concurrent output >=0.95 |
+| 14 | Speed, four-request capacity and stability | Real GPU execution evidence, timing breakdown/p50/p95/p99, >=20% VRAM headroom, isolation, fairness and repeated soak |
+| 15 | Complete customer journey | Mobile/desktop/accessibility, onboarding/catalog/SDK/dashboard/billing/support and actual inference retry/failure journeys |
+
+Start packages 1-4 first, prepare external reviews alongside engineering and
+prepare GPU fixtures before delivery. Include rejected/failed attempts in quality
+and capacity reports. A >=0.95 score does not establish visual realism or an
+acceptable success rate on its own. Hardware acceptance is recorded in
+`docs/ordered-workstation.md`; all four-request acceptance requirements appear
+below. Keep GPU-dependent, live-environment and external-review portions open
+until their required evidence exists.
+
 ## Baseline
+
+Current execution note (2026-10-16): the owner confirmed staging has not been
+provisioned. Live deployment gates remain pending; next infrastructure work is
+to prepare the deployment package and obtain the host/provider/domain/access
+and spending decision. The ordered GPU workstation is not yet delivered.
+API/web dependency remediation and local verification are recorded separately
+in `docs/security-remediation-2026-10-16.md`; this does not close AI image or live
+release gates.
 
 At `62ea336757070539422f010b5192ed7e40ee2d80`, [CI run 35400607857](https://github.com/Tanish2022/Drapixai/actions/runs/35400607857)
 passed application checks, secret scanning and API/web image scanning. Its AI
@@ -113,6 +155,46 @@ until those prerequisites exist, rather than manufacturing placeholder passes.
    decision only after legal and security approvals.
 
 ## Gate-by-gate completion conditions
+
+### Four simultaneous Standard requests: additional acceptance requirement
+
+Added 2026-10-16 at the owner's request. The required target is four simultaneous
+try-on requests, with each output independently meeting the approved Standard
+quality floor. This extends concurrency acceptance; it does not replace any of
+the original 22 P0 gates or constitute passing evidence for four-request mode.
+
+- For every test group, all four outputs must have finite, independently computed
+  scores >=0.95 and no warnings. A missing/failed output or any score below 0.95
+  fails that group; an average >=0.95 cannot compensate for a failing output.
+- Compare each output with its own single-request Standard reference using the
+  same person, garment, seed and approved configuration. Require named visual
+  review of garment color/texture/print, collar/sleeve/hem, anatomy, face and
+  background. Equal quality means meeting these requirements; images and scores
+  need not be numerically or pixel-identical. A score is not a measured percentage
+  of realism.
+- Submit all four together through the real SDK/public path, with four distinct
+  tenant identities and distinguishable fixtures. Prove correct result ownership,
+  all 12 cross-tenant access denials, no image/metadata mix-ups and spool cleanup.
+- Record submission, queue and execution times, per-output end-to-end latency,
+  actual worker batch size/index and fallback events. Four accepted or queued
+  requests do not prove a four-item GPU batch. Label sequential/fallback runs
+  accurately and do not use them to certify four-item execution.
+- Preserve the approved Standard settings and warm p95 end-to-end target <=12
+  seconds. Report every request's latency and repeated-run p50/p95/p99, peak
+  reserved VRAM with >=20% headroom, failures and accepted-result rate. Do not
+  hide rejected/failed attempts or lower thresholds to make capacity pass.
+- Prepare mixed-garment, repeated runs and a 100-group soak (400 requests).
+  Every accepted output requires the same score and warning checks. Retain all
+  failure counts and require no CUDA OOM, worker restart, lost/duplicate results,
+  cross-tenant disclosure or transient-file leak in the certification soak.
+- The current code hard-caps `gpu_batch_max` at three. Prepare fixtures, test
+  assertions and reporting before delivery; implement and validate isolated
+  four-request candidate support on the ordered RTX PRO 6000 after delivery.
+  Keep the existing three-request evidence and tests, and require independent
+  review of the expanded capacity before enabling four-request mode for users.
+
+Status: **PENDING GPU implementation and certification**. No four-output quality,
+latency or concurrency result has been established by this plan.
 
 | Gate | Work without GPU | What still prevents closure |
 | --- | --- | --- |

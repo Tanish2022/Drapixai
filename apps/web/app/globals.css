@@ -1,6 +1,17 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@config "../tailwind.config.ts";
+@source "./**/*.{js,ts,jsx,tsx,mdx}";
+
+/* Preserve the v3 visual scale while replacing its vulnerable build tooling. */
+@theme {
+  --blur-sm: 4px;
+  --radius-sm: 0.125rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --default-ring-width: 3px;
+  --default-ring-color: #3b82f6;
+}
+
+@layer base {
 
 :root {
   --background: #f4f6f2;
@@ -76,11 +87,6 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: 0;
 }
 
-:focus-visible {
-  outline: 3px solid #2b745a;
-  outline-offset: 3px;
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -109,4 +115,11 @@ progress.onboarding-progress::-moz-progress-bar {
   background: #183f32;
   border-radius: 9999px;
   transition: width 200ms ease;
+}
+}
+
+/* Keep keyboard focus visible even on controls with an outline utility. */
+:focus-visible {
+  outline: 3px solid #2b745a;
+  outline-offset: 3px;
 }

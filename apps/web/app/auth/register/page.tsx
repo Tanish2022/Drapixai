@@ -18,7 +18,7 @@ const formatSelectedPlan = (value: string | null) => {
 const getSafeNextPath = (value: string | null) =>
   value?.startsWith('/') && !value.startsWith('//') ? value : '/';
 
-const fieldClass = 'h-12 w-full border border-black/15 bg-white pl-12 pr-4 text-[#172019] outline-none placeholder:text-[#9ca49e] focus:border-[#31725b] disabled:bg-[#eef1ed] disabled:text-[#78837b]';
+const fieldClass = 'h-12 w-full border border-black/15 bg-white pl-12 pr-4 text-[#172019] outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b] disabled:bg-[#eef1ed] disabled:text-[#78837b]';
 
 function RegisterPageContent() {
   const [name, setName] = useState('');

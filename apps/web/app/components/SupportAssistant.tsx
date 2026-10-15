@@ -438,7 +438,7 @@ export default function SupportAssistant() {
                   }}
                   placeholder="Ask about onboarding, garments, store verification, docs, or billing..."
                   
-                  className="w-full resize-none bg-transparent text-sm leading-6 text-[#172019] outline-none placeholder:text-[#7c887f]"
+                  className="w-full resize-none bg-transparent text-sm leading-6 text-[#172019] outline-hidden placeholder:text-[#7c887f]"
                 />
               </div>
               <button

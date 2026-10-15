@@ -227,6 +227,12 @@
       "args": ["--prefix", "apps/api", "audit", "--omit=dev", "--audit-level=high"]
     },
     {
+      "id": "api-build-dependency-audit",
+      "label": "API development tooling and production dependency audit",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "audit", "--include=dev", "--audit-level=high"]
+    },
+    {
       "id": "web-dependency-audit",
       "label": "Web production dependency audit",
       "runner": "npm",

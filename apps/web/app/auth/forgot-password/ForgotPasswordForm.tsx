@@ -102,7 +102,7 @@ export default function ForgotPasswordForm() {
               disabled={otpRequested}
               required
               placeholder="you@company.com"
-              className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-none placeholder:text-[#9ca49e] focus:border-[#31725b] disabled:bg-[#eef1ed]"
+              className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b] disabled:bg-[#eef1ed]"
             />
           </div>
         </div>
@@ -121,7 +121,7 @@ export default function ForgotPasswordForm() {
                   onChange={(event) => setOtp(event.target.value)}
                   required
                   placeholder="Enter the 6-digit code"
-                  className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-none placeholder:text-[#9ca49e] focus:border-[#31725b]"
+                  className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b]"
                 />
               </div>
               <button
@@ -155,7 +155,7 @@ export default function ForgotPasswordForm() {
                   minLength={8}
                   required
                   placeholder="Create a new password"
-                  className="h-12 w-full border border-black/15 bg-white pl-12 pr-16 outline-none placeholder:text-[#9ca49e] focus:border-[#31725b]"
+                  className="h-12 w-full border border-black/15 bg-white pl-12 pr-16 outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b]"
                 />
                 <button
                   type="button"

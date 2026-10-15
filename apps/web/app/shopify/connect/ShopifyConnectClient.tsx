@@ -121,7 +121,7 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
               </ol>
             )}
 
-            <div className="mt-10 flex gap-3 border-l-4 border-[#31725b] bg-white p-5 text-sm leading-6 text-[#5d6961]"><ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#31725b]" /><p>The Shopify offline token is encrypted. The storefront widget receives a separate domain-bound credential.</p></div>
+            <div className="mt-10 flex gap-3 border-l-4 border-[#31725b] bg-white p-5 text-sm leading-6 text-[#5d6961]"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#31725b]" /><p>The Shopify offline token is encrypted. The storefront widget receives a separate domain-bound credential.</p></div>
           </div>
         </aside>
       </div>

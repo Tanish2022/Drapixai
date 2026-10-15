@@ -218,7 +218,7 @@ export default function HelpPage() {
           <aside className="self-start border-t border-black/10 pt-5 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
             <div className="mb-7 border-b border-black/10 pb-5">
               <div className="flex min-w-0 items-start gap-3">
-                <Search className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#667169]" />
+                <Search className="mt-0.5 h-4 w-4 shrink-0 text-[#667169]" />
                 <div className="min-w-0">
                   <p className="text-sm font-bold">Browse help topics</p>
                   <p className="mt-1 text-xs leading-5 text-[#748078]">
@@ -297,7 +297,7 @@ export default function HelpPage() {
                   'Install the browser SDK or call the REST API only after those pairings feel trusted.',
                 ].map((item) => (
                   <div key={item} className="flex items-start gap-3">
-                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-[#31725b]" />
+                    <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[#31725b]" />
                     <p className="leading-7">{item}</p>
                   </div>
                 ))}
@@ -415,7 +415,7 @@ export default function HelpPage() {
               <div className="space-y-4 mb-8">
                 {integrationTips.map((item) => (
                   <div key={item} className="flex items-start gap-3">
-                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-[#31725b]" />
+                    <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[#31725b]" />
                     <p className="leading-7 text-[#5d6961]">{item}</p>
                   </div>
                 ))}
@@ -486,7 +486,7 @@ export default function HelpPage() {
                     'whether the issue happened on demo, staging, or production',
                   ].map((item) => (
                     <div key={item} className="flex items-start gap-3">
-                      <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-[#31725b]" />
+                      <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[#31725b]" />
                       <p>{item}</p>
                     </div>
                   ))}

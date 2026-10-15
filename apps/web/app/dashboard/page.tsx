@@ -836,7 +836,7 @@ export default function Dashboard() {
                       <p className={`font-semibold ${strongTextClass}`}>{step.title}</p>
                       <p className={`text-sm mt-2 ${mutedTextClass}`}>{step.summary}</p>
                     </div>
-                    <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${step.done ? 'text-emerald-400' : 'text-slate-400'}`} />
+                    <CheckCircle2 className={`w-5 h-5 shrink-0 ${step.done ? 'text-emerald-400' : 'text-slate-400'}`} />
                   </div>
                   <Link href={step.actionHref} className={`mt-4 inline-flex items-center gap-2 text-sm ${themePreference === 'light' ? 'text-[#246048] hover:text-[#183f32]' : 'text-[#8fc4a8] hover:text-[#b4d8c3]'}`}>
                     {step.actionLabel}

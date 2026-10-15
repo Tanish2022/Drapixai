@@ -60,7 +60,7 @@ export default function ChangelogPage() {
               <div>
                 <h2 className="text-3xl font-semibold">{release.title}</h2>
                 <ul className="mt-7 grid gap-x-10 gap-y-4 md:grid-cols-2">
-                  {release.items.map((item) => <li key={item} className="flex gap-3 text-sm leading-6 text-[#5d6961]"><Check className="mt-1 h-4 w-4 flex-shrink-0 text-[#31725b]" /><span>{item}</span></li>)}
+                  {release.items.map((item) => <li key={item} className="flex gap-3 text-sm leading-6 text-[#5d6961]"><Check className="mt-1 h-4 w-4 shrink-0 text-[#31725b]" /><span>{item}</span></li>)}
                 </ul>
               </div>
             </article>

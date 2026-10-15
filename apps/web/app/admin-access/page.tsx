@@ -60,18 +60,18 @@ export default function AdminAccess() {
                 <span className="mb-2 block text-sm font-bold">Administrator email</span>
                 <span className="relative block">
                   <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
-                  <input type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Administrator email" className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-none placeholder:text-[#9ca49e] focus:border-[#31725b]" />
+                  <input type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Administrator email" className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b]" />
                 </span>
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">Authenticator code</span>
-                <input type="text" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code" className="h-12 w-full border border-black/15 bg-white px-4 tracking-widest outline-none placeholder:tracking-normal placeholder:text-[#9ca49e] focus:border-[#31725b]" />
+                <input type="text" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit code" className="h-12 w-full border border-black/15 bg-white px-4 tracking-widest outline-hidden placeholder:tracking-normal placeholder:text-[#9ca49e] focus:border-[#31725b]" />
               </label>
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">Password</span>
                 <span className="relative block">
                   <LockKeyhole className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
-                  <input type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Admin password" className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-none placeholder:text-[#9ca49e] focus:border-[#31725b]" />
+                  <input type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Admin password" className="h-12 w-full border border-black/15 bg-white pl-12 pr-4 outline-hidden placeholder:text-[#9ca49e] focus:border-[#31725b]" />
                 </span>
               </label>
               <button type="submit" disabled={isSubmitting} className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48] disabled:cursor-not-allowed disabled:opacity-50">

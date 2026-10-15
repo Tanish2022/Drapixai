@@ -368,6 +368,12 @@ const webBuildDependencyAudit = launchGateConfig.repository.find((gate) => gate.
 assert.ok(webBuildDependencyAudit, 'Launch gates must audit website build tooling as well as production dependencies');
 assert.equal(webBuildDependencyAudit.runner, 'npm');
 assert.deepEqual(webBuildDependencyAudit.args, ['--prefix', 'apps/web', 'audit', '--include=dev', '--audit-level=high']);
+const apiBuildDependencyAudit = launchGateConfig.repository.find((gate) => gate.id === 'api-build-dependency-audit');
+assert.ok(apiBuildDependencyAudit, 'Launch gates must audit API development tooling as well as production dependencies');
+assert.equal(apiBuildDependencyAudit.runner, 'npm');
+assert.deepEqual(apiBuildDependencyAudit.args, ['--prefix', 'apps/api', 'audit', '--include=dev', '--audit-level=high']);
+assertIncludes(launchWorkflow, 'npm --prefix apps/api audit --include=dev --audit-level=high', 'CI must block high-risk API tooling dependencies');
+assertIncludes(launchWorkflow, 'npm --prefix apps/web audit --include=dev --audit-level=high', 'CI must block high-risk website build dependencies');
 const rootPackageJson = read('package.json');
 const gitignore = read('.gitignore');
 const gitattributes = read('.gitattributes');
