@@ -95,7 +95,7 @@ const main = async () => {
           updates++; Object.assign(row, values); return { count: 1 };
         },
       },
-      $transaction: async (run: any) => run({ $executeRaw: async () => 1, securityAuditLog: {
+      $transaction: async (run: any) => run({ $queryRaw: async () => [{ acquired: true }], securityAuditLog: {
         findFirst: async () => null, create: async ({ data: value }: any) => { audit.push(value); return value; },
       } }),
     };
