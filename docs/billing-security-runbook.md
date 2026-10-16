@@ -31,10 +31,18 @@ incomplete, unpaid, and canceled subscriptions fail closed in plan enforcement.
 
 ## Verification
 
-Run `npm --prefix apps/api run test:billing-security`. In staging, additionally
-run `npm --prefix apps/api run test:billing-database` against the isolated staging
-database. Then
-prove one successful purchase, one canceled checkout, one failed-payment event,
+Run `npm --prefix apps/api run test:billing-security`. Run the database fixture
+only against a separate, disposable loopback PostgreSQL database with migrations
+applied and `DRAPIXAI_DISPOSABLE_DB_APPROVAL=I_ACKNOWLEDGE_DISPOSABLE_DATABASE`.
+Its database name must include a `test`, `p0` or `disposable` segment, or be the
+CI-only `drapixai_launch_gate`. Set `DATABASE_URL` explicitly in the test process;
+never use an application's normal environment or point this cleanup fixture at
+staging/production data. Launch CI provides its own disposable service and runs
+the target-refusal checks before the positive fixture. See
+`docs/billing-verification-2026-10-17.md` for the verification scope.
+
+Against the approved staging billing integration, separately prove one
+successful purchase, one canceled checkout, one failed-payment event,
 one duplicate event, one stale signature, and one test/live mode mismatch. Save
 redacted evidence containing event IDs and outcomes only. Never save raw event
 payloads or Stripe secrets.
