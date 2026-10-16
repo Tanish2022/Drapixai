@@ -6,6 +6,7 @@
 node_modules
 **/node_modules
 **/.next
+**/.next-*
 **/dist
 **/coverage
 **/*.log
@@ -16,6 +17,9 @@ logs
 models
 runtime
 uploads
+output
+outputs
+**/outputs
 docs
 **/.env
 **/.env.*

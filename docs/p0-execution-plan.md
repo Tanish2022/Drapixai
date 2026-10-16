@@ -52,6 +52,15 @@ API/web dependency remediation and local verification are recorded separately
 in `docs/security-remediation-2026-10-16.md`; this does not close AI image or live
 release gates.
 
+At `5ac16ee56000fa29156cd0e9eea26ae27e0e1009`, application and secret-scan CI
+passed, but the edge image scan reported OpenSSL `CVE-2026-84782`; the AI audit
+still reported Accelerate `PYSEC-2026-3804`. The Debian 13 edge remediation and
+exact-image CI evidence work are recorded in `docs/edge-runtime-security-2026-10-16.md`.
+Merchant onboarding changes and their synthetic-test scope are recorded in
+`docs/merchant-onboarding-2026-10-16.md`. The owner also confirmed there is no
+Shopify Partner account yet; app registration, development-store installation,
+real catalog sync and public distribution approval remain pending.
+
 At `62ea336757070539422f010b5192ed7e40ee2d80`, [CI run 35400607857](https://github.com/Tanish2022/Drapixai/actions/runs/35400607857)
 passed application checks, secret scanning and API/web image scanning. Its AI
 dependency audit failed on Accelerate `PYSEC-2026-3804`, suppressing subsequent

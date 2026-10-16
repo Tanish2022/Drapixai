@@ -28,6 +28,8 @@ const excluded = [
   'drapixai_ai/third_party/CatVTON/.git/config',
   'runtime/person.png', 'uploads/person.png', 'apps/api/uploads/person.png',
   'logs/request.log', 'node_modules/dependency/index.js',
+  'output/merchant-onboarding/private-screenshot.jpg', 'outputs/private-preview.png',
+  'nested/outputs/private-preview.png', 'apps/web/.next-review/server/private.js',
   'apps/web/node_modules/dependency/index.js', 'apps/web/.next/server.js',
   'runpod_test.env', 'drapixai_runpod_test.tar',
 ];

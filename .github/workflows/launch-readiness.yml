@@ -228,11 +228,34 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Build production edge images
+        id: edge_build
         run: |
-          docker build -f apps/api/Dockerfile -t "drapixai-api:${GITHUB_SHA}" .
-          docker build -f apps/web/Dockerfile -t "drapixai-web:${GITHUB_SHA}" .
-      - name: Scan production edge images
+          docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" -f apps/api/Dockerfile -t "drapixai-api:${GITHUB_SHA}" .
+          docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" -f apps/web/Dockerfile -t "drapixai-web:${GITHUB_SHA}" .
+      - name: Verify native edge runtime compatibility
+        run: node scripts/verify-edge-container-runtime.mjs "drapixai-api:${GITHUB_SHA}" "drapixai-web:${GITHUB_SHA}"
+      - name: Scan production API image
+        if: ${{ !cancelled() && steps.edge_build.outcome == 'success' }}
+        env:
+          DRAPIXAI_CONTAINER_SCAN_EVIDENCE: runtime/launch-evidence/api-container-scan.json
         run: >-
           bash deploy/scripts/scan-container-images.sh
           "drapixai-api:${GITHUB_SHA}"
+      - name: Scan production web image
+        if: ${{ !cancelled() && steps.edge_build.outcome == 'success' }}
+        env:
+          DRAPIXAI_CONTAINER_SCAN_EVIDENCE: runtime/launch-evidence/web-container-scan.json
+        run: >-
+          bash deploy/scripts/scan-container-images.sh
           "drapixai-web:${GITHUB_SHA}"
+      - name: Retain edge runtime and scan evidence
+        if: ${{ !cancelled() && steps.edge_build.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: edge-security-evidence-${{ github.sha }}
+          path: |
+            runtime/launch-evidence/edge-runtime-*.json
+            runtime/launch-evidence/*-container-scan.json
+            runtime/launch-evidence/*-container-scan.reports/*.json
+          if-no-files-found: error
+          retention-days: 30

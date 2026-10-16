@@ -1746,8 +1746,8 @@ assertIncludes(auditLog, 'pg_advisory_xact_lock', 'Audit hash-chain appends must
 assertIncludes(auditLog, 'verifySecurityAuditChain', 'Operators must be able to verify the immutable audit chain');
 assertIncludes(apiDockerfile, 'USER nonroot', 'API container must run as the distroless non-root user');
 assertIncludes(webDockerfile, 'USER nonroot', 'Web container must run as the distroless non-root user');
-assertIncludes(apiDockerfile, 'gcr.io/distroless/nodejs22-debian12:nonroot', 'API runtime must use a supported distroless Node LTS image');
-assertIncludes(webDockerfile, 'gcr.io/distroless/nodejs22-debian12:nonroot', 'Web runtime must use a supported distroless Node LTS image');
+assertIncludes(apiDockerfile, 'gcr.io/distroless/nodejs22-debian13:nonroot', 'API runtime must use a supported distroless Node LTS image');
+assertIncludes(webDockerfile, 'gcr.io/distroless/nodejs22-debian13:nonroot', 'Web runtime must use a supported distroless Node LTS image');
 assertNotIncludes(apiDockerfile, 'node:20', 'API container must not reintroduce the EOL Node 20 runtime');
 assertNotIncludes(webDockerfile, 'node:20', 'Web container must not reintroduce the EOL Node 20 runtime');
 assertIncludes(nodeVersion, '22', 'Local and CI runtime selection must target supported Node 22 LTS');
@@ -1759,8 +1759,17 @@ assertIncludes(runpodSdkApiSetup, '[[ "$major" -ge 22 ]]', 'RunPod API setup mus
 assertIncludes(apiDockerfile, 'npm ci --include=dev', 'API build stage must install compiler dependencies before pruning them');
 assertIncludes(webDockerfile, 'npm ci --include=dev', 'Web build stage must install compiler dependencies before pruning them');
 assertIncludes(apiDockerfile, 'apt-get install -y --no-install-recommends openssl', 'API container must include the OpenSSL runtime required by Prisma');
-assertIncludes(apiDockerfile, 'apt-get install -y --no-install-recommends libssl3', 'API runtime must overlay the current security-patched OpenSSL library');
-assertIncludes(webDockerfile, 'apt-get install -y --no-install-recommends libssl3', 'Web runtime must overlay the current security-patched OpenSSL library');
+for (const dockerfile of [apiDockerfile, webDockerfile]) {
+  assertIncludes(dockerfile, 'node:22-trixie-slim@sha256:', 'Native dependencies must build on the same Debian release as the runtime');
+  assertIncludes(dockerfile, 'apt-get install -y --no-install-recommends libssl3t64', 'Edge runtimes must overlay the Debian 13 security-patched OpenSSL library');
+  assertIncludes(dockerfile, "ge '3.5.7-1~deb13u3'", 'Edge builds must refuse OpenSSL versions before the CVE-2026-84782 Debian fix');
+  assertNotIncludes(dockerfile, 'debian12', 'Edge runtimes must not retain the vulnerable Debian 12 OpenSSL ABI layer');
+}
+assertIncludes(launchWorkflow, 'node scripts/verify-edge-container-runtime.mjs', 'CI must exercise native dependencies and authenticated page protection inside the built edge containers');
+assertIncludes(launchWorkflow, 'org.opencontainers.image.revision=${GITHUB_SHA}', 'CI must label the scanned edge images with the exact tested commit');
+assertIncludes(launchWorkflow, 'runtime/launch-evidence/api-container-scan.json', 'CI must retain exact-image API scan evidence');
+assertIncludes(launchWorkflow, 'runtime/launch-evidence/web-container-scan.json', 'CI must retain exact-image web scan evidence independently of the API scan');
+assertIncludes(launchWorkflow, 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02', 'CI must retain scan evidence with a pinned artifact uploader');
 assertIncludes(containerScanScript, 'docker save --output', 'Container scanning must export an immutable image archive');
 assertIncludes(containerScanScript, '--input /scan/image.tar', 'Container scanning must inspect the exported archive');
 assertNotIncludes(containerScanScript, '/var/run/docker.sock', 'Container scanners must not receive Docker daemon control');
