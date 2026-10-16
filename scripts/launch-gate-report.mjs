@@ -4,14 +4,34 @@ import fs from "node:fs";
 import path from "node:path";
 import { prepareComposeEnvFiles } from "./lib/temporary-compose-env.mjs";
 
+const usage = "Usage: node scripts/launch-gate-report.mjs [--scope=repository|all] [--evidence=path]";
+const cliArgs = process.argv.slice(2);
+if (cliArgs.length === 1 && ["--help", "-h"].includes(cliArgs[0])) {
+  console.log(usage);
+  process.exit(0);
+}
+const seenOptions = new Set();
+for (const arg of cliArgs) {
+  const match = /^(--scope|--evidence)=(.+)$/.exec(arg);
+  if (!match || seenOptions.has(match[1])) {
+    console.error(usage);
+    process.exit(2);
+  }
+  seenOptions.add(match[1]);
+}
+const requestedScope = cliArgs.find((arg) => arg.startsWith("--scope="))?.slice("--scope=".length) ?? "all";
+const validScopes = new Set(["repository", "all"]);
+if (!validScopes.has(requestedScope)) {
+  console.error(usage);
+  process.exit(2);
+}
+
 const root = process.cwd();
 const configPath = path.join(root, "deploy", "launch-gates.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-const requestedScope = process.argv.find((arg) => arg.startsWith("--scope="))?.split("=")[1] ?? "all";
-const requestedEvidencePath = process.argv.find((arg) => arg.startsWith("--evidence="))?.slice("--evidence=".length);
+const requestedEvidencePath = cliArgs.find((arg) => arg.startsWith("--evidence="))?.slice("--evidence=".length);
 const evidencePath = path.resolve(root, requestedEvidencePath || path.join("runtime", "launch-evidence", "approved-evidence.json"));
 const evidenceRoot = path.join(root, "runtime", "launch-evidence");
-const validScopes = new Set(["repository", "all"]);
 
 const childProcessEnv = (overrides = {}) => {
   const env = { ...process.env, ...overrides, CI: "1", NO_COLOR: "1" };
@@ -21,11 +41,6 @@ const childProcessEnv = (overrides = {}) => {
   env.NPM_CONFIG_CACHE ||= path.join(root, "runtime", ".npm-cache");
   return env;
 };
-
-if (!validScopes.has(requestedScope)) {
-  console.error("Usage: node scripts/launch-gate-report.mjs [--scope=repository|all]");
-  process.exit(2);
-}
 
 const commandFor = (runner, args) => {
   if (runner === "npm" && process.platform === "win32") {

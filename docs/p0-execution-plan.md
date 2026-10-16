@@ -45,9 +45,12 @@ until their required evidence exists.
 ## Baseline
 
 Current execution note (2026-10-16): the owner confirmed staging has not been
-provisioned. Live deployment gates remain pending; next infrastructure work is
-to prepare the deployment package and obtain the host/provider/domain/access
-and spending decision. The ordered GPU workstation is not yet delivered.
+provisioned and the ordered GPU workstation has not arrived. The owner has
+on-site hardware and reports approximately INR 50,000 in total monthly business
+running costs; this is not an approved hosting budget. Prepare and verify CPU
+work on the existing laptop, then inspect and certify the delivered workstation.
+The proposed on-site deployment and its remaining live prerequisites are recorded
+in `docs/on-site-staging-plan.md`. Live deployment gates remain pending.
 API/web dependency remediation and local verification are recorded separately
 in `docs/security-remediation-2026-10-16.md`; this does not close AI image or live
 release gates.

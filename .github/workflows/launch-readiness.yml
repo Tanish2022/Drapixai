@@ -138,6 +138,7 @@ jobs:
         run: node scripts/verify-docker-build-context.mjs
       - name: Validate launch gate tooling and production CSP
         run: |
+          node --test scripts/launch-gate-report-cli.test.mjs
           node --check scripts/launch-gate-report.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('deploy/launch-gates.json', 'utf8'))"
           node scripts/verify-production-csp.mjs

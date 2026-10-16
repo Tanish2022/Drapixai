@@ -52,6 +52,19 @@ each have matching revision labels and zero HIGH/CRITICAL findings. The native
 runtime report records a clean tested checkout. This is evidence for that
 specific commit; later source changes require their own CI and artifact binding.
 
+[CI run 38918055914](https://github.com/Tanish2022/Drapixai/actions/runs/38918055914)
+also completed for clean commit `4c18b7e1418d88ce238884972c10d73759030293`.
+Application, secret-scan and container-scan jobs passed; the AI audit still
+failed on Accelerate 1.11.0 / `PYSEC-2026-3804`. Artifact ID 12053377005,
+`edge-security-evidence-4c18b7e1418d88ce238884972c10d73759030293`, has verified
+SHA-256 `5705d40370a312e4739671a1a3bbfefc3f87cd906dfc0745d700826ef472af92`.
+The downloaded raw scan hashes and image revision labels match. API image
+`sha256:ad784ae3b42e1a255eae3c989d5341942f687b801e90f2f41012c9183c88c6bc`
+and web image
+`sha256:2716d908cc7572e9f70f68a5b044b2ee225e19d5da7a25c4d84c570852c15a26`
+each record zero HIGH/CRITICAL findings; the native-runtime report passed with
+zero dirty source entries. The embedded-library review below remains open.
+
 Local candidate scans reported zero HIGH/CRITICAL OS or library findings for
 both images using the pinned scanner and unchanged policy. Native checks passed
 with UID 65532 and Debian `libssl3t64` 3.5.7-1~deb13u3. These candidate builds

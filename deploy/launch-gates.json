@@ -38,6 +38,12 @@
       "args": ["--test", "scripts/temporary-compose-env.test.mjs"]
     },
     {
+      "id": "gate-runner-cli",
+      "label": "Help and invalid gate-runner options cannot start verification processes",
+      "runner": "node",
+      "args": ["--test", "scripts/launch-gate-report-cli.test.mjs"]
+    },
+    {
       "id": "node-runtime",
       "label": "Supported Node.js release runtime",
       "runner": "node",
