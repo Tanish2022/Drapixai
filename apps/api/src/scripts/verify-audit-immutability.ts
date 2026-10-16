@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { appendSecurityAudit, verifySecurityAuditChain } from '../lib/audit-log';
 
 const prisma = new PrismaClient();
 
@@ -32,16 +33,13 @@ async function main() {
   }
 
   const unique = crypto.randomUUID();
-  const record = await prisma.securityAuditLog.create({
-    data: {
+  if (!(await verifySecurityAuditChain(prisma)).valid) throw new Error('Audit chain must be valid before mutation probes');
+  const record = await appendSecurityAudit(prisma, {
       actorRole: 'release-verifier',
       action: 'security.audit.immutability.verify',
       targetType: 'release',
       targetId: unique,
-      previousHash: `previous-${unique}`,
-      entryHash: `entry-${unique}`,
       metadata: { disposable: true }
-    }
   });
 
   await expectMutationRejected('UPDATE', () => prisma.$executeRawUnsafe(
@@ -62,6 +60,8 @@ async function main() {
     throw new Error('SecurityAuditLog verification row was altered despite immutable triggers');
   }
   console.log('PASS SecurityAuditLog row remains unchanged');
+  if (!(await verifySecurityAuditChain(prisma)).valid) throw new Error('Mutation probes must preserve a valid audit chain');
+  console.log('PASS immutability fixture preserves the real audit hash chain');
 }
 
 main()
