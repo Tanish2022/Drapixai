@@ -41,6 +41,14 @@ and [upstream proposed fix](https://github.com/huggingface/accelerate/pull/4138)
 This finding remains open and is not added to the exception list. The older
 clean-audit statement below is historical evidence, not the current result.
 
+An isolated CPU-tested patch review candidate is now prepared under
+`deploy/security/accelerate/`; see its `README.md` for exact-wheel provenance,
+real-loader negative controls, Linux CI scope and remaining approval requirements.
+It does not change any runtime requirements or audit exceptions. The original
+version remains 1.11.0, so a version bump cannot hide the finding. Independent
+review and exact-image GPU quality certification remain necessary before any
+integration or promotion.
+
 Rechecked September 19, 2026: Accelerate 1.15.0 exists, but its
 [checkpoint loader](https://github.com/huggingface/accelerate/blob/v1.15.0/src/accelerate/utils/modeling.py#L1786-L1794)
 still joins index values directly onto the checkpoint directory without the

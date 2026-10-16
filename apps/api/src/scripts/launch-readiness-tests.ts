@@ -1488,9 +1488,16 @@ assertIncludes(aiSecurityCandidate, 'huggingface_hub==1.23.0', 'Security candida
 assertIncludes(aiSecurityCandidate, 'safetensors==0.8.0', 'Security candidate must satisfy Transformers 5 safetensors requirements');
 assertIncludes(aiSecurityCandidate, 'rembg==2.0.69', 'Security candidate must retain the proven library-only rembg release');
 assertIncludes(launchWorkflow, 'pip-audit==2.9.0', 'Launch CI must install a pinned Python audit tool');
-assertIncludes(launchWorkflow, '--requirement drapixai_ai/requirements.security-candidate.txt', 'Launch CI must audit secure AI candidate pins');
-assertNotIncludes(launchWorkflow, '--no-deps', 'Launch CI must audit the complete resolved Python dependency graph');
-assertNotIncludes(launchWorkflow, '--disable-pip', 'Launch CI must resolve transitive Python dependencies');
+const aiAuditParts = launchWorkflow.split('      - name: Audit secure AI candidate pins\n');
+assert.strictEqual(aiAuditParts.length, 2, 'Launch CI must retain exactly one named blocking AI dependency audit');
+const aiAuditStep = aiAuditParts[1].split(/\n(?:      - |  \S)/)[0];
+assertIncludes(aiAuditStep, 'pip-audit', 'The required AI audit must still execute the dependency auditor');
+assertIncludes(aiAuditStep, '--requirement drapixai_ai/requirements.security-candidate.txt', 'Launch CI must audit secure AI candidate pins');
+// A separate disposable wheel test installs with --no-deps after resolving its
+// environment. The dependency auditor itself must always resolve transitives.
+assertNotIncludes(aiAuditStep, '--no-deps', 'Launch CI must audit the complete resolved Python dependency graph');
+assertNotIncludes(aiAuditStep, '--disable-pip', 'Launch CI must resolve transitive Python dependencies');
+assertNotIncludes(launchWorkflow, 'continue-on-error: true', 'Launch CI must not forgive a failing security audit or regression');
 assertIncludes(launchWorkflow, '--ignore-vuln PYSEC-2026-2274', 'Launch CI may suppress only the documented rembg path-traversal server advisory');
 assertIncludes(launchWorkflow, '--ignore-vuln GHSA-55v6-g8pm-pw4c', 'Launch CI may suppress only the documented rembg SSRF/CORS server advisory');
 assertIncludes(launchWorkflow, '--ignore-vuln PYSEC-2026-3447', 'Launch CI may suppress only the documented macOS sdist Setuptools advisory');
