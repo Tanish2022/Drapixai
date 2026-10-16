@@ -263,6 +263,12 @@
       "args": ["deploy/scripts/test-model-artifacts.py"]
     },
     {
+      "id": "disposable-billing-target",
+      "label": "Billing database fixture tests refuse unapproved or non-disposable targets before connecting",
+      "runner": "node",
+      "args": ["--test", "scripts/disposable-billing-guard.test.mjs"]
+    },
+    {
       "id": "python-compile",
       "label": "Production Python compile validation",
       "runner": "python",
