@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { DatabaseLockBusy, runDatabaseTransaction } from './database-transaction';
 
 type AuditInput = {
   actorUserId?: number | null;
@@ -51,15 +52,21 @@ const buildAuditHash = (payload: Record<string, unknown>, secret = auditSecret()
   .digest('hex');
 
 export const appendSecurityAudit = async (prisma: PrismaClient, input: AuditInput) => {
+  return runDatabaseTransaction(prisma, (transaction) => appendSecurityAuditInTransaction(transaction, input));
+};
+
+// Call through runDatabaseTransaction so a busy chain lock rolls back the whole
+// operation before retry. READ COMMITTED reads the latest locked predecessor.
+export const appendSecurityAuditInTransaction = async (transaction: Prisma.TransactionClient, input: AuditInput) => {
   const createdAt = new Date();
-  return prisma.$transaction(async (transaction) => {
-    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('drapixai-security-audit-chain'))`;
-    const previous = await transaction.securityAuditLog.findFirst({
-      orderBy: { id: 'desc' },
-      select: { entryHash: true },
-    });
-    const previousHash = previous?.entryHash || 'GENESIS';
-    const payload = {
+  const [lock] = await transaction.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext('drapixai-security-audit-chain')) AS acquired`;
+  if (!lock?.acquired) throw new DatabaseLockBusy();
+  const previous = await transaction.securityAuditLog.findFirst({
+    orderBy: { id: 'desc' },
+    select: { entryHash: true },
+  });
+  const previousHash = previous?.entryHash || 'GENESIS';
+  const payload = {
       actorUserId: input.actorUserId || null,
       actorRole: input.actorRole,
       action: input.action,
@@ -71,9 +78,9 @@ export const appendSecurityAudit = async (prisma: PrismaClient, input: AuditInpu
       metadata: input.metadata || null,
       previousHash,
       createdAt: createdAt.toISOString(),
-    };
-    const entryHash = buildAuditHash(payload);
-    return transaction.securityAuditLog.create({
+  };
+  const entryHash = buildAuditHash(payload);
+  return transaction.securityAuditLog.create({
       data: {
         actorUserId: input.actorUserId || null,
         actorRole: input.actorRole,
@@ -88,8 +95,7 @@ export const appendSecurityAudit = async (prisma: PrismaClient, input: AuditInpu
         entryHash,
         createdAt,
       },
-    });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  });
 };
 
 export const verifySecurityAuditChain = async (prisma: PrismaClient) => {

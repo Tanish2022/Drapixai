@@ -52,7 +52,11 @@ import {
   sanitizeUpstreamError,
   formatLogError,
 } from '../lib/security';
-import { getUserMonthlyUsage, incrementApiKeyUsage } from '../lib/usage';
+import { getUserMonthlyUsage, getUserQuotaUsage } from '../lib/usage';
+import {
+  QuotaTicket, reserveTryOnUsage, markUsageDispatched, releaseUndispatchedUsage,
+  commitTryOnResultUsage, commitLegacyRenderUsage,
+} from '../lib/quota-reservations';
 import { hasPermission, ownsTenantResource } from '../lib/authorization';
 import { appendSecurityAudit } from '../lib/audit-log';
 import { validateMultipartFields } from '../lib/input-validation';
@@ -700,14 +704,15 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
 
     // Get usage stats
     const now = new Date();
-    const rendersUsed = await getUserMonthlyUsage(prisma, user.id, now);
+    const { used: rendersUsed, reserved: quotaReserved } = await getUserQuotaUsage(prisma, user.id, now);
 
     res.json({ 
       valid: true,
       plan: plan.normalizedPlan,
       planName: plan.planName,
       rendersUsed,
-      quotaRemaining: Math.max(0, plan.quota - rendersUsed),
+      quotaReserved,
+      quotaRemaining: Math.max(0, plan.quota - rendersUsed - quotaReserved),
       quota: plan.quota,
       domain: finalWhitelist,
       selectedPlan: user.selectedPlan || null,
@@ -727,6 +732,7 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
  */
 router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnIntake, upload.single('image'), async (req: any, res: any) => {
   if (rejectInvalidMultipartFields(req, res)) return;
+  let usageTicket: QuotaTicket | null = null;
   try {
     const apiKey = req.apiKey;
     const user = req.user;
@@ -780,6 +786,10 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnInt
       });
     }
 
+    const admission = await reserveTryOnUsage(prisma, user.id, apiKey.id, crypto.randomUUID(), 'legacy_render', now);
+    if (!admission.ok) return res.status(admission.reason === 'QUOTA_EXCEEDED' ? 429 : 403).json({ error: admission.reason });
+    usageTicket = admission.ticket;
+
     // Read uploaded file
     const fileContent = fs.readFileSync(req.file.path);
     const fileExtension = path.extname(req.file.originalname) || '.jpg';
@@ -814,6 +824,7 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnInt
     });
 
     // Add job to Redis queue
+    await markUsageDispatched(prisma, usageTicket, render.id);
     await redis.lPush('render_queue', JSON.stringify({ 
       jobId: render.id,
       inputKey: inputKey,
@@ -825,7 +836,7 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnInt
     }));
 
     // Update usage count
-    await incrementApiKeyUsage(prisma, apiKey.id, now);
+    await commitLegacyRenderUsage(prisma, usageTicket);
 
     // Clean up temp file
     fs.unlinkSync(req.file.path);
@@ -846,6 +857,10 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnInt
     });
   } finally {
     removeUploadedFile(req.file);
+    if (usageTicket) {
+      await releaseUndispatchedUsage(prisma, usageTicket).catch((error) =>
+        console.error('Quota cleanup failed:', formatLogError(error)));
+    }
   }
 });
 
@@ -858,6 +873,7 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
   { name: 'cloth_image', maxCount: 1 }
 ]), async (req: any, res: any) => {
   if (rejectInvalidMultipartFields(req, res)) return;
+  let usageTicket: QuotaTicket | null = null;
   try {
     const apiKey = req.apiKey;
     const user = req.user;
@@ -1145,6 +1161,9 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
         cloth_cache_key: generationGarmentSource === 'cache' ? finalCacheKey : undefined
       };
 
+      const admission = await reserveTryOnUsage(prisma, user.id, apiKey.id, requestId, 'tryon');
+      if (!admission.ok) return res.status(admission.reason === 'QUOTA_EXCEEDED' ? 429 : 403).json({ error: admission.reason });
+      usageTicket = admission.ticket;
       const slot = await acquireTryOnSlot(user.id);
       if (!slot.ok) {
         const unavailable = slot.reason === 'CONCURRENCY_CONTROL_UNAVAILABLE';
@@ -1161,6 +1180,7 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
 
       let aiResponse: Response;
       try {
+        await markUsageDispatched(prisma, usageTicket);
         aiResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
           method: 'POST',
           headers: getAiHeaders({ 'Content-Type': 'application/json' }),
@@ -1225,8 +1245,7 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
         ? 'rejected'
         : 'generated';
 
-      const tryOnResult = await prisma.tryOnResult.create({
-        data: {
+      const tryOnResult = await commitTryOnResultUsage(prisma, usageTicket, {
           userId: user.id,
           apiKeyId: apiKey.id,
           requestId,
@@ -1244,7 +1263,6 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
           warnings: storedWarnings,
           status: resultStatus,
           rejectedAt: resultStatus === 'rejected' ? new Date() : undefined,
-        }
       });
 
       await appendSecurityAudit(prisma, {
@@ -1276,8 +1294,6 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
         });
       }
 
-      await incrementApiKeyUsage(prisma, apiKey.id, now);
-
       res.setHeader('Content-Type', contentType);
       res.setHeader('x-drapixai-tryon-result-id', String(tryOnResult.id));
       if (engine) res.setHeader('x-drapixai-engine', engine);
@@ -1299,6 +1315,10 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
       res.send(buffer);
     } finally {
       cleanupTryOnUploadFiles();
+      if (usageTicket) {
+        await releaseUndispatchedUsage(prisma, usageTicket).catch((error) =>
+          console.error('Quota cleanup failed:', formatLogError(error)));
+      }
     }
   } catch (error) {
     console.error('Try-on error:', formatLogError(error));

@@ -47,6 +47,7 @@ model User {
   verificationCodes               VerificationCode[]
   shopifyInstallations            ShopifyInstallation[]
   billingCheckoutAttempts         BillingCheckoutAttempt[]
+  usageReservations               UsageReservation[]
 }
 
 model ApiKey {
@@ -70,6 +71,7 @@ model ApiKey {
   tryOnResults        TryOnResult[]
   shopifyInstallation ShopifyInstallation?
   apiIdempotencyRecords ApiIdempotencyRecord[]
+  usageReservations   UsageReservation[]
 
   @@index([userId, kind, isActive])
   @@index([expiresAt])
@@ -127,6 +129,29 @@ model BillingUsagePeriod {
 
   @@unique([apiKeyId, periodStart, periodEnd])
   @@index([periodStart, periodEnd])
+}
+
+model UsageReservation {
+  id             String   @id @default(uuid())
+  requestId      String   @unique
+  userId         Int
+  apiKeyId       Int
+  kind           String
+  status         String   @default("reserved")
+  quota          Int
+  periodStart    DateTime
+  periodEnd      DateTime
+  admittedAt     DateTime
+  dispatchedAt   DateTime?
+  settledAt      DateTime?
+  tryOnResultId  Int?     @unique
+  renderId       Int?     @unique
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey         ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
+
+  @@index([userId, periodStart, periodEnd, status])
+  @@index([status, createdAt])
 }
 
 model EmailLog {

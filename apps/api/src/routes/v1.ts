@@ -11,7 +11,7 @@ import {
 } from '../lib/api-key-auth';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { getPlanAccessContext } from '../lib/plans';
-import { getUserMonthlyUsage, getUserUsagePeriod } from '../lib/usage';
+import { getUserQuotaUsage } from '../lib/usage';
 import { readStoredObject } from '../lib/storage';
 import { appendSecurityAudit } from '../lib/audit-log';
 import {
@@ -223,10 +223,7 @@ router.post('/tokens', serverKeyAuth, serverKeyRateLimit, async (req: any, res) 
 
 router.get('/usage', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requireScope('api:usage'), async (req: any, res) => {
   const plan = getPlanAccessContext(req.user);
-  const [used, usagePeriod] = await Promise.all([
-    getUserMonthlyUsage(prisma, req.user.id),
-    getUserUsagePeriod(prisma, req.user.id),
-  ]);
+  const { used, reserved, period: usagePeriod } = await getUserQuotaUsage(prisma, req.user.id);
   res.json({
     environment: getApiEnvironment(),
     period: usagePeriod
@@ -235,8 +232,9 @@ router.get('/usage', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requireS
     period_start: usagePeriod?.periodStart.toISOString() || null,
     period_end: usagePeriod?.periodEnd.toISOString() || null,
     approved_tryons: used,
+    reserved_tryons: reserved,
     quota: plan.quota,
-    remaining: Math.max(0, plan.quota - used),
+    remaining: Math.max(0, plan.quota - used - reserved),
     active: plan.active,
   });
 });

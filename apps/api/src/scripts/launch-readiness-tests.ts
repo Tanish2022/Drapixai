@@ -850,10 +850,14 @@ assertIncludes(analyticsRoute, 'router.use(analyticsRateLimit);', 'Analytics rou
 assertIncludes(analyticsRoute, 'router.use(requireDashboardProxy);', 'Analytics routes must require the same-origin dashboard proxy token');
 assertIncludes(analyticsRoute, "router.post('/sdk-preview-token'", 'Dashboard proxy must issue scoped SDK preview credentials');
 assertIncludes(analyticsRoute, 'issueDashboardPreviewToken', 'Dashboard preview endpoint must use centralized signed token issuance');
-assertIncludes(analyticsRoute, 'getUserDailyUsage, getUserMonthlyUsage', 'Dashboard analytics must aggregate usage across the brand account');
-assertIncludes(sdkRoute, 'getUserMonthlyUsage, incrementApiKeyUsage', 'SDK quota enforcement must aggregate usage while preserving per-key audit counts');
+assertIncludes(analyticsRoute, 'getUserDailyUsage, getUserQuotaUsage', 'Dashboard analytics must aggregate completed usage and durable holds across the brand account');
+assertIncludes(sdkRoute, 'getUserMonthlyUsage', 'SDK reporting must aggregate completed account usage');
+assertIncludes(sdkRoute, 'reserveTryOnUsage', 'SDK inference must reserve account quota before dispatch');
+assertIncludes(sdkRoute, 'commitTryOnResultUsage', 'SDK result creation and usage settlement must be atomic');
+assertNotIncludes(sdkRoute, 'incrementApiKeyUsage(', 'SDK routes must not bypass durable quota reservations');
 assertIncludes(usageLib, 'apiKey: { userId }', 'Usage totals must include every API key owned by the same brand account');
-assertIncludes(usageLib, 'prisma.$transaction([', 'Monthly and daily usage counters must update atomically');
+assertIncludes(usageLib, 'runDatabaseTransaction(prisma, async (transaction)', 'Monthly and daily usage counters must update atomically');
+assertIncludes(usageLib, 'pg_try_advisory_xact_lock', 'Usage writes and quota admission must share a non-blocking database account lock');
 assertIncludes(plansLib, 'getPlanAccessContext', 'Plan access helper must centralize launch billing gates');
 assertIncludes(plansLib, 'TRIAL_EXPIRED', 'Plan access helper must block expired trials');
 assertIncludes(plansLib, 'INACTIVE_SUBSCRIPTION_STATUSES', 'Plan access helper must block explicit inactive subscription states');
@@ -1645,7 +1649,8 @@ assertIncludes(shopifyRedactionService, 'DeleteObjectCommand', 'Shop redaction m
 assertIncludes(shopifyRedactionService, 'transaction.garmentMatch.deleteMany', 'Shop redaction must remove Shopify garment mappings');
 assertIncludes(shopifyRedactionService, 'transaction.garment.deleteMany', 'Shop redaction must remove Shopify-derived garment records');
 assertIncludes(shopifyRedactionService, 'transaction.catalogProduct.deleteMany', 'Shop redaction must remove Shopify catalog records');
-assertIncludes(shopifyRedactionService, 'transaction.apiKey.deleteMany', 'Shop redaction must remove the storefront API key');
+assertIncludes(shopifyRedactionService, 'transaction.apiKey.updateMany', 'Shop redaction must revoke and redact the storefront credential while preserving quota references');
+assertIncludes(shopifyRedactionService, "domainWhitelist: 'redacted.invalid'", 'Shop redaction must erase the domain on the revoked key');
 assertIncludes(shopifyRedactionService, "shopDomain: 'redacted.invalid'", 'Shop redaction must remove merchant domains from retained webhook audit rows');
 assertIncludes(aiServer, '@app.post("/ai/garment/cache/delete")', 'AI service must expose authenticated garment-cache deletion');
 assertIncludes(aiServer, 'Worker.all(connection=connection)', 'AI readiness must require a registered RQ worker');
@@ -1749,7 +1754,8 @@ assertIncludes(auditTruncateMigration, 'BEFORE TRUNCATE ON "SecurityAuditLog"', 
 assertIncludes(auditTruncateMigration, 'FOR EACH STATEMENT', 'Truncation protection must use a statement-level trigger');
 assertIncludes(auditImmutabilityVerifier, "expectMutationRejected('TRUNCATE'", 'Database certification must test actual truncation rejection');
 assertIncludes(auditImmutabilityVerifier, 'I_ACKNOWLEDGE_DISPOSABLE_DATABASE', 'Destructive audit tests must require disposable-database approval');
-assertIncludes(auditLog, 'pg_advisory_xact_lock', 'Audit hash-chain appends must serialize concurrent writers');
+assertIncludes(auditLog, 'pg_try_advisory_xact_lock', 'Audit hash-chain appends must serialize writers without blocking the connection pool');
+assertIncludes(auditLog, 'throw new DatabaseLockBusy()', 'A busy audit-chain lock must roll back the caller before retry');
 assertIncludes(auditLog, 'verifySecurityAuditChain', 'Operators must be able to verify the immutable audit chain');
 assertIncludes(apiDockerfile, 'USER nonroot', 'API container must run as the distroless non-root user');
 assertIncludes(webDockerfile, 'USER nonroot', 'Web container must run as the distroless non-root user');

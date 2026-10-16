@@ -19,6 +19,7 @@ type UsageData = {
   rendersUsed: number;
   quota: number;
   quotaRemaining: number;
+  quotaReserved?: number;
   domain?: string;
   storeConnected?: boolean;
   companyName?: string | null;
@@ -195,6 +196,7 @@ export default function SubscriptionPage() {
             <Gauge className="w-8 h-8 text-[#31725b] mb-4" />
             <p className={`text-sm mb-2 ${mutedTextClass}`}>Usage This Period</p>
             <p className="text-2xl font-bold">{usage.rendersUsed} / {usage.quota}</p>
+            {(usage.quotaReserved || 0) > 0 && <p className={`mt-2 text-xs ${mutedTextClass}`}>{usage.quotaReserved} try-on(s) are in progress or awaiting confirmation. They are not yet counted as completed usage. Contact support if they remain pending.</p>}
             <p className={`text-xs mt-2 ${isQuotaExhausted ? (themePreference === 'light' ? 'text-rose-700' : 'text-rose-300') : isQuotaLow ? (themePreference === 'light' ? 'text-amber-700' : 'text-amber-300') : mutedTextClass}`}>
               {isQuotaExhausted ? 'No try-ons remaining this period' : `${usage.quotaRemaining} try-ons remaining`}
             </p>

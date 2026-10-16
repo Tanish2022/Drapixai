@@ -24,6 +24,7 @@ interface UsageData {
   rendersUsed: number;
   quota: number;
   quotaRemaining: number;
+  quotaReserved?: number;
   trialDaysLeft: number;
   domain?: string;
   storeConnected?: boolean;
@@ -981,6 +982,7 @@ export default function Dashboard() {
           <div className={subtleCardClass}>
             <p className={`text-sm ${mutedTextClass}`}>Quota Remaining</p>
             <p className={`text-2xl font-bold ${isQuotaExhausted ? (themePreference === 'light' ? 'text-rose-700' : 'text-rose-300') : strongTextClass}`}>{usage.quotaRemaining}</p>
+            {(usage.quotaReserved || 0) > 0 && <p className={`mt-2 text-xs ${mutedTextClass}`}>{usage.quotaReserved} try-on(s) are in progress or awaiting confirmation. They are not yet counted as completed usage. Contact support if they remain pending.</p>}
             <p className={`text-xs mt-2 ${isQuotaExhausted ? (themePreference === 'light' ? 'text-rose-700' : 'text-rose-300') : isQuotaLow ? (themePreference === 'light' ? 'text-amber-700' : 'text-amber-300') : mutedTextClass}`}>
               {isQuotaExhausted ? 'Upgrade required before more try-ons can run' : isQuotaLow ? 'Plan is close to its limit' : 'Current period remaining'}
             </p>

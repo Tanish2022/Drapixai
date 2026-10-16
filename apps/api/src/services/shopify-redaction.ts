@@ -83,7 +83,12 @@ export const redactShopifyInstallationData = async (
     }
     await transaction.shopifyInstallation.delete({ where: { id: installation.id } });
     if (installation.storefrontApiKeyId) {
-      await transaction.apiKey.deleteMany({ where: { id: installation.storefrontApiKeyId } });
+      // Preserve quota/financial references while removing the storefront
+      // identity and access. Deleting a key must never erase in-flight holds.
+      await transaction.apiKey.updateMany({ where: { id: installation.storefrontApiKeyId }, data: {
+        isActive: false, revokedAt: new Date(), expiresAt: new Date(),
+        domainWhitelist: 'redacted.invalid', label: null, scopes: '',
+      } });
     }
     await transaction.shopifyWebhookEvent.updateMany({
       where: { shopDomain: installation.shopDomain },

@@ -5,7 +5,7 @@ import { issueApiKeyForUser, issueDashboardPreviewToken, resolveActiveApiKey } f
 import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { getPlanAccessContext, getPlanName } from '../lib/plans';
 import { getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality';
-import { getUserDailyUsage, getUserMonthlyUsage } from '../lib/usage';
+import { getUserDailyUsage, getUserQuotaUsage } from '../lib/usage';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -29,7 +29,7 @@ router.get('/summary', async (req, res) => {
   
   const user = await prisma.user.findUnique({ where: { id: validKey.userId } });
   const now = new Date();
-  const rendersUsed = await getUserMonthlyUsage(prisma, validKey.userId, now);
+  const { used: rendersUsed, reserved: quotaReserved } = await getUserQuotaUsage(prisma, validKey.userId, now);
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   start.setUTCDate(start.getUTCDate() - 13);
   const daily = await getUserDailyUsage(prisma, validKey.userId, start);
@@ -117,8 +117,9 @@ router.get('/summary', async (req, res) => {
     planType: plan.normalizedPlan,
     planName: plan.planName,
     rendersUsed,
+    quotaReserved,
     quota: plan.quota,
-    quotaRemaining: Math.max(0, plan.quota - rendersUsed),
+    quotaRemaining: Math.max(0, plan.quota - rendersUsed - quotaReserved),
     email: user?.email || null,
     companyName: user?.companyName || null,
     selectedPlan: user?.selectedPlan || null,

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { getUserMonthlyUsage, incrementApiKeyUsage } from '../lib/usage';
 import { requireDisposableDatabase } from '../lib/disposable-database';
+import { verifyQuotaReservations } from './quota-reservation-database-tests';
 
 const cleanupFixtures = async (prisma: PrismaClient, userIds: number[]) => {
   if (!userIds.length) return;
@@ -13,6 +14,9 @@ const cleanupFixtures = async (prisma: PrismaClient, userIds: number[]) => {
   const apiKeyIds = users.flatMap((user) => user.apiKeys.map((apiKey) => apiKey.id));
   if (apiKeyIds.length > 0) {
     await prisma.$transaction([
+      prisma.usageReservation.deleteMany({ where: { userId: { in: userIds } } }),
+      prisma.tryOnResult.deleteMany({ where: { userId: { in: userIds } } }),
+      prisma.render.deleteMany({ where: { apiKeyId: { in: apiKeyIds } } }),
       prisma.billingUsagePeriod.deleteMany({ where: { apiKeyId: { in: apiKeyIds } } }),
       prisma.usageDaily.deleteMany({ where: { apiKeyId: { in: apiKeyIds } } }),
       prisma.usage.deleteMany({ where: { apiKeyId: { in: apiKeyIds } } }),
@@ -113,6 +117,7 @@ const main = async () => {
     console.log('PASS concurrent cross-key usage increments and revoked-key accounting');
     console.log('PASS duplicate billing webhook event rejected');
     console.log('PASS duplicate Stripe customer mapping rejected');
+    await verifyQuotaReservations(prisma, userIds);
     const sentinel = await prisma.user.create({ data: {
       email: `billing-db-preserve-${marker}@example.invalid`, passwordHash: 'synthetic-not-a-login',
     } });

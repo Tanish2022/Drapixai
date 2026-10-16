@@ -34,7 +34,7 @@ reservation at a concurrent limit, production migrations, tax approval, real-job
 charging or live staging readiness. Those requirements remain open. No payment
 provider is contacted and no billing or Standard inference behavior changes.
 
-## Quota admission remains open
+## Quota admission remediation
 
 Source inspection also confirms a gap that these increment tests cannot close:
 `/sdk/tryon` reads monthly usage before acquiring the GPU slot, releases the slot
@@ -43,9 +43,9 @@ the remaining quota before either records its usage, even with a one-request
 tenant slot. The legacy render path also checks then increments separately.
 The Redis slot limits inference concurrency; it is not an atomic quota reservation.
 
-The next accounting change needs durable, account-wide admission and exactly-once
-completion/release semantics, covering multiple keys/API replicas, period rollover,
-quality rejection, worker/API failure and retry reconciliation. Verify those
-state transitions in disposable database tests and the live job journey. Do not
-mark quota correctness complete because concurrent counter increments pass, or
-hold a database transaction open across GPU inference to hide this race.
+The durable reservation implementation and real-database tests now address
+account-wide admission, exactly-once settlement, period rollover, quality
+rejection and pre-dispatch release. See `docs/quota-reservations.md` for the
+state transitions, migration/rollout requirements and verified CPU scope. Live
+job-journey verification and reconciliation of ambiguous dispatched work remain
+open; do not mark the entire billing gate complete from counter or fixture tests.
