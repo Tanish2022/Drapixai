@@ -205,6 +205,8 @@ jobs:
           python -m drapixai_ai.scripts.validate_garment_skin_detection
           python -m drapixai_ai.scripts.validate_tryon_scorer_neutral_garments
           python deploy/runpod/validate_upper_body_50_tooling.py
+      - name: Concurrency evidence negative controls
+        run: python deploy/scripts/test-concurrency-benchmark.py
       - name: Deployment shell syntax
         run: |
           find deploy -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n

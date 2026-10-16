@@ -39,6 +39,19 @@ add an exception or infer safety merely because ordinary HTTPS uses TLS.
 
 ## Verification boundary
 
+[CI run 38916503402](https://github.com/Tanish2022/Drapixai/actions/runs/38916503402)
+tested clean commit `11a57a70893392b19dd2da79938616eb4da59610`. Application,
+secret-scan and container-scan jobs passed. The AI audit remained blocking.
+The retained artifact `edge-security-evidence-11a57a70893392b19dd2da79938616eb4da59610`
+(artifact ID 12052179645) has SHA-256
+`826b068ebe9ee73e26f9312928d56881c956e511d7da35780c87d26092f01f9a`.
+Downloaded artifact bytes and the raw reports' recorded hashes were verified.
+API image `sha256:f40b35a21198229408b4e75f51ca16429812138f3e6d1c1e3c36190ef0047328`
+and web image `sha256:6caf7664c36c881416fae902031ed627e6fc07fc6d07140e8e773bcd135a1e73`
+each have matching revision labels and zero HIGH/CRITICAL findings. The native
+runtime report records a clean tested checkout. This is evidence for that
+specific commit; later source changes require their own CI and artifact binding.
+
 Local candidate scans reported zero HIGH/CRITICAL OS or library findings for
 both images using the pinned scanner and unchanged policy. Native checks passed
 with UID 65532 and Debian `libssl3t64` 3.5.7-1~deb13u3. These candidate builds

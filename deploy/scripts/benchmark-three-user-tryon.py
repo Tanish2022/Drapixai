@@ -24,7 +24,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--quality-threshold", type=float, default=0.95)
     parser.add_argument("--latency-target-ms", type=int, default=12000)
     parser.add_argument("--minimum-headroom-ratio", type=float, default=0.20)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not math.isfinite(args.quality_threshold) or not 0.95 <= args.quality_threshold <= 1:
+        parser.error("--quality-threshold must be finite and between 0.95 and 1")
+    if not math.isfinite(args.minimum_headroom_ratio) or not 0.20 <= args.minimum_headroom_ratio < 1:
+        parser.error("--minimum-headroom-ratio must be finite, at least 0.20 and below 1")
+    if not 0 < args.latency_target_ms <= 12000:
+        parser.error("--latency-target-ms must be positive and at most 12000")
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
+    return args
 
 
 def load_manifest(path: Path) -> list[dict[str, Any]]:
@@ -55,10 +64,38 @@ def parse_json_header(response: requests.Response, name: str) -> dict[str, Any]:
     if not value:
         return {}
     try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError:
+        parsed = json.loads(value, parse_constant=reject_nonfinite_json, parse_float=finite_json_float)
+    except ValueError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def reject_nonfinite_json(value: str) -> None:
+    raise ValueError("Non-finite timing value")
+
+
+def finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError("Non-finite timing value")
+    return parsed
+
+
+def finite_float(value: Any) -> float:
+    try:
+        result = float(value or 0)
+        return result if math.isfinite(result) else 0.0
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+
+
+def finite_int(value: Any) -> int:
+    try:
+        if isinstance(value, bool) or isinstance(value, float) and not value.is_integer():
+            return 0
+        return int(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
 
 
 def run_case(
@@ -125,18 +162,44 @@ def run_case(
         "id": case_id,
         "output": str(output_path),
         "status": response.status_code,
-        "quality_score": float(response.headers.get("x-drapixai-quality-score") or 0),
-        "candidate_count": int(response.headers.get("x-drapixai-candidate-count") or 0),
+        "quality_score": finite_float(response.headers.get("x-drapixai-quality-score")),
+        "candidate_count": finite_int(response.headers.get("x-drapixai-candidate-count")),
         "warnings": warnings,
-        "processing_ms": int(response.headers.get("x-drapixai-processing-ms") or 0),
+        "processing_ms": finite_int(response.headers.get("x-drapixai-processing-ms")),
         "wall_ms": wall_ms,
-        "worker_batch_size": int(timing.get("worker_batch_size") or 0),
-        "gpu_peak_allocated_mb": int(timing.get("gpu_peak_allocated_mb") or 0),
-        "gpu_peak_reserved_mb": int(timing.get("gpu_peak_reserved_mb") or 0),
-        "gpu_total_mb": int(timing.get("gpu_total_mb") or 0),
-        "gpu_headroom_ratio": float(timing.get("gpu_headroom_ratio") or 0),
+        "worker_batch_size": finite_int(timing.get("worker_batch_size")),
+        "gpu_peak_allocated_mb": finite_int(timing.get("gpu_peak_allocated_mb")),
+        "gpu_peak_reserved_mb": finite_int(timing.get("gpu_peak_reserved_mb")),
+        "gpu_total_mb": finite_int(timing.get("gpu_total_mb")),
+        "gpu_headroom_ratio": finite_float(timing.get("gpu_headroom_ratio")),
         "timings": timing,
     }
+
+
+def result_failures(result: dict[str, Any], args: argparse.Namespace) -> list[str]:
+    failures: list[str] = []
+    if result.get("error"):
+        failures.append(f"{result['id']}: {result['error']}")
+    if result["candidate_count"] != 1:
+        failures.append(f"{result['id']}: candidate_count is not 1")
+    if result["worker_batch_size"] != 3:
+        failures.append(f"{result['id']}: worker batch was {result['worker_batch_size']}, expected 3")
+    if not math.isfinite(result["quality_score"]) or not args.quality_threshold <= result["quality_score"] <= 1:
+        failures.append(f"{result['id']}: quality score is invalid or below threshold")
+    if result["warnings"]:
+        failures.append(f"{result['id']}: warnings present")
+    if not math.isfinite(result["gpu_headroom_ratio"]) or not args.minimum_headroom_ratio <= result["gpu_headroom_ratio"] < 1:
+        failures.append(f"{result['id']}: GPU headroom is invalid or below threshold")
+    total, reserved, allocated = result["gpu_total_mb"], result["gpu_peak_reserved_mb"], result["gpu_peak_allocated_mb"]
+    if not 0 < allocated <= reserved <= total or total <= 0:
+        failures.append(f"{result['id']}: GPU memory measurements are missing or inconsistent")
+    else:
+        measured_headroom = (total - reserved) / total
+        if measured_headroom < args.minimum_headroom_ratio or abs(measured_headroom - result["gpu_headroom_ratio"]) > 0.0001:
+            failures.append(f"{result['id']}: reserved VRAM does not support reported headroom")
+    if result["wall_ms"] <= 0 or result["wall_ms"] > args.latency_target_ms:
+        failures.append(f"{result['id']}: wall latency is invalid or above target")
+    return failures
 
 
 def main() -> int:
@@ -162,30 +225,25 @@ def main() -> int:
             for index, case in enumerate(cases)
         }
         for future in as_completed(futures):
-            results.append(future.result())
+            try:
+                results.append(future.result())
+            except Exception:
+                index = futures[future]
+                results.append({
+                    "id": str(cases[index].get("id") or f"case-{index + 1}"),
+                    "output": None, "status": 0, "quality_score": 0.0,
+                    "candidate_count": 0, "warnings": [], "processing_ms": 0,
+                    "wall_ms": 0, "worker_batch_size": 0,
+                    "gpu_peak_allocated_mb": 0, "gpu_peak_reserved_mb": 0,
+                    "gpu_total_mb": 0, "gpu_headroom_ratio": 0.0,
+                    "timings": {}, "error": "BENCHMARK_WORKER_FAILED",
+                })
     wall_total_ms = int((time.perf_counter() - wall_start) * 1000)
     results.sort(key=lambda item: item["id"])
 
     failures: list[str] = []
     for result in results:
-        if result["candidate_count"] != 1:
-            failures.append(f"{result['id']}: candidate_count is not 1")
-        if result["worker_batch_size"] != 3:
-            failures.append(
-                f"{result['id']}: worker batch was {result['worker_batch_size']}, expected 3"
-            )
-        if result["quality_score"] < args.quality_threshold:
-            failures.append(
-                f"{result['id']}: quality {result['quality_score']:.4f} below "
-                f"{args.quality_threshold:.4f}"
-            )
-        if result["warnings"]:
-            failures.append(f"{result['id']}: warnings={result['warnings']}")
-        if result["gpu_headroom_ratio"] < args.minimum_headroom_ratio:
-            failures.append(
-                f"{result['id']}: GPU headroom {result['gpu_headroom_ratio']:.4f} below "
-                f"{args.minimum_headroom_ratio:.4f}"
-            )
+        failures.extend(result_failures(result, args))
 
     wall_values = [result["wall_ms"] for result in results]
     p95_wall_ms = percentile(wall_values, 0.95)
@@ -203,6 +261,8 @@ def main() -> int:
         "quality_threshold": args.quality_threshold,
         "latency_target_ms": args.latency_target_ms,
         "minimum_headroom_ratio": args.minimum_headroom_ratio,
+        "accepted_requests": sum(not result_failures(result, args) for result in results),
+        "failed_or_rejected_requests": sum(bool(result_failures(result, args)) for result in results),
         "results": results,
         "failures": failures,
     }

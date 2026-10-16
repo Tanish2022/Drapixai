@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import os
+import re
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,7 +17,7 @@ import requests
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Certify three simultaneous tenants through DrapixAI public API v1."
+        description="Measure three or four simultaneous tenants through DrapixAI public API v1; visual and release approval are separate."
     )
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--base-url", required=True, help="Example: https://api.staging.drapixai.com/v1")
@@ -24,7 +25,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--quality-threshold", type=float, default=0.95)
     parser.add_argument("--latency-target-ms", type=int, default=12000)
-    parser.add_argument("--required-worker-batch-size", type=int, default=3)
+    parser.add_argument("--concurrent-tenants", type=int, choices=(3, 4), default=3)
+    parser.add_argument("--required-worker-batch-size", type=int, default=None)
     parser.add_argument("--minimum-headroom-ratio", type=float, default=0.20)
     parser.add_argument(
         "--retain-output-images",
@@ -32,30 +34,61 @@ def parse_args() -> argparse.Namespace:
         help="Save generated test PNGs for consented internal visual review. Disabled by default.",
     )
     args = parser.parse_args()
-    if args.required_worker_batch_size < 1 or args.required_worker_batch_size > 3:
-        parser.error("--required-worker-batch-size must be between 1 and 3")
-    if args.minimum_headroom_ratio < 0 or args.minimum_headroom_ratio >= 1:
-        parser.error("--minimum-headroom-ratio must be at least 0 and below 1")
+    if args.required_worker_batch_size is None:
+        args.required_worker_batch_size = args.concurrent_tenants
+    if args.required_worker_batch_size != args.concurrent_tenants:
+        parser.error("--required-worker-batch-size must equal --concurrent-tenants; queued or fallback execution cannot certify a full batch")
+    if not math.isfinite(args.quality_threshold) or not 0.95 <= args.quality_threshold <= 1:
+        parser.error("--quality-threshold must be finite and between 0.95 and 1")
+    if not math.isfinite(args.minimum_headroom_ratio) or not 0.20 <= args.minimum_headroom_ratio < 1:
+        parser.error("--minimum-headroom-ratio must be finite, at least 0.20 and below 1")
+    if not 0 < args.latency_target_ms <= 12000:
+        parser.error("--latency-target-ms must be positive and at most 12000")
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
     return args
 
 
-def load_manifest(path: Path) -> list[dict[str, Any]]:
+def load_manifest(path: Path, concurrent_tenants: int = 3) -> list[dict[str, Any]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     cases = payload.get("cases") if isinstance(payload, dict) else payload
-    if not isinstance(cases, list) or len(cases) != 3:
-        raise ValueError("Manifest must contain exactly three tenant cases")
+    if concurrent_tenants not in (3, 4) or not isinstance(cases, list) or len(cases) != concurrent_tenants:
+        raise ValueError(f"Manifest must contain exactly {concurrent_tenants} tenant cases")
     token_envs: set[str] = set()
+    token_values: set[str] = set()
+    case_ids: set[str] = set()
     for index, case in enumerate(cases):
+        if not isinstance(case, dict):
+            raise ValueError(f"Case {index + 1} must be an object")
         for required in ("id", "person", "product_id", "token_env"):
             if not case.get(required):
                 raise ValueError(f"Case {index + 1} is missing {required}")
+        case_id = str(case["id"])
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", case_id) or case_id in case_ids:
+            raise ValueError("Every case needs a unique safe ID")
+        case_ids.add(case_id)
         token_env = str(case["token_env"])
         if token_env in token_envs:
             raise ValueError("Every case must use a distinct tenant token environment variable")
         token_envs.add(token_env)
-        if not os.getenv(token_env):
+        token_value = os.getenv(token_env)
+        if not token_value:
             raise ValueError(f"Required token environment variable is unset: {token_env}")
+        if token_value in token_values:
+            raise ValueError("Every case must use a distinct tenant credential, not aliases of one token")
+        token_values.add(token_value)
     return cases
+
+
+def reject_nonfinite_json(value: str) -> None:
+    raise ValueError("Non-finite timing value")
+
+
+def finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError("Non-finite timing value")
+    return parsed
 
 
 def parse_timing_header(response: requests.Response) -> dict[str, Any]:
@@ -63,8 +96,8 @@ def parse_timing_header(response: requests.Response) -> dict[str, Any]:
     if not value:
         return {}
     try:
-        payload = json.loads(value)
-    except json.JSONDecodeError:
+        payload = json.loads(value, parse_constant=reject_nonfinite_json, parse_float=finite_json_float)
+    except ValueError:
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -77,14 +110,15 @@ def percentile(values: list[int], value: float) -> int:
 def _int_header(response: requests.Response, name: str) -> int:
     try:
         return int(response.headers.get(name) or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
 def _float_header(response: requests.Response, name: str) -> float:
     try:
-        return float(response.headers.get(name) or 0)
-    except (TypeError, ValueError):
+        value = float(response.headers.get(name) or 0)
+        return value if math.isfinite(value) else 0.0
+    except (TypeError, ValueError, OverflowError):
         return 0.0
 
 
@@ -195,19 +229,27 @@ def run_case(
 
 def _int_header_from_timing(timing: dict[str, Any], name: str) -> int:
     try:
-        return int(timing.get(name) or 0)
-    except (TypeError, ValueError):
+        value = timing.get(name)
+        if isinstance(value, bool) or isinstance(value, float) and not value.is_integer():
+            return 0
+        return int(value or 0)
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
 def _float_header_from_timing(timing: dict[str, Any], name: str) -> float:
     try:
-        return float(timing.get(name) or 0)
-    except (TypeError, ValueError):
+        if isinstance(timing.get(name), bool):
+            return 0.0
+        value = float(timing.get(name) or 0)
+        return value if math.isfinite(value) else 0.0
+    except (TypeError, ValueError, OverflowError):
         return 0.0
 
-def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str, Any]], base_url: str, timeout: int) -> list[str]:
+def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str, Any]], base_url: str, timeout: int, probe_counts: dict[str, int] | None = None) -> list[str]:
     failures: list[str] = []
+    counts = probe_counts if probe_counts is not None else {}
+    counts.update(owner_attempts=0, cross_attempts=0, cross_denials=0)
     by_id = {str(case["id"]): case for case in cases}
     for result in results:
         if not result["tryon_id"]:
@@ -216,6 +258,7 @@ def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str
         owner_case = by_id[result["id"]]
         owner_token = os.environ[str(owner_case["token_env"])]
         try:
+            counts["owner_attempts"] += 1
             own_response = requests.get(
                 f"{base_url.rstrip('/')}/tryons/{result['tryon_id']}",
                 headers={"Authorization": f"Bearer {owner_token}"},
@@ -232,7 +275,7 @@ def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str
             except ValueError:
                 failures.append(f"{result['id']}: owner metadata lookup was not valid JSON")
             else:
-                if str(metadata.get("product_id")) != result["product_id"]:
+                if not isinstance(metadata, dict) or str(metadata.get("product_id")) != result["product_id"]:
                     failures.append(f"{result['id']}: result/product association changed")
 
         for other_case in cases:
@@ -240,6 +283,7 @@ def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str
                 continue
             other_token = os.environ[str(other_case["token_env"])]
             try:
+                counts["cross_attempts"] += 1
                 cross_response = requests.get(
                     f"{base_url.rstrip('/')}/tryons/{result['tryon_id']}",
                     headers={"Authorization": f"Bearer {other_token}"},
@@ -252,17 +296,51 @@ def verify_tenant_boundaries(cases: list[dict[str, Any]], results: list[dict[str
                 failures.append(
                     f"{other_case['id']} could probe {result['id']} result: {cross_response.status_code}"
                 )
+            else:
+                counts["cross_denials"] += 1
     return failures
+
+def result_failures(result: dict[str, Any], args: argparse.Namespace) -> list[str]:
+    failures: list[str] = []
+    if result.get("error"):
+        failures.append(f"{result['id']}: {result['error']}")
+    if result["candidate_count"] != 1:
+        failures.append(f"{result['id']}: candidate_count is not 1")
+    if not math.isfinite(result["quality_score"]) or not args.quality_threshold <= result["quality_score"] <= 1:
+        failures.append(f"{result['id']}: quality score is invalid or below threshold")
+    if result["warnings"]:
+        failures.append(f"{result['id']}: warnings present")
+    if result["media_retention"] != "transient-only":
+        failures.append(f"{result['id']}: media retention contract missing")
+    if result["training_use"] != "none":
+        failures.append(f"{result['id']}: no-training contract missing")
+    if result["worker_batch_size"] != args.required_worker_batch_size:
+        failures.append(f"{result['id']}: worker batch was {result['worker_batch_size']}, expected {args.required_worker_batch_size}")
+    if not math.isfinite(result["gpu_headroom_ratio"]) or not args.minimum_headroom_ratio <= result["gpu_headroom_ratio"] < 1:
+        failures.append(f"{result['id']}: GPU headroom is invalid or below threshold")
+    total = result["gpu_total_mb"]
+    reserved = result["gpu_peak_reserved_mb"]
+    allocated = result["gpu_peak_allocated_mb"]
+    if not 0 < allocated <= reserved <= total or total <= 0:
+        failures.append(f"{result['id']}: GPU memory measurements are missing or inconsistent")
+    else:
+        measured_headroom = (total - reserved) / total
+        if measured_headroom < args.minimum_headroom_ratio or abs(measured_headroom - result["gpu_headroom_ratio"]) > 0.0001:
+            failures.append(f"{result['id']}: reserved VRAM does not support reported headroom")
+    if result["wall_ms"] <= 0 or result["wall_ms"] > args.latency_target_ms:
+        failures.append(f"{result['id']}: wall latency is invalid or above target")
+    return failures
+
 
 def main() -> int:
     args = parse_args()
-    cases = load_manifest(Path(args.manifest).expanduser().resolve())
+    cases = load_manifest(Path(args.manifest).expanduser().resolve(), args.concurrent_tenants)
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
 
     wall_started = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=args.concurrent_tenants) as executor:
         futures = [
             executor.submit(
                 run_case,
@@ -284,33 +362,16 @@ def main() -> int:
     wall_total_ms = int((time.perf_counter() - wall_started) * 1000)
     results.sort(key=lambda item: item["id"])
 
-    failures = verify_tenant_boundaries(cases, results, args.base_url, args.timeout)
+    probe_counts: dict[str, int] = {}
+    failures = verify_tenant_boundaries(cases, results, args.base_url, args.timeout, probe_counts)
+    required_cross_probes = args.concurrent_tenants * (args.concurrent_tenants - 1)
+    if probe_counts.get("cross_denials", 0) != required_cross_probes:
+        failures.append("Not all required cross-tenant denial probes passed")
     result_ids = [item["tryon_id"] for item in results]
-    if any(not item for item in result_ids) or len(set(result_ids)) != 3:
-        failures.append("Three unique try-on result IDs were not returned")
+    if any(not item for item in result_ids) or len(set(result_ids)) != args.concurrent_tenants:
+        failures.append(f"{args.concurrent_tenants} unique try-on result IDs were not returned")
     for result in results:
-        if result.get("error"):
-            failures.append(f"{result['id']}: {result['error']}")
-        if result["candidate_count"] != 1:
-            failures.append(f"{result['id']}: candidate_count is not 1")
-        if result["quality_score"] < args.quality_threshold:
-            failures.append(f"{result['id']}: quality score is below threshold")
-        if result["warnings"]:
-            failures.append(f"{result['id']}: warnings={result['warnings']}")
-        if result["media_retention"] != "transient-only":
-            failures.append(f"{result['id']}: media retention contract missing")
-        if result["training_use"] != "none":
-            failures.append(f"{result['id']}: no-training contract missing")
-        if result["worker_batch_size"] != args.required_worker_batch_size:
-            failures.append(
-                f"{result['id']}: worker batch was {result['worker_batch_size']}, "
-                f"expected {args.required_worker_batch_size}"
-            )
-        if result["gpu_headroom_ratio"] < args.minimum_headroom_ratio:
-            failures.append(
-                f"{result['id']}: GPU headroom {result['gpu_headroom_ratio']:.4f} below "
-                f"{args.minimum_headroom_ratio:.4f}"
-            )
+        failures.extend(result_failures(result, args))
 
     p95_wall_ms = percentile([result["wall_ms"] for result in results], 0.95)
     if p95_wall_ms > args.latency_target_ms:
@@ -319,7 +380,7 @@ def main() -> int:
     report = {
         "status": "PASS" if not failures else "FAIL",
         "base_url": args.base_url,
-        "target_concurrent_tenants": 3,
+        "target_concurrent_tenants": args.concurrent_tenants,
         "wall_total_ms": wall_total_ms,
         "p95_wall_ms": p95_wall_ms,
         "quality_threshold": args.quality_threshold,
@@ -327,7 +388,12 @@ def main() -> int:
         "required_worker_batch_size": args.required_worker_batch_size,
         "minimum_headroom_ratio": args.minimum_headroom_ratio,
         "output_images_retained": args.retain_output_images,
-        "cross_tenant_probes": 6,
+        "cross_tenant_probes": probe_counts.get("cross_attempts", 0),
+        "cross_tenant_denials": probe_counts.get("cross_denials", 0),
+        "required_cross_tenant_probes": required_cross_probes,
+        "scope": "technical-concurrency-measurement-not-visual-or-release-approval",
+        "accepted_requests": sum(not result_failures(result, args) for result in results),
+        "failed_or_rejected_requests": sum(bool(result_failures(result, args)) for result in results),
         "results": results,
         "failures": failures,
     }

@@ -205,6 +205,14 @@ the original 22 P0 gates or constitute passing evidence for four-request mode.
 Status: **PENDING GPU implementation and certification**. No four-output quality,
 latency or concurrency result has been established by this plan.
 
+CPU tooling update (2026-10-16): `benchmark-three-tenant-public-api.py` now offers
+an explicit four-tenant measurement mode while defaulting to the original three.
+It requires four-item worker telemetry and all twelve cross-tenant denials; it
+does not enable a four-item worker. Both concurrency benchmarks reject weakened
+CLI limits, non-finite measurements and inconsistent VRAM. Adversarial CPU tests
+and the remaining evidence boundary are documented in
+`docs/concurrency-evidence-2026-10-16.md`. These tests are not GPU certification.
+
 | Gate | Work without GPU | What still prevents closure |
 | --- | --- | --- |
 | `clean-release-commit` | Record clean candidate SHA | Recheck after every edit/commit |

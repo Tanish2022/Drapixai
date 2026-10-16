@@ -305,6 +305,12 @@
       "args": ["deploy/runpod/validate_upper_body_50_tooling.py"]
     },
     {
+      "id": "concurrency-evidence-controls",
+      "label": "Concurrency evidence rejects non-finite scores, weak thresholds, fallback batches and inconsistent VRAM",
+      "runner": "python",
+      "args": ["deploy/scripts/test-concurrency-benchmark.py"]
+    },
+    {
       "id": "csp-source",
       "label": "Nonce-based production CSP source validation",
       "runner": "node",

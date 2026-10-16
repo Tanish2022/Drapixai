@@ -1969,7 +1969,9 @@ assertIncludes(publicApiMigration, 'ApiIdempotencyRecord_userId_route_keyHash_ke
 assertIncludes(publicApiMigration, 'WebhookDelivery_endpointId_eventId_key', 'Webhook event delivery must be deduplicated per endpoint');
 assertIncludes(publicApiSpec, "openapi: '3.1.0'", 'Public API must publish a machine-readable OpenAPI contract');
 assertIncludes(publicApiDocs, 'Live and sandbox are separate deployments', 'Public API docs must require infrastructure isolation');
-assertIncludes(threeTenantPublicApiBenchmark, 'ThreadPoolExecutor(max_workers=3)', 'Staging certification must submit three tenants concurrently');
+assertIncludes(threeTenantPublicApiBenchmark, 'ThreadPoolExecutor(max_workers=args.concurrent_tenants)', 'Concurrency certification must submit the requested tenant count concurrently');
+assertIncludes(threeTenantPublicApiBenchmark, 'choices=(3, 4), default=3', 'The original three-tenant gate must remain the default while four-tenant tooling is prepared');
+assertIncludes(threeTenantPublicApiBenchmark, 'args.required_worker_batch_size != args.concurrent_tenants', 'Concurrency certification must reject queued or fallback execution as full-batch evidence');
 assertIncludes(threeTenantPublicApiBenchmark, 'TRYON_REQUEST_FAILED', 'Three-tenant benchmark must record redacted API failure evidence.');
 assertIncludes(threeTenantPublicApiBenchmark, 'failure_result(', 'Three-tenant benchmark must write a report even when an individual request fails.');
 assertIncludes(threeTenantPublicApiBenchmark, 'cross_response.status_code != 404', 'Staging certification must prove cross-tenant result isolation');
