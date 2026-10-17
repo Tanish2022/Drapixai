@@ -4,6 +4,8 @@
 
 Latest follow-ups: [18 October browser sessions](browser-session-security-2026-10-18.md), [atomic Redis counters](atomic-rate-limits-2026-10-18.md) and [bounded Redis requests/recovery](redis-request-bounds-2026-10-18.md), including native transport faults, real Redis integration and **84/84 security cases**. Counts below describe the original assessment unless explicitly updated. Outbound and administrator follow-ups retain their own evidence and deployment limits.
 
+Runtime-review follow-ups verify the [Node source signature](node-shared-openssl-review-2026-10-18.md) and fix [mutable-image evidence binding](edge-runtime-evidence-binding-2026-10-18.md). They do not close the embedded-OpenSSL review, candidate compatibility or live launch requirements.
+
 ## Scope, method and architecture
 
 Baseline: `1f033326eec2efe74c9d0d8a7ec7bf9140f89e96`, branch `codex/public-launch-rc1`. Reviewed the Next.js website and server-side authentication/proxies, Express API and Prisma access paths, JavaScript/React SDK rendering and token use, private Python inference boundary, storage/retention controls, deployment configuration, dependency/security CI and secret-scanning policy. Concurrent lower-body development was present in the worktree and is outside this change set.

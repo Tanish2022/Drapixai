@@ -122,6 +122,13 @@ Then exercise the actual API/web candidate images:
 node scripts/verify-edge-container-runtime.mjs drapixai-api:node-shared-review drapixai-web:node-shared-review
 ```
 
+The native verifier inspects and executes immutable local image IDs, records its
+own source hash and distinguishes shared from embedded OpenSSL. Its checkout
+Dockerfile hashes do not attest candidate image inputs: retain this materializer's
+generated Dockerfiles/source manifest and actual image revision labels separately.
+An optional real-Docker [alias-movement regression](../../../docs/edge-runtime-evidence-binding-2026-10-18.md)
+checks that changing only owned test tags cannot change the images it executes.
+
 Use the existing scanner unchanged on each exact image, retain raw reports,
 and bind source/input hashes, image IDs and labels. These are separate from the
 ordinary release CI, which still builds the unchanged production Dockerfiles.

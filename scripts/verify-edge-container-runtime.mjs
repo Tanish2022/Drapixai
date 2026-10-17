@@ -3,9 +3,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const [apiImage, webImage] = process.argv.slice(2);
 assert.ok(apiImage && webImage, 'Usage: node scripts/verify-edge-container-runtime.mjs <api-image> <web-image>');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const postgresImage = 'postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4';
 const runId = crypto.randomBytes(6).toString('hex');
 const network = `drapixai-edge-runtime-${runId}`;
@@ -13,14 +15,23 @@ const database = `drapixai-edge-db-${runId}`;
 const web = `drapixai-edge-web-${runId}`;
 const password = crypto.randomBytes(24).toString('hex');
 const probeEnv = { ...process.env, POSTGRES_PASSWORD: password, DATABASE_URL: `postgresql://postgres:${password}@${database}:5432/postgres`, DASHBOARD_SESSION_SECRET: crypto.randomBytes(32).toString('hex') };
-const evidenceRoot = path.resolve('runtime/launch-evidence');
+const evidenceRoot = path.join(root, 'runtime/launch-evidence');
 fs.mkdirSync(evidenceRoot, { recursive: true });
 const reportFile = path.join(evidenceRoot, `edge-runtime-${runId}.json`);
 const report = { scope: 'disposable-native-container-compatibility-not-live-staging', passed: false, generatedAt: new Date().toISOString(), images: {}, checks: [], failure: null };
+const git = (args) => {
+  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, 'Unable to establish verifier checkout state');
+  return result.stdout.trim();
+};
+const sourceCommit = git(['rev-parse', 'HEAD']);
+assert.match(sourceCommit, /^[a-f0-9]{40}$/);
 report.source = {
-  commit: spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim(),
-  dirtyEntries: spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).stdout.trim().split('\n').filter(Boolean).length,
-  dockerfiles: Object.fromEntries(['apps/api/Dockerfile', 'apps/web/Dockerfile'].map((file) => [file, crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')])),
+  commit: sourceCommit,
+  dirtyEntries: git(['status', '--porcelain']).split('\n').filter(Boolean).length,
+  dockerfiles: Object.fromEntries(['apps/api/Dockerfile', 'apps/web/Dockerfile'].map((file) => [file, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex')])),
+  dockerfilesScope: 'current verifier checkout inputs; not an attestation of tested image build inputs',
+  verifierSha256: crypto.createHash('sha256').update(fs.readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
 };
 const invoke = (args, env = process.env) => spawnSync('docker', args, { env, encoding: 'utf8', timeout: 180000, maxBuffer: 4 * 1024 * 1024 });
 const docker = (args, env) => {
@@ -48,10 +59,12 @@ let webCreated = false;
 try {
   for (const [role, image] of [['api', apiImage], ['web', webImage]]) {
     const info = JSON.parse(docker(['image', 'inspect', image]))[0];
+    assert.match(info.Id, /^sha256:[a-f0-9]{64}$/);
     assert.ok(info.Config.User && !['0', 'root'].includes(info.Config.User), `${role} image must default to a non-root user`);
     const revision = info.Config.Labels?.['org.opencontainers.image.revision'] || null;
     if (process.env.GITHUB_SHA) assert.equal(revision, process.env.GITHUB_SHA, 'CI image revision must match the tested commit');
-    const runtimeVersions = JSON.parse(docker(['run', '--rm', ...safety, '--network', 'none', image, '-e', `console.log(JSON.stringify({node:process.versions.node,embeddedOpenSSL:process.versions.openssl,uid:process.getuid(),systemOpenSSLPackage:require('node:fs').readFileSync('/var/lib/dpkg/status.d/libssl3t64','utf8').split('\\n').find(line=>line.startsWith('Version:'))}))`]));
+    const runtimeVersions = JSON.parse(docker(['run', '--pull=never', '--rm', ...safety, '--network', 'none', info.Id, '-e', String.raw`console.log(JSON.stringify({node:process.versions.node,openssl:process.versions.openssl,embeddedOpenSSL:process.config.variables.node_shared_openssl?null:process.versions.openssl,sharedOpenSSL:process.config.variables.node_shared_openssl,uid:process.getuid(),systemOpenSSLPackage:require('node:fs').readFileSync('/var/lib/dpkg/status.d/libssl3t64','utf8').split('\n').find(line=>line.startsWith('Version:'))}))`]));
+    assert.match(runtimeVersions.systemOpenSSLPackage || '', /^Version: \S+$/);
     report.images[role] = { image, imageId: info.Id, user: info.Config.User, revision, runtimeVersions };
   }
   docker(['network', 'create', '--internal', '--label', 'drapixai.purpose=disposable-edge-runtime-test', network]);
@@ -64,7 +77,7 @@ try {
     await pause();
   }
   assert.ok(ready, 'Disposable PostgreSQL failed to start');
-  docker(['run', '--rm', ...safety, '--network', network, '-e', 'DATABASE_URL', apiImage, '-e', `${commonProbe}
+  docker(['run', '--pull=never', '--rm', ...safety, '--network', network, '-e', 'DATABASE_URL', report.images.api.imageId, '-e', `${commonProbe}
     (async () => {
       const sharp = require('sharp');
       const bytes = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#31725b' } }).png().toBuffer();
@@ -80,10 +93,10 @@ try {
     })().catch(error => { console.error(error.message); process.exit(1); });`], probeEnv);
   report.checks.push('api-nonroot-readonly-debian13-native-sharp-prisma-and-offline-mail');
   console.log('API native runtime compatibility passed against disposable PostgreSQL.');
-  docker(['run', '--rm', ...safety, '--network', 'none', webImage, '-e', `${commonProbe}
+  docker(['run', '--pull=never', '--rm', ...safety, '--network', 'none', report.images.web.imageId, '-e', `${commonProbe}
     (async () => { const sharp = require('sharp'); const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#31725b' } }).webp().toBuffer(); assert.ok(bytes.length > 0); console.log('Web native image fixture passed.'); })().catch(error => { console.error(error.message); process.exit(1); });`]);
   report.checks.push('web-nonroot-readonly-debian13-native-sharp');
-  docker(['run', '-d', '--name', web, ...safety, '--network', 'none', '-e', 'DASHBOARD_SESSION_SECRET', webImage], probeEnv);
+  docker(['run', '--pull=never', '-d', '--name', web, ...safety, '--network', 'none', '-e', 'DASHBOARD_SESSION_SECRET', report.images.web.imageId], probeEnv);
   webCreated = true;
   let htmlPassed = false;
   for (let i = 0; i < 60; i++) {
