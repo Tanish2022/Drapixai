@@ -80,6 +80,14 @@ DTLS code. Retain vendor/build and native-addon reachability review as an open
 security requirement; do not infer whole-runtime remediation from a library
 overlay or silently expand VEX. Runtime reports record both library versions.
 
+An isolated [Node 22 shared-OpenSSL review candidate](../deploy/security/node/README.md)
+now prepares a source-pinned build against Debian's patched library, explicit
+linkage/hash/TLS checks and application inputs extracted from exact Git blobs.
+Production Dockerfiles are unchanged. Compilation or matching the reported ABI
+number alone is insufficient: retained crypto/native/application/scan results and
+downstream compatibility/maintenance review are required before integration. No
+candidate approval or embedded-library closure is inferred from preparation.
+
 The local native-container drill uses a disposable internal network and
 PostgreSQL container, synthetic credentials, no published host ports, read-only
 edge roots and non-root execution. It checks Sharp decoding/encoding, a real
