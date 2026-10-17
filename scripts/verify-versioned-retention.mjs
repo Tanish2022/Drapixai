@@ -68,7 +68,11 @@ try {
   let ready = false;
   for (let attempt = 0; attempt < 30; attempt++) {
     try {
-      docker(['exec', db, 'pg_isready', '-U', 'postgres', '-d', database]);
+      // pg_isready accepts the entrypoint's temporary socket server before
+      // POSTGRES_DB exists. Wait for the final TCP server and the actual DB.
+      assert.equal(docker(['exec', '-e', 'PGPASSWORD', db, 'psql', '-X', '-t', '-A',
+        '-h', '127.0.0.1', '-U', 'postgres', '-d', database, '-c', 'SELECT current_database();'],
+      { env: { ...process.env, PGPASSWORD: password } }), database);
       const response = await fetch(`${endpoint}/minio/health/ready`, { signal: AbortSignal.timeout(2000) });
       if (response.ok) { ready = true; break; }
     } catch { /* Both containers must become ready before any fixture is seeded. */ }

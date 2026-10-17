@@ -22,6 +22,8 @@ First security commit `9e3ed774e4fa14a174defb975d41d04413f5ab8e`: [CI run 390451
 
 The final response-error handler fix (SEC-09), its regression and report update follow that commit. Its reproduction failed before the fix; all **29 cases**, the full launch suite and API TypeScript pass afterwards. The preceding run does not certify this follow-up commit; check its own exact-head CI separately. No web, dependency, inference or configuration behavior changed in this follow-up.
 
+Follow-up `e881c9cda225cf936b813f99c14faee8dc32e7d8`: [run 39045580881](https://github.com/Tanish2022/Drapixai/actions/runs/39045580881) passed the 29 security cases, secret scan and checkpoint candidate job. The application job later failed because its disposable PostgreSQL readiness probe raced database initialization. API/web container scans failed because ECR rate-limited database retrieval, producing no reports; this is not a clean scan result. The AI advisory remained blocking. See [the CI reliability remediation and test evidence](ci-verification-reliability-2026-10-17.md) for these follow-up fixes. Active history scanning after this commit covered 204 commits with zero unallowlisted findings.
+
 Live staging, independent penetration testing/retest, production transport/storage/secret rotation, GPU quality/parity/concurrency and legal/pilot approvals remain outstanding. None of the original 22 launch-gate release-evidence decisions was promoted by this audit.
 
 Existing operator sessions must be replaced by a fresh password/TOTP login when this patch is deployed. All API replicas must enforce the MFA-assured key requirement before that rollout is considered complete.

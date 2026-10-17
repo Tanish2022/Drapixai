@@ -2,7 +2,9 @@
 set -euo pipefail
 
 TRIVY_IMAGE="aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e"
-TRIVY_DB_REPOSITORY="${DRAPIXAI_TRIVY_DB_REPOSITORY:-public.ecr.aws/aquasecurity/trivy-db:2}"
+# Trivy accepts an ordered comma-separated registry list. Keep the official
+# mirror/upstream fallback so one registry's quota cannot disable all scans.
+TRIVY_DB_REPOSITORY="${DRAPIXAI_TRIVY_DB_REPOSITORY:-mirror.gcr.io/aquasec/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2,public.ecr.aws/aquasecurity/trivy-db:2}"
 TRIVY_CACHE_VOLUME="${DRAPIXAI_TRIVY_CACHE_VOLUME:-drapixai-trivy-cache}"
 TRIVY_TIMEOUT="${DRAPIXAI_TRIVY_TIMEOUT:-45m}"
 EVIDENCE_PATH="${DRAPIXAI_CONTAINER_SCAN_EVIDENCE:-}"
@@ -106,7 +108,7 @@ row = {
     "highFindings": sum(1 for item in vulnerabilities if item.get("Severity") == "HIGH"),
     "criticalFindings": sum(1 for item in vulnerabilities if item.get("Severity") == "CRITICAL"),
     "report": relative(retained_path),
-    "reportSha256": hashlib.sha256(report_path.read_bytes()).hexdigest() if report_path.is_file() else None,
+    "reportSha256": hashlib.sha256(report_path.read_bytes()).hexdigest() if report_path.is_file() and report_path.stat().st_size else None,
     "scannerError": pathlib.Path(scanner_log).read_text(encoding="utf-8", errors="replace")[-1000:].strip() if pathlib.Path(scanner_log).is_file() and status != "PASS" else None,
 }
 print(json.dumps(row, separators=(",", ":")))
@@ -178,6 +180,8 @@ scan_image() {
   local attempt
   local parser_status
   local trivy_log
+  local scan_succeeded=0
+  local command_exit=0
   local last_failure="no command error captured"
 
   for attempt in 1 2 3; do
@@ -208,18 +212,21 @@ scan_image() {
       --vex /scan/vex.openvex.json \
       --timeout "${TRIVY_TIMEOUT}" \
       --skip-version-check > "${report}" 2>"${trivy_log}"; then
+      scan_succeeded=1
       break
+    else
+      command_exit=$?
     fi
 
-    last_failure="$(tail -n 4 "${trivy_log}" 2>/dev/null | tr '\n' ' ')"
+    last_failure="$(python3 -c 'import pathlib,sys; print(" ".join([line.strip() for line in pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines() if line.strip()][-4:]))' "${trivy_log}")"
     if [[ "${attempt}" -lt 3 ]]; then
       echo "Trivy scan failed; retrying once its vulnerability database or registry is available." >&2
       sleep "$((attempt * 10))"
     fi
   done
 
-  if [[ ! -s "${report}" ]]; then
-    emit_error "Trivy could not produce a vulnerability report after 3 attempts; keeping the release gate closed. Last scanner error: ${last_failure}"
+  if [[ "${scan_succeeded}" -ne 1 || ! -s "${report}" ]]; then
+    emit_error "Trivy could not complete a vulnerability report after ${attempt} attempts (command exit ${command_exit}); keeping the release gate closed. Last scanner error: ${last_failure}"
     return 20
   fi
 

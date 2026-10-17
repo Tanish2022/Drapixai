@@ -2102,5 +2102,8 @@ assertIncludes(launchWorkflow, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41
 // cases; these controls must not rely only on source-string assertions.
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-website-privacy.cjs')], { stdio: 'inherit' });
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-security-boundaries.cjs')], { stdio: 'inherit' });
+// The shell scanner's failure controls run on Linux CI; Windows runs the same
+// suite in an isolated Linux container rather than depending on a WSL install.
+if (process.platform !== 'win32') execFileSync('python3', [path.join(repoRoot, 'deploy/scripts/test-container-scanner.py')], { stdio: 'inherit' });
 
 console.log('Launch readiness tests passed.');
