@@ -39,6 +39,23 @@ function loader(mocks = {}, globals = {}) {
 const tests = [];
 const test = (name, run) => tests.push({ name, run });
 const response = () => ({ statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} });
+// Small general Prisma adapter; real PostgreSQL concurrency is checked separately.
+const matchesWhere = (record, where) => Object.entries(where).every(([name, condition]) => {
+  if (condition === undefined) return true;
+  if (name === 'AND' || name === 'OR') {
+    const clauses = Array.isArray(condition) ? condition : [condition];
+    return name === 'AND' ? clauses.every((clause) => matchesWhere(record, clause)) : clauses.some((clause) => matchesWhere(record, clause));
+  }
+  const value = record[name];
+  if (condition === null) return value == null;
+  if (condition && typeof condition === 'object' && !(condition instanceof Date)) {
+    return Object.entries(condition).every(([operator, expected]) => value != null && ({
+      gt: () => value > expected, gte: () => value >= expected,
+      lt: () => value < expected, lte: () => value <= expected,
+    }[operator]?.() ?? false));
+  }
+  return value === condition;
+});
 function routeFixture(user, key = { kind: 'dashboard', scopes: 'dashboard', userId: 1 }) {
   const routes = new Map();
   const uses = [];
@@ -47,7 +64,8 @@ function routeFixture(user, key = { kind: 'dashboard', scopes: 'dashboard', user
   const router = { use(...handlers) { uses.push(...handlers); } };
   for (const method of ['post', 'get', 'delete']) router[method] = (name, ...handlers) => routes.set(`${method}:${name}`, handlers);
   const database = {
-    user: { findUnique: async () => user, create: async () => { writes++; return user; }, update: async () => { writes++; return user; } },
+    user: { findUnique: async () => user, create: async () => { writes++; return user; }, update: async () => { writes++; return user; },
+      updateMany: async ({ where, data }) => { if (!matchesWhere(user, where)) return { count: 0 }; Object.assign(user, data); writes++; return { count: 1 }; } },
   };
   class FixedDate extends Date { constructor(value = 59000) { super(value); } static now() { return 59000; } }
   const env = { NODE_ENV: 'production', DRAPIXAI_AUTH_SYNC_TOKEN: 'local-fixture-auth-sync-only', DRAPIXAI_ADMIN_EMAIL: 'operator@example.test', DRAPIXAI_ADMIN_TOTP_SECRET: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' };
@@ -60,7 +78,7 @@ function routeFixture(user, key = { kind: 'dashboard', scopes: 'dashboard', user
     '../lib/audit-log': { appendSecurityAudit: async () => {} },
     '../services/emailer': { sendOtpEmail: async () => { throw Error('MAIL_NOT_ALLOWED'); }, sendWelcomeEmail: async () => {} },
   }, { process: { env }, Date: FixedDate });
-  return { load, routes, uses, issued, writes: () => writes, env };
+  return { load, routes, uses, issued, writes: () => writes, env, database };
 }
 
 test('OAuth cannot issue a privileged key without local MFA', async () => {
@@ -461,6 +479,105 @@ test('Timed-out webhook delivery preserves bounded retry accounting instead of h
   assert.equal(updates.length, 1); assert.equal(updates[0].status, 'retrying');
   assert.equal(updates[0].attemptCount, 1); assert.equal(updates[0].errorCode, 'REMOTE_FETCH_TIMEOUT');
   assert.equal(updates[0].responseCode, null); assert.ok(updates[0].nextAttemptAt.getTime() > Date.now());
+});
+
+for (const concurrent of [false, true]) test(`Administrator TOTP is consumed once for ${concurrent ? 'concurrent' : 'repeated'} logins`, async () => {
+  const f = routeFixture({ id: 1, email: 'operator@example.test', role: 'system_admin', emailVerifiedAt: new Date(0) });
+  f.load('apps/api/src/routes/auth.ts');
+  const handler = f.routes.get('post:/login').at(-1);
+  const attempt = async () => { const res = response(); await handler({ body: { email: 'operator@example.test', password: 'correct-fixture-password', mfaCode: '287082' } }, res); return res; };
+  const results = concurrent ? await Promise.all(Array.from({ length: 8 }, attempt)) : [await attempt(), await attempt()];
+  assert.equal(results.filter((res) => res.statusCode === 200).length, 1);
+  assert.equal(results.filter((res) => res.statusCode === 401).length, results.length - 1);
+  assert.equal(f.issued.length, 1);
+});
+
+test('Administrator cannot use an earlier valid TOTP step after accepting a later step', async () => {
+  const f = routeFixture({ id: 1, email: 'operator@example.test', role: 'system_admin', emailVerifiedAt: new Date(0) });
+  f.load('apps/api/src/routes/auth.ts');
+  const handler = f.routes.get('post:/login').at(-1);
+  const first = response(), earlier = response();
+  await handler({ body: { email: 'operator@example.test', password: 'correct-fixture-password', mfaCode: '359152' } }, first);
+  await handler({ body: { email: 'operator@example.test', password: 'correct-fixture-password', mfaCode: '287082' } }, earlier);
+  assert.equal(first.statusCode, 200); assert.equal(earlier.statusCode, 401); assert.equal(f.issued.length, 1);
+});
+
+test('MFA replay-state write failure denies login without issuing a privileged key', async () => {
+  const f = routeFixture({ id: 1, email: 'operator@example.test', role: 'system_admin', emailVerifiedAt: new Date(0) });
+  f.database.user.updateMany = async () => { throw Error('SYNTHETIC_MFA_STATE_UNAVAILABLE'); };
+  f.load('apps/api/src/routes/auth.ts');
+  const res = response();
+  await f.routes.get('post:/login').at(-1)({ body: { email: 'operator@example.test', password: 'correct-fixture-password', mfaCode: '287082' } }, res);
+  assert.equal(res.statusCode, 500); assert.equal(f.issued.length, 0);
+});
+
+test('Merchant password login does not require administrator MFA state', async () => {
+  const f = routeFixture({ id: 2, email: 'merchant@example.test', role: 'brand_admin', emailVerifiedAt: new Date(0) });
+  f.database.user.updateMany = async () => { throw Error('MFA_STATE_NOT_ALLOWED'); };
+  f.load('apps/api/src/routes/auth.ts');
+  const res = response();
+  await f.routes.get('post:/login').at(-1)({ body: { email: 'merchant@example.test', password: 'correct-fixture-password' } }, res);
+  assert.equal(res.statusCode, 200); assert.equal(f.issued.length, 1);
+});
+
+function sessionFixture(overrides = {}, beforeTouch = () => {}) {
+  const now = Date.now(), credential = 'dpx_synthetic_operator_session';
+  const key = { id: 7, userId: 1, keyHash: require('node:crypto').createHash('sha256').update(credential).digest('hex'), kind: 'dashboard', scopes: 'dashboard,admin:mfa', isActive: true, revokedAt: null,
+    createdAt: new Date(now - 3600000), lastUsedAt: new Date(now - 60000), expiresAt: new Date(now + 3600000), ...overrides };
+  class FixedDate extends Date { constructor(value = now) { super(value); } static now() { return now; } }
+  const database = { apiKey: {
+    findUnique: async ({ where }) => where.keyHash === key.keyHash ? { ...key } : null,
+    findFirst: async ({ where }) => matchesWhere(key, where) ? { ...key } : null,
+    findMany: async () => [],
+    update: async ({ data }) => { beforeTouch(key); Object.assign(key, data); return { ...key }; },
+    updateMany: async ({ where, data }) => { beforeTouch(key); if (!matchesWhere(key, where)) return { count: 0 }; Object.assign(key, data); return { count: 1 }; },
+  } };
+  const auth = loader({}, { Date: FixedDate, process: { env: { NODE_ENV: 'production', JWT_SECRET: 'synthetic-preview-signing-secret-at-least-32' } } })('apps/api/src/lib/api-key-auth.ts');
+  return { auth, database, key, now, credential };
+}
+
+for (const idle of [15 * 60000, 16 * 60000]) test(`Privileged session idle for ${idle / 60000} minutes cannot be revived`, async () => {
+  const f = sessionFixture({ lastUsedAt: new Date(Date.now() - idle) });
+  const last = f.key.lastUsedAt.getTime();
+  assert.equal(await f.auth.resolveActiveApiKey(f.database, f.credential), null);
+  assert.equal(f.key.lastUsedAt.getTime(), last);
+});
+
+test('Unused privileged session expires from creation time', async () => {
+  const f = sessionFixture({ lastUsedAt: null, createdAt: new Date(Date.now() - 16 * 60000) });
+  assert.equal(await f.auth.resolveActiveApiKey(f.database, f.credential), null);
+  assert.equal(f.key.lastUsedAt, null);
+});
+
+test('Privileged session absolute age cannot be extended by a fresh last-used timestamp', async () => {
+  const f = sessionFixture({ createdAt: new Date(Date.now() - 9 * 3600000), lastUsedAt: new Date() });
+  assert.equal(await f.auth.resolveActiveApiKey(f.database, f.credential), null);
+});
+
+test('Recent privileged session remains usable and records activity', async () => {
+  const f = sessionFixture();
+  assert.ok(await f.auth.resolveActiveApiKey(f.database, f.credential));
+  assert.equal(f.key.lastUsedAt.getTime(), f.now);
+});
+
+test('Concurrent key revocation wins over a privileged session activity update', async () => {
+  const f = sessionFixture({}, (key) => { key.isActive = false; key.revokedAt = new Date(); });
+  assert.equal(await f.auth.resolveActiveApiKey(f.database, f.credential), null);
+});
+
+test('Merchant and manual server-key lifetimes retain their existing policy', async () => {
+  for (const type of [{ kind: 'dashboard', scopes: 'dashboard' }, { kind: 'manual', scopes: 'api:tryon' }]) {
+    const f = sessionFixture({ ...type, createdAt: new Date(Date.now() - 2 * 86400000), lastUsedAt: new Date(Date.now() - 86400000), expiresAt: new Date(Date.now() + 86400000) });
+    assert.ok(await f.auth.resolveActiveApiKey(f.database, f.credential));
+  }
+});
+
+for (const expired of [true, false]) test(`Dashboard preview ${expired ? 'cannot revive idle operator session' : 'does not extend operator inactivity window'}`, async () => {
+  const f = sessionFixture({ lastUsedAt: new Date(Date.now() - (expired ? 16 : 1) * 60000) });
+  const last = f.key.lastUsedAt.getTime();
+  const token = f.auth.issueDashboardPreviewToken({ apiKeyId: f.key.id, userId: f.key.userId, allowedDomain: 'preview.example.test' });
+  const result = await f.auth.resolveSdkApiKey(f.database, token);
+  assert.equal(Boolean(result), !expired); assert.equal(f.key.lastUsedAt.getTime(), last);
 });
 
 (async () => {

@@ -1,0 +1,40 @@
+# Administrator replay and session controls — 18 October 2026
+
+Work packages 4–5 and 8, with CI/database evidence for package 2. **Implemented and locally verified; deployment and live authentication-lifecycle approval remain pending.** Standard CatVTON behavior and the original 22 release gates are unchanged.
+
+## Findings and changes
+
+| Finding | Severity and prerequisite | Remediation |
+|---|---|---|
+| Administrator TOTP codes could authenticate repeatedly, including simultaneous logins, while their time step remained valid. | Medium: requires the operator's password and a valid captured authenticator code. No deployed account takeover was attempted. | `admin-mfa.ts` consumes a valid counter through one conditional PostgreSQL update before key issuance. The per-account counter advances monotonically; an already used or older step cannot win again across replicas. A database write failure prevents privileged key issuance. |
+| An MFA-issued dashboard key remained usable after prolonged inactivity; activity tracking could refresh a stale key. | Medium: requires an existing privileged session. | `api-key-auth.ts` enforces **15 minutes of inactivity** and the existing **eight-hour absolute maximum**. Freshness, active/revoked state and scope are checked in the same update that records activity. Unused keys measure inactivity from creation. |
+| A dashboard-preview JWT could continue using an idle operator parent session. | Medium: requires a valid preview token. | Preview authentication checks the parent operator session's freshness and does not refresh its activity. Preview traffic cannot keep that session alive. |
+| Revocation between the initial key read and activity write could still return an earlier privileged-key snapshot. | Medium, narrow race: valid session being revoked concurrently. | The privileged activity update requires the key still to be active, unrevoked and unchanged in kind/scope. Revocation winning first prevents authentication. Actions already authorized before revocation are not cancelled. |
+
+Migration `20261017120000_admin_mfa_replay` adds nullable `User.adminTotpLastCounter BIGINT` with a nonnegative constraint. It stores a moving counter, not the OTP or seed. This is account-linked authentication metadata and needs account/security-state access, backup and deletion controls. Existing account/login responses select explicit fields and do not expose it.
+
+TOTP step length and adjacent-step clock-skew tolerance are unchanged. If one code matches several accepted steps, the claim checks the earliest and advances to the latest match. Production refuses a missing secret. Development's existing unconfigured-secret behavior remains; it is not authorized production configuration. Merchant login and non-MFA dashboard/manual key lifetimes retain their existing policy.
+
+The changes address per-account replay under [ASVS 5.0.0 V6.5.1](https://raw.githubusercontent.com/OWASP/ASVS/v5.0.0/5.0/en/0x15-V6-Authentication.md) and add evidence for privileged session expiry. They do not establish Level 2 conformance: lifetime/skew policy, cookie prefixes, enrollment/recovery, phishing resistance, production clock synchronization and the complete lifecycle require separate review. The existing configured TOTP seed is still shared configuration; this patch does not provide individual operator enrollment or global replay prevention across different accounts sharing that seed. Unique operator authenticators and their lifecycle remain required review items.
+
+## Verification
+
+- The initial reproductions passed 44/54 cases against old behavior; ten new negative cases failed as expected. A second negative control substituted the exact `0398b18` MFA/auth/key modules **in memory**, reproduced those ten failures and left source intact. Output: `runtime/launch-evidence/admin-sessions-2026-10-18/baseline-boundaries.txt`.
+- **54/54 security cases passed** with the fix: repeated/concurrent login, older-step denial, fail-closed state writes, idle/absolute expiry, unused keys, revocation interleaving, preview non-extension and positive merchant/operator controls. Existing outbound, upload, JWT, Origin and authorization cases remain.
+- API TypeScript, RFC TOTP checks, storefront-token tests, public API contracts and the full launch-readiness suite passed. Prisma Client was regenerated from the new schema.
+- `admin-session-database-tests.ts` runs inside the existing guarded P0 fixture. A **real disposable PostgreSQL database** applied all migrations and accepted exactly **one of 12 concurrent claims across two Prisma clients**. Reconnection preserved replay state; old/invalid codes failed, the next permitted step succeeded, role mismatch failed, the database constraint rejected a negative counter and merchant state stayed unchanged.
+- Real database checks confirmed idle/absolute rejection without revival, fresh/first-use success, parent-preview rejection/non-extension, ordinary key policy preservation and revocation between a real read and a second client's write. Cleanup uses the fixture's exact synthetic user/key IDs.
+- The same run passed CORS/retention, immutable audit UPDATE/DELETE/TRUNCATE rejection, billing/quota concurrency, accounting, rollback and audit integrity. Only disposable databases were modified. A preliminary PowerShell 5 invocation stopped before creating resources because the existing harness requires PowerShell 7; its PowerShell 7 run passed and removed the container.
+- Active Gitleaks policy canary and disabled-rule negative control passed. The exact public RFC 6238 seed exception now names three fixture files; real credentials and production configuration are not exempted. No dependency or lockfile was changed.
+
+Existing launch and P0 database CI entry points execute these cases. Local results are candidate evidence; record the new clean commit's hosted outcome separately.
+
+## Deployment and recovery requirements
+
+1. Apply the reviewed additive migration through the controlled backup/migration procedure **before starting API replicas generated from this schema**. The client expects the column. No live or ordinary local operator database was migrated during this task.
+2. Drain old authentication replicas during rollout. Old code still permits TOTP reuse and does not enforce inactivity; every authentication path must use the new implementation. Retain the previous operator OAuth denial and MFA-assured-key requirement.
+3. An idle operator must authenticate with password and fresh TOTP after 15 minutes. The cookie's eight-hour cryptographic lifetime does not override server-side expiry. Activity means authenticated API activity, not proof of human presence. The current admin UI has no periodic heartbeat; preview traffic does not extend the limit.
+4. Keep the counter as durable security state. Do not clear it to retry a consumed code or regain access. A failure after consumption may require the next fresh code. Clock rollback, secret rotation and backup recovery need approved operator procedures, credential/session revocation and reviewed MFA recovery; do not restore older counters as a workaround.
+5. Verify permitted login, replay denial, fresh/expired sessions, logout, offboarding and rotation/recovery on the actual multi-replica deployment. No live-factor recovery, production request or independent penetration test was performed here.
+
+Commercial model rights, qualified legal review, pilot/founder approval, isolated live staging, the Accelerate advisory and embedded OpenSSL review remain open. Workstation/GPU acceptance, four independently scored >=0.95 warning-free outputs with visual/reference review, latency/headroom/isolation and soak evidence remain mandatory. The protected Standard profile is unchanged at SHA-256 `b732cd2b227a34a9bdfb65ff08cbacb3abd87846be589ba1a58e98199a012762`.

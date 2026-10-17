@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma, ApiKey } from '@prisma/client';
+import { ADMIN_MFA_SCOPE, ADMIN_SESSION_IDLE_TIMEOUT_MS, ADMIN_SESSION_KEY_MAX_AGE_MS } from './admin-mfa';
 
 const MODERN_API_KEY_PREFIX = 'dpx_';
 const LEGACY_API_KEY_PATTERN = /^[a-f0-9]{32}$/i;
@@ -35,6 +36,36 @@ export const generateApiKey = () => `${MODERN_API_KEY_PREFIX}${crypto.randomByte
 
 export const hashApiKey = (apiKey: string) =>
   crypto.createHash('sha256').update(apiKey, 'utf8').digest('hex');
+
+const isAdminSessionKey = (key: ApiKey) =>
+  key.kind === 'dashboard' && key.scopes.split(',').includes(ADMIN_MFA_SCOPE);
+
+const adminSessionFreshness = (now: Date): Prisma.ApiKeyWhereInput => ({
+  AND: [
+    { createdAt: { gt: new Date(now.getTime() - ADMIN_SESSION_KEY_MAX_AGE_MS) } },
+    { OR: [
+      { lastUsedAt: { gt: new Date(now.getTime() - ADMIN_SESSION_IDLE_TIMEOUT_MS) } },
+      { lastUsedAt: null, createdAt: { gt: new Date(now.getTime() - ADMIN_SESSION_IDLE_TIMEOUT_MS) } },
+    ] },
+  ],
+});
+
+const recordKeyActivity = async (prisma: PrismaClient, key: ApiKey) => {
+  if (!isAdminSessionKey(key)) {
+    await prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });
+    return key;
+  }
+  const now = new Date();
+  const result = await prisma.apiKey.updateMany({
+    where: {
+      id: key.id, kind: 'dashboard', scopes: key.scopes, isActive: true, revokedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      ...adminSessionFreshness(now),
+    },
+    data: { lastUsedAt: now },
+  });
+  return result.count === 1 ? { ...key, lastUsedAt: now } : null;
+};
 
 export const issueApiKeyForUser = async (
   prisma: PrismaClient,
@@ -329,9 +360,17 @@ const resolveDashboardPreviewToken = async (prisma: PrismaClient, credential: st
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    return apiKey
-      ? { ...apiKey, domainWhitelist: claims.allowedDomain.trim().toLowerCase() }
-      : null;
+    if (!apiKey) return null;
+    // Preview traffic must neither revive nor extend an operator session.
+    if (isAdminSessionKey(apiKey)) {
+      const fresh = await prisma.apiKey.findFirst({ where: {
+        id: apiKey.id, kind: 'dashboard', scopes: apiKey.scopes, isActive: true, revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        ...adminSessionFreshness(new Date()),
+      } });
+      if (!fresh) return null;
+    }
+    return { ...apiKey, domainWhitelist: claims.allowedDomain.trim().toLowerCase() };
   } catch {
     return null;
   }
@@ -410,8 +449,7 @@ export const resolveActiveApiKey = async (prisma: PrismaClient, rawApiKey: strin
     && !directMatch.revokedAt
     && (!directMatch.expiresAt || directMatch.expiresAt > new Date())
   ) {
-    await prisma.apiKey.update({ where: { id: directMatch.id }, data: { lastUsedAt: new Date() } });
-    return directMatch;
+    return recordKeyActivity(prisma, directMatch);
   }
 
   if (!legacyApiKeyLookupEnabled() || !LEGACY_API_KEY_PATTERN.test(apiKey)) {
@@ -428,8 +466,7 @@ export const resolveActiveApiKey = async (prisma: PrismaClient, rawApiKey: strin
   });
   for (const key of keys) {
     if (await bcrypt.compare(apiKey, key.keyHash)) {
-      await prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });
-      return key;
+      return recordKeyActivity(prisma, key);
     }
   }
 

@@ -14,6 +14,7 @@ model User {
   passwordHash                    String
   role                            String                @default("brand_admin")
   authVersion                     Int                   @default(1)
+  adminTotpLastCounter             BigInt?
   companyName                     String?
   mobileNumber                    String?
   themePreference                 String                @default("light")

@@ -6,7 +6,7 @@ import { formatLogError } from '../lib/security';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { issueApiKeyForUser } from '../lib/api-key-auth';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
-import { ADMIN_MFA_SCOPE, ADMIN_SESSION_KEY_MAX_AGE_MS, requiresAdminMfa, verifyAdminTotp } from '../lib/admin-mfa';
+import { ADMIN_MFA_SCOPE, ADMIN_SESSION_KEY_MAX_AGE_MS, requiresAdminMfa, consumeAdminTotp } from '../lib/admin-mfa';
 import { PASSWORD_HASH_ROUNDS, validatePasswordStrength } from '../lib/security';
 import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
@@ -233,7 +233,7 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
       }).catch(() => undefined);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    if (!verifyAdminTotp(normalizedEmail, mfaCode, Date.now(), user.role === 'system_admin')) {
+    if (!await consumeAdminTotp(prisma, user, mfaCode)) {
       await appendSecurityAudit(prisma, {
         actorUserId: user.id,
         actorRole: user.role,

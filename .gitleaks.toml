@@ -36,8 +36,8 @@ id = "generic-api-key"
     '''^DRAPIXAI_S3_BUCKET=drapixai-prod$''',
   ]
   [[rules.allowlists]]
-  description = "RFC 6238 SHA-1 test-vector seed only in the two TOTP regression fixtures"
+  description = "RFC 6238 SHA-1 test-vector seed only in the three TOTP regression fixtures"
   condition = "AND"
-  paths = ['''^(?:apps/api/src/scripts/admin-mfa-tests\.ts|scripts/test-security-boundaries\.cjs)$''']
+  paths = ['''^(?:apps/api/src/scripts/(?:admin-mfa-tests|admin-session-database-tests)\.ts|scripts/test-security-boundaries\.cjs)$''']
   regexTarget = "secret"
   regexes = ['''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''']

@@ -1,9 +1,11 @@
 import crypto from 'crypto';
+import type { PrismaClient, User } from '@prisma/client';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const TOTP_STEP_SECONDS = 30;
 export const ADMIN_MFA_SCOPE = 'admin:mfa';
 export const ADMIN_SESSION_KEY_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+export const ADMIN_SESSION_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 
 const decodeBase32 = (value: string) => {
   const normalized = value.toUpperCase().replace(/[^A-Z2-7]/g, '');
@@ -49,25 +51,49 @@ export const isSystemAdminEmail = (email: string) => {
 export const requiresAdminMfa = (email: string, role: unknown) =>
   role === 'system_admin' || isSystemAdminEmail(email);
 
-export const verifyAdminTotp = (
-  email: string,
+const matchingTotpCounters = (
   rawCode: unknown,
-  now = Date.now(),
-  requireForRole = false,
+  now: number,
 ) => {
-  if (!requireForRole && !isSystemAdminEmail(email)) return true;
-
   const secretValue = (process.env.DRAPIXAI_ADMIN_TOTP_SECRET || '').trim();
-  if (!secretValue) return process.env.NODE_ENV !== 'production';
-
   const code = String(rawCode || '').replace(/\s+/g, '');
-  if (!/^\d{6}$/.test(code)) return false;
+  if (!secretValue || !/^\d{6}$/.test(code) || !Number.isFinite(now) || now < 0) return [];
 
   try {
     const secret = decodeBase32(secretValue);
     const counter = Math.floor(now / 1000 / TOTP_STEP_SECONDS);
-    return [-1, 0, 1].some((offset) => timingSafeCodeEqual(code, codeForCounter(secret, counter + offset)));
+    return [-1, 0, 1].map((offset) => counter + offset)
+      .filter((step) => step >= 0 && timingSafeCodeEqual(code, codeForCounter(secret, step)));
   } catch {
-    return false;
+    return [];
   }
+};
+
+// Cryptographic verification only; authentication must use consumeAdminTotp.
+export const verifyAdminTotp = (email: string, rawCode: unknown, now = Date.now(), requireForRole = false) => {
+  if (!requireForRole && !isSystemAdminEmail(email)) return true;
+  if (!(process.env.DRAPIXAI_ADMIN_TOTP_SECRET || '').trim()) return process.env.NODE_ENV !== 'production';
+  return matchingTotpCounters(rawCode, now).length > 0;
+};
+
+export const consumeAdminTotp = async (
+  prisma: PrismaClient,
+  user: Pick<User, 'id' | 'email' | 'role'>,
+  rawCode: unknown,
+  now = Date.now(),
+) => {
+  if (!requiresAdminMfa(user.email, user.role)) return true;
+  if (!(process.env.DRAPIXAI_ADMIN_TOTP_SECRET || '').trim()) return process.env.NODE_ENV !== 'production';
+  const counters = matchingTotpCounters(rawCode, now);
+  if (!counters.length) return false;
+  // Cover every matching step in the skew window, including rare code collisions.
+  // The predicate and update are one DB operation across all API replicas.
+  const result = await prisma.user.updateMany({
+    where: {
+      id: user.id, email: user.email, role: user.role,
+      OR: [{ adminTotpLastCounter: null }, { adminTotpLastCounter: { lt: BigInt(counters[0]) } }],
+    },
+    data: { adminTotpLastCounter: BigInt(counters[counters.length - 1]) },
+  });
+  return result.count === 1;
 };
