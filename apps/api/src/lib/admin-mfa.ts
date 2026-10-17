@@ -2,6 +2,8 @@ import crypto from 'crypto';
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const TOTP_STEP_SECONDS = 30;
+export const ADMIN_MFA_SCOPE = 'admin:mfa';
+export const ADMIN_SESSION_KEY_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 const decodeBase32 = (value: string) => {
   const normalized = value.toUpperCase().replace(/[^A-Z2-7]/g, '');
@@ -43,6 +45,9 @@ export const isSystemAdminEmail = (email: string) => {
   const adminEmail = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
   return Boolean(adminEmail) && email.trim().toLowerCase() === adminEmail;
 };
+
+export const requiresAdminMfa = (email: string, role: unknown) =>
+  role === 'system_admin' || isSystemAdminEmail(email);
 
 export const verifyAdminTotp = (
   email: string,

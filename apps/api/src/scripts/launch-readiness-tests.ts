@@ -2101,5 +2101,6 @@ assertIncludes(launchWorkflow, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41
 // Exercise the actual browser preference/tracking modules, including failure
 // cases; these controls must not rely only on source-string assertions.
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-website-privacy.cjs')], { stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-security-boundaries.cjs')], { stdio: 'inherit' });
 
 console.log('Launch readiness tests passed.');

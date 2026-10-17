@@ -13,6 +13,7 @@ import { formatLogError, readLocalUploadFile } from '../lib/security';
 import { withOperationTimeout } from '../lib/operation-timeout';
 import { appendSecurityAudit } from '../lib/audit-log';
 import { hasPermission } from '../lib/authorization';
+import { ADMIN_MFA_SCOPE } from '../lib/admin-mfa';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -99,6 +100,9 @@ const adminAuth = async (req: any, res: any, next: any) => {
   const isAdmin = Boolean(user && hasPermission(user.role, 'system:admin') && matchesConfiguredAdmin);
   if (!user || !isAdmin) {
     return res.status(403).json({ error: 'ADMIN_REQUIRED' });
+  }
+  if (activeKey.kind !== 'dashboard' || !String(activeKey.scopes || '').split(',').includes(ADMIN_MFA_SCOPE)) {
+    return res.status(403).json({ error: 'ADMIN_MFA_SESSION_REQUIRED' });
   }
 
   req.user = user;

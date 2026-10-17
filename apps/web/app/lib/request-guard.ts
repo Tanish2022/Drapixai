@@ -19,8 +19,8 @@ export const isSameOriginRequest = (request: Request) => {
   const expected = expectedWebOrigin();
   if (!expected) return false;
 
-  const origin = parseOrigin(request.headers.get('origin'));
-  if (origin) return origin === expected;
+  const originHeader = request.headers.get('origin');
+  if (originHeader !== null) return parseOrigin(originHeader) === expected;
 
   const referer = parseOrigin(request.headers.get('referer'));
   if (referer) return referer === expected;
@@ -67,13 +67,26 @@ export const readLimitedProxyBody = async (request: Request) => {
     };
   }
 
-  const body = await request.arrayBuffer();
-  if (body.byteLength > maxBytes) {
-    return {
-      body: undefined,
-      rejection: noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 }),
-    };
+  if (!request.body) return { body: undefined, rejection: null as NextResponse | null };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return { body: undefined, rejection: noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 }) };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
   }
-
-  return { body, rejection: null as NextResponse | null };
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+  return { body: body.buffer, rejection: null as NextResponse | null };
 };

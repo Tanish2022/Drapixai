@@ -1,15 +1,16 @@
 import crypto from 'crypto';
-import net from 'net';
+import { isPublicRemoteUrl } from '../lib/network-address';
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import sdkRoutes from './sdk';
 import {
   getApiEnvironment,
   issuePublicApiToken,
+  isStorefrontProductAllowed,
   resolveActiveApiKey,
   resolvePublicApiToken,
 } from '../lib/api-key-auth';
-import { createRateLimitMiddleware } from '../lib/rate-limit';
+import { createRateLimitMiddleware, rateLimitRouteKey } from '../lib/rate-limit';
 import { getPlanAccessContext } from '../lib/plans';
 import { getUserQuotaUsage } from '../lib/usage';
 import { readStoredObject } from '../lib/storage';
@@ -105,38 +106,21 @@ const requireScope = (scope: string) => (req: any, res: any, next: any) => {
 const serverKeyRateLimit = createRateLimitMiddleware(
   Number(process.env.DRAPIXAI_SERVER_KEY_RATE_LIMIT || 120),
   RATE_LIMIT_WINDOW_MS,
-  (req: any) => `public-api:server-key:${req.apiKey?.id || 'unknown'}:${req.path}`,
+  (req: any) => `public-api:server-key:${req.apiKey?.id || 'unknown'}:${rateLimitRouteKey(req)}`,
 );
 const apiKeyRateLimit = createRateLimitMiddleware(
   Number(process.env.DRAPIXAI_API_KEY_RATE_LIMIT || 600),
   RATE_LIMIT_WINDOW_MS,
-  (req: any) => `public-api:key:${req.apiKey?.id || 'unknown'}:${req.path}`,
+  (req: any) => `public-api:key:${req.apiKey?.id || 'unknown'}:${rateLimitRouteKey(req)}`,
 );
 const tenantRateLimit = createRateLimitMiddleware(
   Number(process.env.DRAPIXAI_TENANT_RATE_LIMIT || 1200),
   RATE_LIMIT_WINDOW_MS,
-  (req: any) => `public-api:tenant:${req.user?.id || 'unknown'}:${req.path}`,
+  (req: any) => `public-api:tenant:${req.user?.id || 'unknown'}:${rateLimitRouteKey(req)}`,
 );
 
 const isSafeWebhookUrl = (value: unknown) => {
-  try {
-    const parsed = new URL(String(value || ''));
-    const hostname = parsed.hostname.toLowerCase();
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.hash) return false;
-    if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost')) return false;
-    if (net.isIP(hostname)) {
-      const mappedIpv4 = hostname.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)?.[1];
-      if (mappedIpv4 && !isSafeWebhookUrl(`https://${mappedIpv4}`)) return false;
-      if (hostname === '::1' || hostname === '::' || hostname.startsWith('fc') || hostname.startsWith('fd')
-        || hostname.startsWith('fe80:') || hostname.startsWith('ff') || hostname.startsWith('127.') || hostname.startsWith('10.')
-        || hostname.startsWith('192.168.') || hostname.startsWith('169.254.')) return false;
-      const parts = hostname.split('.').map(Number);
-      if (parts.length === 4 && parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  return isPublicRemoteUrl(String(value || ''));
 };
 
 const replayIdempotentResult = async (req: any, res: any, record: any) => {
@@ -144,7 +128,7 @@ const replayIdempotentResult = async (req: any, res: any, record: any) => {
   const result = await prisma.tryOnResult.findFirst({
     where: { id: record.tryOnResultId, userId: req.user.id },
   });
-  if (!result) return false;
+  if (!result || !isStorefrontProductAllowed(req.publicApiContext, result.productId)) return false;
   if (record.responseStatus === 422 || result.status === 'rejected') {
     res.status(422).json({
       error: 'TRYON_RESULT_NOT_PUBLISHABLE',
@@ -312,7 +296,7 @@ router.post('/tryons', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requir
 router.get('/tryons/:id', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requireScope('api:tryon'), async (req: any, res) => {
   const id = Number(req.params.id);
   const result = await prisma.tryOnResult.findFirst({ where: { id, userId: req.user.id } });
-  if (!result) return res.status(404).json({ error: 'TRYON_NOT_FOUND' });
+  if (!result || !isStorefrontProductAllowed(req.publicApiContext, result.productId)) return res.status(404).json({ error: 'TRYON_NOT_FOUND' });
   res.json({
     id: String(result.id),
     product_id: result.productId,

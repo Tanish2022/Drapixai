@@ -28,7 +28,12 @@ const ensureRedis = async () => {
   await redisConnectPromise;
 };
 
-const getClientKey = (req: Request) => `${req.ip || 'unknown'}:${req.path}`;
+// Matched templates keep identifier changes in one bucket. Before Express has
+// matched a route, apply the mount-wide cap rather than attacker-chosen paths.
+export const rateLimitRouteKey = (req: Request) =>
+  `${req.baseUrl || ''}:${typeof req.route?.path === 'string' ? req.route.path : req.baseUrl || req.path}`;
+
+const getClientKey = (req: Request) => `${req.ip || 'unknown'}:${rateLimitRouteKey(req)}`;
 
 const applyHeaders = (res: Response, remaining: number, resetAt: number) => {
   res.setHeader('RateLimit-Remaining', String(Math.max(0, remaining)));

@@ -96,10 +96,20 @@ const getStorefrontVerificationSecrets = () => {
   return [...new Set([current, ...previous])];
 };
 
+const verifyBoundedJwt = (token: string, secret: string, options: jwt.VerifyOptions, maxAgeSeconds: number) => {
+  const claims = jwt.verify(token, secret, { ...options, maxAge: maxAgeSeconds }) as jwt.JwtPayload;
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isSafeInteger(claims.iat) || !Number.isSafeInteger(claims.exp)
+    || claims.iat! > now + 30 || claims.exp! <= claims.iat! || claims.exp! - claims.iat! > maxAgeSeconds) {
+    throw new Error('TOKEN_LIFETIME_INVALID');
+  }
+  return claims;
+};
+
 const verifyStorefrontJwt = (token: string, options: jwt.VerifyOptions) => {
   for (const secret of getStorefrontVerificationSecrets()) {
     try {
-      return jwt.verify(token, secret, options) as jwt.JwtPayload;
+      return verifyBoundedJwt(token, secret, options, options.audience === 'drapixai-public-api' ? 900 : 300);
     } catch {
       // Continue through the bounded rotation key ring.
     }
@@ -294,10 +304,11 @@ const resolveGenericStorefrontToken = async (prisma: PrismaClient, credential: s
 const resolveDashboardPreviewToken = async (prisma: PrismaClient, credential: string) => {
   if (!credential.startsWith(DASHBOARD_PREVIEW_TOKEN_PREFIX)) return null;
   try {
-    const claims = jwt.verify(
+    const claims = verifyBoundedJwt(
       credential.slice(DASHBOARD_PREVIEW_TOKEN_PREFIX.length),
       getDashboardPreviewTokenSecret(),
       { algorithms: ['HS256'], audience: 'drapixai-sdk-preview', issuer: 'drapixai-api' },
+      900,
     ) as jwt.JwtPayload;
     if (
       claims.kind !== 'dashboard-preview'

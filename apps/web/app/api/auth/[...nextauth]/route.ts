@@ -21,7 +21,12 @@ const handler = NextAuth({
   session: { strategy: 'jwt' },
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, profile }) {
+      const googleProfile = profile as { email?: unknown; email_verified?: unknown } | undefined;
+      if (googleProfile?.email_verified !== true
+        || typeof googleProfile.email !== 'string'
+        || typeof user.email !== 'string'
+        || googleProfile.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) return false;
       try {
         const res = await fetch(`${API_BASE_URL}/auth/oauth/google`, {
           method: 'POST',

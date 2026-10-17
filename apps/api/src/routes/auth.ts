@@ -6,7 +6,7 @@ import { formatLogError } from '../lib/security';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { issueApiKeyForUser } from '../lib/api-key-auth';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
-import { verifyAdminTotp } from '../lib/admin-mfa';
+import { ADMIN_MFA_SCOPE, ADMIN_SESSION_KEY_MAX_AGE_MS, requiresAdminMfa, verifyAdminTotp } from '../lib/admin-mfa';
 import { PASSWORD_HASH_ROUNDS, validatePasswordStrength } from '../lib/security';
 import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
@@ -255,7 +255,10 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
       return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
     }
 
-    const apiKey = issueNewKey ? await issueApiKeyForUser(prisma, user.id) : null;
+    const apiKey = issueNewKey ? await issueApiKeyForUser(prisma, user.id, requiresAdminMfa(normalizedEmail, user.role) ? {
+      scopes: ['dashboard', ADMIN_MFA_SCOPE],
+      expiresAt: new Date(Date.now() + ADMIN_SESSION_KEY_MAX_AGE_MS),
+    } : {}) : null;
     await appendSecurityAudit(prisma, {
       actorUserId: user.id,
       actorRole: user.role,
@@ -298,6 +301,11 @@ router.post('/oauth/google', async (req, res) => {
     const normalizedSelectedPlan = normalizeSelectedPlan(selectedPlan);
 
     let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    // Google identity alone is not proof of the local operator TOTP challenge.
+    // The existing password + MFA login remains the privileged entry point.
+    if (requiresAdminMfa(normalizedEmail, user?.role)) {
+      return res.status(403).json({ error: 'ADMIN_PASSWORD_MFA_REQUIRED' });
+    }
     if (!user) {
       user = await prisma.user.create({
         data: {
