@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
+import { ADMIN_SESSION_COOKIE, LEGACY_ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
+import { clearSessionCookies } from '@/app/lib/session-cookie';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
 import { noStoreJson, readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
@@ -53,6 +54,9 @@ const proxyAdminRequest = async (request: NextRequest, context: AdminProxyContex
     body: bodyResult.body,
     cache: 'no-store',
   });
+  if (upstream.status === 401 || upstream.status === 403) {
+    clearSessionCookies(cookieStore, ADMIN_SESSION_COOKIE, LEGACY_ADMIN_SESSION_COOKIE);
+  }
 
   const responseHeaders = new Headers();
   responseHeaders.set('Cache-Control', 'no-store, no-cache, max-age=0, must-revalidate');

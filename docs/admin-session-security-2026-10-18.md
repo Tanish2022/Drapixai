@@ -29,6 +29,10 @@ The changes address per-account replay under [ASVS 5.0.0 V6.5.1](https://raw.git
 
 Existing launch and P0 database CI entry points execute these cases. Local results are candidate evidence; record the new clean commit's hosted outcome separately.
 
+Hosted verification for `e4818909cff9f8c54d00b8d9c3388a342eb5fcae`: [run 39061283258](https://github.com/Tanish2022/Drapixai/actions/runs/39061283258) passed application, secret-scan, container-scan and checkpoint-candidate jobs; AI contracts failed on the existing Accelerate advisory. Application logs confirm 54/54 boundary cases, 12 concurrent real PostgreSQL claims with one winner, all nine retention checks, builds/CSP and npm production/development audits. Downloaded edge artifact `12111243570` SHA-256 `8a23a230eba05e1e6fd7f3b83fc74490eaf51efa1aa45482ffe55362dbe16e84` matches its API digest; raw image reports/revision/VEX/source hashes were checked. This does not close the embedded OpenSSL review or certify later commits. Full local history scanning covered 207 commits with no unallowlisted findings.
+
+The [browser-session follow-up](browser-session-security-2026-10-18.md) addresses the custom cookie-prefix and expired-session navigation gaps, with separate fixture scope and rollout requirements. Individual operator enrollment/recovery and live lifecycle approval remain open.
+
 ## Deployment and recovery requirements
 
 1. Apply the reviewed additive migration through the controlled backup/migration procedure **before starting API replicas generated from this schema**. The client expects the column. No live or ordinary local operator database was migrated during this task.

@@ -4,9 +4,11 @@ import { NextRequest } from 'next/server';
 import {
   createDashboardSessionToken,
   DASHBOARD_SESSION_COOKIE,
+  LEGACY_DASHBOARD_SESSION_COOKIE,
   DASHBOARD_SESSION_MAX_AGE_SECONDS,
 } from '@/app/lib/dashboard-session';
 import { noStoreJson, rejectCrossOriginRequest } from '@/app/lib/request-guard';
+import { sessionCookie, retireLegacySessionCookie } from '@/app/lib/session-cookie';
 
 export async function POST(request: NextRequest) {
   const csrfRejection = rejectCrossOriginRequest(request);
@@ -19,15 +21,8 @@ export async function POST(request: NextRequest) {
   }
 
   const cookieStore = await cookies();
-  cookieStore.set({
-    name: DASHBOARD_SESSION_COOKIE,
-    value: await createDashboardSessionToken(apiKey),
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: DASHBOARD_SESSION_MAX_AGE_SECONDS,
-  });
+  cookieStore.set(sessionCookie(DASHBOARD_SESSION_COOKIE, await createDashboardSessionToken(apiKey), DASHBOARD_SESSION_MAX_AGE_SECONDS));
+  retireLegacySessionCookie(cookieStore, LEGACY_DASHBOARD_SESSION_COOKIE);
 
   return noStoreJson({ ok: true });
 }

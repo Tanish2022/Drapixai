@@ -27,6 +27,7 @@ function loader(mocks = {}, globals = {}) {
       ...globals,
       require(name) {
         if (Object.hasOwn(mocks, name)) return mocks[name];
+        if (name.startsWith('@/')) return load(path.join('apps/web', `${name.slice(2)}.ts`));
         if (name.startsWith('.') && fs.existsSync(path.resolve(path.dirname(file), `${name}.ts`))) return load(path.resolve(path.dirname(file), `${name}.ts`));
         return createRequire(file)(name);
       },
@@ -578,6 +579,163 @@ for (const expired of [true, false]) test(`Dashboard preview ${expired ? 'cannot
   const token = f.auth.issueDashboardPreviewToken({ apiKeyId: f.key.id, userId: f.key.userId, allowedDomain: 'preview.example.test' });
   const result = await f.auth.resolveSdkApiKey(f.database, token);
   assert.equal(Boolean(result), !expired); assert.equal(f.key.lastUsedAt.getTime(), last);
+});
+
+function browserSessionFixture(purpose = 'admin', mode = 'production') {
+  const values = new Map(), writes = [], calls = [];
+  const env = { NODE_ENV: mode, NEXT_PUBLIC_WEB_BASE_URL: 'https://app.example.test', ADMIN_SESSION_SECRET: 'synthetic-admin-browser-cookie-secret-32-plus', DASHBOARD_SESSION_SECRET: 'synthetic-dashboard-browser-cookie-secret-32-plus', DRAPIXAI_DASHBOARD_PROXY_TOKEN: 'synthetic-proxy-fixture' };
+  const store = { get: (name) => values.has(name) ? { value: values.get(name) } : undefined,
+    set: (cookie) => { writes.push(cookie); if (cookie.maxAge === 0) values.delete(cookie.name); else values.set(cookie.name, cookie.value); } };
+  const fixture = { status: 200, expectedPassword: 'fixture-password' };
+  const load = loader({
+    'next/headers': { cookies: async () => store },
+    '@/app/lib/server-env': { SERVER_API_BASE_URL: 'https://internal-api.example.test' },
+    'next-auth/jwt': { getToken: async () => ({ apiKey: 'synthetic-browser-key' }) },
+  }, { process: { env }, fetch: async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith('/auth/login')) {
+      const payload = JSON.parse(init.body);
+      return payload.password === fixture.expectedPassword ? Response.json({ apiKey: 'synthetic-browser-key' }) : Response.json({ error: 'INVALID' }, { status: 401 });
+    }
+    return Response.json({ ok: true }, { status: fixture.status });
+  } });
+  const session = load(`apps/web/app/lib/${purpose}-session.ts`);
+  const prefix = purpose.toUpperCase();
+  return { ...fixture, config: fixture, env, values, writes, calls, load, session,
+    name: session[`${prefix}_SESSION_COOKIE`], legacy: `drapixai_${purpose}_session`,
+    create: session[`create${purpose[0].toUpperCase()+purpose.slice(1)}SessionToken`],
+    read: session[`read${purpose[0].toUpperCase()+purpose.slice(1)}SessionToken`],
+  };
+}
+
+for (const purpose of ['admin', 'dashboard']) {
+  test(`${purpose} cookie uses a host prefix in production and retains HTTP development naming`, async () => {
+    const prod = browserSessionFixture(purpose), dev = browserSessionFixture(purpose, 'development');
+    assert.equal(prod.name, `__Host-drapixai_${purpose}_session`);
+    assert.equal(dev.name, `drapixai_${purpose}_session`);
+    const token = await prod.create('synthetic-browser-key');
+    assert.equal((await prod.read(token)).apiKey, 'synthetic-browser-key');
+    assert.equal(await prod.read(token + '.extra'), null);
+    const local = await dev.create('synthetic-browser-key');
+    assert.equal((await dev.read(local)).apiKey, 'synthetic-browser-key');
+  });
+
+  test(`${purpose} cookie rejects legacy unbound ciphertext even when supplied under the new name`, async () => {
+    const f = browserSessionFixture(purpose);
+    const crypto = require('node:crypto').webcrypto;
+    const key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', Buffer.from(f.env[`${purpose.toUpperCase()}_SESSION_SECRET`])), 'AES-GCM', false, ['encrypt']);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, Buffer.from(JSON.stringify({ scope: purpose, apiKey: 'synthetic-browser-key', expiresAt: Date.now()+60000 })));
+    const legacy = Buffer.from(iv).toString('base64url')+'.'+Buffer.from(cipher).toString('base64url');
+    assert.equal(await f.read(legacy), null);
+  });
+
+  test(`${purpose} production proxy ignores legacy-only cookies before contacting the API`, async () => {
+    const f = browserSessionFixture(purpose);
+    f.values.set(f.legacy, await f.create('synthetic-browser-key'));
+    const route = f.load(`apps/web/app/api/${purpose}/proxy/[...path]/route.ts`);
+    const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+    const segments = purpose === 'admin' ? ['overview'] : ['analytics', 'summary'];
+    const result = await route.GET(new NextRequest('https://app.example.test/api/proxy'), { params: Promise.resolve({ path: segments }) });
+    assert.equal(result.status, 401); assert.equal(f.calls.length, 0);
+  });
+
+  test(`${purpose} login and logout apply host-only cookie policy and retire the legacy name`, async () => {
+    const f = browserSessionFixture(purpose);
+    const route = f.load(`apps/web/app/api/${purpose}/session/route.ts`);
+    const payload = { mode: 'login', email: 'fixture@example.test', password: f.config.expectedPassword, mfaCode: '123456' };
+    assert.equal((await route.POST(new Request('https://app.example.test/api/session', { method: 'POST', headers: { origin: 'https://app.example.test', 'content-type': 'application/json' }, body: JSON.stringify(payload) }))).status, 200);
+    const primary = f.writes.find((cookie) => cookie.name === `__Host-drapixai_${purpose}_session` && cookie.maxAge > 0);
+    assert.ok(primary); assert.equal(primary.secure, true); assert.equal(primary.httpOnly, true);
+    assert.equal(primary.sameSite, 'strict'); assert.equal(primary.path, '/'); assert.equal(primary.domain, undefined);
+    assert.ok(f.writes.some((cookie) => cookie.name === f.legacy && cookie.maxAge === 0));
+    f.writes.length = 0;
+    await route.DELETE(new Request('https://app.example.test/api/session', { method: 'DELETE', headers: { origin: 'https://app.example.test' } }));
+    assert.ok(f.writes.some((cookie) => cookie.name === primary.name && cookie.maxAge === 0));
+    assert.ok(f.writes.some((cookie) => cookie.name === f.legacy && cookie.maxAge === 0));
+    assert.equal(f.values.has(primary.name), false);
+  });
+
+  test(`${purpose} development login retains usable HTTP-only localhost configuration`, async () => {
+    const f = browserSessionFixture(purpose, 'development');
+    const result = await f.load(`apps/web/app/api/${purpose}/session/route.ts`).POST(new Request('https://app.example.test/api/session', {
+      method: 'POST', headers: { origin: 'https://app.example.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'login', email: 'fixture@example.test', password: f.config.expectedPassword, mfaCode: '123456' }),
+    }));
+    assert.equal(result.status, 200);
+    const primary = f.writes.find((cookie) => cookie.name === f.legacy && cookie.maxAge > 0);
+    assert.ok(primary); assert.equal(primary.secure, false); assert.equal(primary.httpOnly, true);
+    assert.equal(primary.sameSite, 'strict'); assert.equal(primary.path, '/'); assert.equal(primary.domain, undefined);
+  });
+
+  test(`${purpose} proxy clears the browser cookie when the backend rejects the credential`, async () => {
+    const f = browserSessionFixture(purpose); f.values.set(f.name, await f.create('synthetic-browser-key')); f.config.status = 401;
+    const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+    const route = f.load(`apps/web/app/api/${purpose}/proxy/[...path]/route.ts`);
+    const pathSegments = purpose === 'admin' ? ['overview'] : ['analytics', 'summary'];
+    const result = await route.GET(new NextRequest('https://app.example.test/api/proxy'), { params: Promise.resolve({ path: pathSegments }) });
+    assert.equal(result.status, 401); assert.ok(f.writes.some((cookie) => cookie.name === f.name && cookie.maxAge === 0));
+  });
+}
+
+test('Google dashboard bridge uses the same protected cookie and legacy retirement policy', async () => {
+  const f = browserSessionFixture('dashboard');
+  const result = await f.load('apps/web/app/api/dashboard/oauth-session/route.ts').POST(new Request('https://app.example.test/api/session', { method: 'POST', headers: { origin: 'https://app.example.test' } }));
+  assert.equal(result.status, 200);
+  assert.ok(f.writes.some((cookie) => cookie.name === '__Host-drapixai_dashboard_session' && cookie.secure && cookie.httpOnly && cookie.path === '/' && cookie.maxAge > 0 && !cookie.domain));
+  assert.ok(f.writes.some((cookie) => cookie.name === f.legacy && cookie.maxAge === 0));
+});
+
+test('Admin browser login preserves significant password whitespace', async () => {
+  const f = browserSessionFixture(); f.config.expectedPassword = '  fixture-password  ';
+  const result = await f.load('apps/web/app/api/admin/session/route.ts').POST(new Request('https://app.example.test/api/session', { method: 'POST', headers: { origin: 'https://app.example.test', 'content-type': 'application/json' }, body: JSON.stringify({ email: 'fixture@example.test', password: f.config.expectedPassword, mfaCode: '123456' }) }));
+  assert.equal(result.status, 200);
+  assert.equal(JSON.parse(f.calls[0].init.body).password, f.config.expectedPassword);
+});
+
+test('Merchant permission rejection does not log out an otherwise valid browser session', async () => {
+  const f = browserSessionFixture('dashboard'); f.values.set(f.name, await f.create('synthetic-browser-key')); f.config.status = 403;
+  const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+  const result = await f.load('apps/web/app/api/dashboard/proxy/[...path]/route.ts').GET(new NextRequest('https://app.example.test/api/proxy'), { params: Promise.resolve({ path: ['account', 'profile'] }) });
+  assert.equal(result.status, 403); assert.equal(f.values.has(f.name), true); assert.equal(f.writes.length, 0);
+});
+
+test('Admin request helper handles later expiry once and stops queued private requests', async () => {
+  let calls = 0, redirects = 0;
+  const { createAdminFetch } = loader({}, { fetch: async () => { calls++; return Response.json({ error: 'EXPIRED' }, { status: 401 }); } })('apps/web/app/lib/admin-fetch.ts');
+  const adminFetch = createAdminFetch(() => { redirects++; });
+  assert.equal((await adminFetch('overview')).status, 401);
+  assert.equal((await adminFetch('garments')).status, 401);
+  assert.equal(calls, 1); assert.equal(redirects, 1);
+});
+
+test('Late successful admin response is discarded after another request expires the session', async () => {
+  let finish, redirects = 0, cancelled = false;
+  const { createAdminFetch } = loader({}, { fetch: async (url) => String(url).endsWith('/overview')
+    ? new Promise((resolve) => { finish = resolve; }) : Response.json({ error: 'EXPIRED' }, { status: 403 }) })('apps/web/app/lib/admin-fetch.ts');
+  const adminFetch = createAdminFetch(() => { redirects++; });
+  const pending = adminFetch('overview');
+  assert.equal((await adminFetch('garments')).status, 403);
+  finish(new Response(new ReadableStream({ cancel() { cancelled = true; } }), { status: 200 }));
+  assert.equal((await pending).status, 401); assert.equal(redirects, 1); assert.equal(cancelled, true);
+});
+
+test('Ordinary backend failure does not permanently expire the admin request helper', async () => {
+  let calls = 0, redirects = 0;
+  const { createAdminFetch } = loader({}, { fetch: async () => Response.json({}, { status: ++calls === 1 ? 503 : 200 }) })('apps/web/app/lib/admin-fetch.ts');
+  const adminFetch = createAdminFetch(() => { redirects++; });
+  assert.equal((await adminFetch('overview')).status, 503);
+  assert.equal((await adminFetch('overview')).status, 200);
+  assert.equal(redirects, 0); assert.equal(calls, 2);
+});
+
+test('Malformed admin credential types fail before an upstream authentication request', async () => {
+  const f = browserSessionFixture();
+  const response = await f.load('apps/web/app/api/admin/session/route.ts').POST(new Request('https://app.example.test/api/session', {
+    method: 'POST', headers: { origin: 'https://app.example.test', 'content-type': 'application/json' },
+    body: JSON.stringify({ email: { unexpected: true }, password: ['fixture-password'] }),
+  }));
+  assert.equal(response.status, 400); assert.equal(f.calls.length, 0);
 });
 
 (async () => {

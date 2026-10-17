@@ -1,4 +1,6 @@
-export const DASHBOARD_SESSION_COOKIE = 'drapixai_dashboard_session';
+import { sessionCookieName } from './session-cookie';
+export const LEGACY_DASHBOARD_SESSION_COOKIE = 'drapixai_dashboard_session';
+export const DASHBOARD_SESSION_COOKIE = sessionCookieName(LEGACY_DASHBOARD_SESSION_COOKIE);
 export const DASHBOARD_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 const encoder = new TextEncoder();
@@ -73,7 +75,7 @@ export const createDashboardSessionToken = async (apiKey: string) => {
 
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipherBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(DASHBOARD_SESSION_COOKIE) },
     await getEncryptionKey(),
     encoder.encode(JSON.stringify(payload))
   );
@@ -91,14 +93,14 @@ export const readDashboardSessionToken = async (token: string | undefined) => {
     return null;
   }
 
-  const [ivPart, cipherPart] = token.split('.');
-  if (!ivPart || !cipherPart) {
+  const [ivPart, cipherPart, ...extra] = token.split('.');
+  if (!ivPart || !cipherPart || extra.length) {
     return null;
   }
 
   try {
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: decodeBase64Url(ivPart) },
+      { name: 'AES-GCM', iv: decodeBase64Url(ivPart), additionalData: encoder.encode(DASHBOARD_SESSION_COOKIE) },
       await getEncryptionKey(),
       decodeBase64Url(cipherPart)
     );

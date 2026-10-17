@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { clearSessionCookies } from '@/app/lib/session-cookie';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
 import { noStoreJson, readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
@@ -71,6 +72,7 @@ const proxyDashboardRequest = async (request: NextRequest, context: DashboardPro
     body: bodyResult.body,
     cache: 'no-store',
   });
+  if (upstream.status === 401) clearSessionCookies(cookieStore, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE);
 
   const responseHeaders = new Headers();
   responseHeaders.set('Cache-Control', 'no-store, no-cache, max-age=0, must-revalidate');

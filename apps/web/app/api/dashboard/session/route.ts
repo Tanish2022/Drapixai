@@ -2,11 +2,13 @@ import { cookies } from 'next/headers';
 import {
   createDashboardSessionToken,
   DASHBOARD_SESSION_COOKIE,
+  LEGACY_DASHBOARD_SESSION_COOKIE,
   DASHBOARD_SESSION_MAX_AGE_SECONDS,
   readDashboardSessionToken,
 } from '@/app/lib/dashboard-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
 import { noStoreJson, rejectCrossOriginRequest } from '@/app/lib/request-guard';
+import { sessionCookie, retireLegacySessionCookie, clearSessionCookies } from '@/app/lib/session-cookie';
 
 type DashboardSessionRequestBody = {
   mode?: 'login' | 'register';
@@ -30,15 +32,8 @@ const getDashboardValidationHeaders = (apiKey: string) => {
 
 const persistDashboardCookie = async (apiKey: string) => {
   const cookieStore = await cookies();
-  cookieStore.set({
-    name: DASHBOARD_SESSION_COOKIE,
-    value: await createDashboardSessionToken(apiKey),
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: DASHBOARD_SESSION_MAX_AGE_SECONDS,
-  });
+  cookieStore.set(sessionCookie(DASHBOARD_SESSION_COOKIE, await createDashboardSessionToken(apiKey), DASHBOARD_SESSION_MAX_AGE_SECONDS));
+  retireLegacySessionCookie(cookieStore, LEGACY_DASHBOARD_SESSION_COOKIE);
 };
 
 const validateApiKey = async (apiKey: string) => {
@@ -138,15 +133,7 @@ export async function DELETE(request: Request) {
       cache: 'no-store',
     }).catch(() => null);
   }
-  cookieStore.set({
-    name: DASHBOARD_SESSION_COOKIE,
-    value: '',
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 0,
-  });
+  clearSessionCookies(cookieStore, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE);
 
   return noStoreJson({ ok: true });
 }

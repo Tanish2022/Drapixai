@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import BrandLogo from '@/app/components/BrandLogo';
+import { createAdminFetch } from '@/app/lib/admin-fetch';
 
 interface AdminGarment {
   id: number;
@@ -126,7 +127,7 @@ export default function AdminDashboard() {
   const [tryOnFilter, setTryOnFilter] = useState<TryOnReviewFilter>('generated');
   const [garmentFilter, setGarmentFilter] = useState<GarmentReviewFilter>('pending');
   const router = useRouter();
-  const adminFetch = (path: string, init?: RequestInit) => fetch(`/api/admin/proxy/${path}`, init);
+  const adminFetch = useMemo(() => createAdminFetch(() => router.replace('/admin-access')), [router]);
 
   useEffect(() => {
     let active = true;
@@ -173,7 +174,7 @@ export default function AdminDashboard() {
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [router, adminFetch]);
 
   const fetchGarments = async (filter = garmentFilter) => {
     const res = await adminFetch(`garments?filter=${encodeURIComponent(filter)}`);

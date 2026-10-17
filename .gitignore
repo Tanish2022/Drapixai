@@ -2,6 +2,7 @@ node_modules/
 .next/
 .next-review/
 .next-compliance-audit/
+.next-browser-session-audit/
 .venv/
 .vscode/
 .env
