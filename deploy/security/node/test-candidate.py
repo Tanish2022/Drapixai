@@ -8,6 +8,44 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('node_candidate', HERE/'prepare-edge-candidate.py')
 candidate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(candidate)
+upstream_spec = importlib.util.spec_from_file_location('node_upstream', HERE/'verify-upstream.py')
+upstream = importlib.util.module_from_spec(upstream_spec)
+upstream_spec.loader.exec_module(upstream)
+
+
+class UpstreamEvidence(unittest.TestCase):
+    def test_incomplete_failed_or_skipped_subsystems_cannot_report_pass(self):
+        complete = '''Total: 4 tests
+ *    0 tests will be skipped
+ *    4 tests are expected to pass
+ *    0 tests are expected to fail that we won't fix
+ *    0 tests are expected to fail that we should fix
+TAP version 13
+1..4
+ok 1 parallel/test-crypto-a.js
+ok 2 parallel/test-tls-b.js
+ok 3 parallel/test-https-c.js
+ok 4 parallel/test-http2-d.js
+'''
+        cases = {
+            'valid': (complete, True),
+            'empty': ('', False),
+            'truncated': (complete.rsplit('ok 4', 1)[0], False),
+            'missing-plan': (complete.replace('1..4\n', ''), False),
+            'duplicate-plan': (complete+'1..4\n', False),
+            'missing-summary': (complete[complete.index('TAP version'):], False),
+            'duplicate-case': (complete.replace('ok 3', 'ok 2'), False),
+            'failed-case': (complete.replace('ok 4', 'not ok 4'), False),
+            'todo-case': (complete.replace('http2-d.js', 'http2-d.js # TODO'), False),
+            'whole-subsystem-skipped': (complete.replace('http2-d.js', 'http2-d.js # skip unavailable'), False),
+            'expected-failure': (complete.replace('0 tests are expected to fail that we should fix',
+                                                  '1 tests are expected to fail that we should fix'), False),
+            'subsystem-in-unrelated-name': (complete.replace('test-http2-d.js',
+                                                              'test-other-d.js parallel/test-http2-fake'), False),
+        }
+        for name, (text, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(upstream.parse_tap(text)['passed'], expected)
 
 
 class CandidateInputs(unittest.TestCase):

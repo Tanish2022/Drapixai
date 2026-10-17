@@ -136,6 +136,35 @@ No added recurring CI build or paid resource is provisioned by this candidate.
 
 ## Required review and promotion evidence
 
+The broader offline upstream check runs Node's own parallel crypto, TLS, HTTPS
+and HTTP/2 tests. **It has not yet passed for this candidate.** After the original
+compilation has reached a terminal result and the final runtime/metadata build
+has succeeded, retain the matching source-build stage locally (the unchanged
+compilation layer should be cached):
+
+```powershell
+docker build --target build -f deploy/security/node/Dockerfile.shared-openssl -t drapixai-node22-shared:build-review deploy/security/node
+python deploy/security/node/verify-upstream.py --build-image drapixai-node22-shared:build-review --runtime-image drapixai-node22-shared:review-candidate
+```
+
+Do not start a duplicate compilation because the existing build is quiet. The
+verifier does not build or pull images. It first binds immutable build/runtime
+image IDs and checks that both actually contain the same Node binary, loaded
+libraries, source pin and provenance. The unprivileged, read-only test container
+has no network, two CPUs, a 2 GiB memory cap and temporary scratch space. A bounded
+runner uses two test workers, retains raw TAP/stderr and records upstream-status
+exclusions and runtime skips. Empty/truncated output, missing subsystems, TODOs,
+expected failures or a nonzero runner exit cannot pass. Exact-label container
+cleanup also handles a timed-out Docker client.
+
+These subsystem tests execute in the source-build image, not the distroless
+image, and are a subset of Node's upstream tests. The separate actual-runtime
+TLS/core checks and application/native probes remain required. Review every
+upstream exclusion/skip; a passing subset is not downstream certification. The
+input-policy suite includes twelve adversarial TAP parsing controls, and an
+actual static baseline was rejected at the review-channel boundary. Neither
+result claims the candidate passed upstream tests.
+
 Runtime compilation, core/TLS smoke tests, full application/native compatibility,
 fresh scans and qualified downstream ABI/crypto/maintenance review must all be
 recorded before integration is considered. Initial preparation/policy tests or a

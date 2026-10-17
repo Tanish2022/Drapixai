@@ -39,6 +39,48 @@ Raw metadata, status and report are retained locally under
 
 ## Build and compatibility status
 
+### Upstream harness calibration
+
+The prepared [upstream verifier](../deploy/security/node/verify-upstream.py) runs
+the official Node source archive's parallel crypto, TLS, HTTPS and HTTP/2 tests.
+Its result parser passed twelve positive/adversarial controls; the existing
+static runtime was rejected at the candidate review-channel boundary. These
+checks do not establish a candidate runtime pass.
+
+The test harness was then calibrated against the actual existing stock Node
+22.23.3 binary. Its SHA-256 remained
+`fde6a4bf8d0562f7751d1a2d6cb9b417c4cfe107bbcb0aa3e9a24e125e348f48`.
+A temporary, local driver used the pinned public source archive and the already
+built binary; it configured the source test tree without compiling Node or
+copying application code. Runs were offline, unprivileged, read-only, bounded to
+two CPUs/two workers/2 GiB and used disposable scratch space. No host port was
+published and no external target was tested.
+
+| Stock-binary calibration | Actual results |
+|---|---|
+| Default expected bundled-CLI path absent | 660 planned/results, zero failures or TODOs; 644 non-skipped, 16 runtime skips |
+| Existing Debian CLI exposed at expected test path | 660 planned/results, zero failures or TODOs; 656 non-skipped, four runtime skips |
+| Remaining four skips | Legacy Blowfish provider; upstream OpenSSL 3 certificate-extension case; unsupported `s_client -ssl3`; absent `h2load` |
+| CLI interoperability executable | Debian OpenSSL 3.5.7, SHA-256 `acc10176d038aeb7b2a77d9ec972ac2985857a7191f7aecb7c54ef0e2c7e9549` |
+| Log/evidence verification | Raw stdout/stderr hashes and complete TAP plans/results checked; current parser reproduced both retained reports |
+
+The CLI calibration is an interoperability fixture using Debian's executable;
+it is not the stock binary's bundled OpenSSL 3.5.8 CLI. No Node test source or
+Node binary was patched to make it pass. Skips remain unexercised and are not
+reported as passing tests. Baseline reports, image IDs and raw logs are retained
+under `runtime/security-candidate/node-shared-openssl/baseline-upstream-3ac38a6650da/`
+and the verified summary `baseline-upstream-verified.json` in its parent.
+
+The candidate verifier requires matching actual binary/library hashes and
+source provenance in the source-build and distroless images, records the CLI and
+upstream helper hashes, and rejects empty/incomplete TAP, missing wholly exercised
+subsystems, TODOs, expected failures or a nonzero runner exit. It cleans up only
+containers bearing its own exact random label, including when its Docker client
+times out. Upstream tests run in the source-build image and cover a subset of
+Node CI; final distroless core/TLS and actual application/native checks remain
+separate requirements. **The shared-OpenSSL candidate has not passed these
+upstream tests yet.**
+
 The two-job source compilation remains running in the original build session at
 this checkpoint. Docker clipped the verbose compiler step after its output
 limit; that observation is not a terminal result. Do not start a duplicate build
