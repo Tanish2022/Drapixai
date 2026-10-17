@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { PrismaClient, Prisma, ApiKey } from '@prisma/client';
+import { PrismaClient, Prisma, ApiKey, User } from '@prisma/client';
 import { ADMIN_MFA_SCOPE, ADMIN_SESSION_IDLE_TIMEOUT_MS, ADMIN_SESSION_KEY_MAX_AGE_MS } from './admin-mfa';
 
 const MODERN_API_KEY_PREFIX = 'dpx_';
@@ -67,6 +67,22 @@ const recordKeyActivity = async (prisma: PrismaClient, key: ApiKey) => {
   return result.count === 1 ? { ...key, lastUsedAt: now } : null;
 };
 
+export type PasswordCredentialSnapshot = Pick<User, 'id' | 'email' | 'passwordHash' | 'authVersion' | 'role' | 'emailVerifiedAt'>;
+export const passwordCredentialWhere = (snapshot: PasswordCredentialSnapshot): Prisma.UserWhereUniqueInput => ({
+  id: snapshot.id, email: snapshot.email, passwordHash: snapshot.passwordHash,
+  authVersion: snapshot.authVersion, role: snapshot.role, emailVerifiedAt: snapshot.emailVerifiedAt,
+});
+
+export const applyVerifiedPassword = (
+  prisma: Pick<PrismaClient, 'user'>,
+  snapshot: PasswordCredentialSnapshot,
+  passwordHash = snapshot.passwordHash,
+  advanceVersion = false,
+) => prisma.user.update({
+  where: passwordCredentialWhere(snapshot),
+  data: { passwordHash, ...(advanceVersion ? { authVersion: { increment: 1 } } : {}) },
+});
+
 export const issueApiKeyForUser = async (
   prisma: PrismaClient,
   userId: number,
@@ -77,6 +93,7 @@ export const issueApiKeyForUser = async (
     deactivateExisting?: boolean;
     expiresAt?: Date | null;
     scopes?: string[];
+    passwordProof?: { snapshot: PasswordCredentialSnapshot; upgradedHash?: string };
   } = {},
 ) => {
   const kind = options.kind || 'dashboard';
@@ -89,7 +106,14 @@ export const issueApiKeyForUser = async (
   const apiKey = generateApiKey();
   const keyHash = hashApiKey(apiKey);
 
-  const operations = [];
+  const operations: Prisma.PrismaPromise<unknown>[] = [];
+  if (options.passwordProof) {
+    if (options.passwordProof.snapshot.id !== userId) throw new Error('PASSWORD_PROOF_USER_MISMATCH');
+    // The conditional user update locks the same row as credential resets. It
+    // must succeed inside this transaction before rotating/creating any key.
+    // Rehashing preserves authVersion; actual password changes advance it.
+    operations.push(applyVerifiedPassword(prisma, options.passwordProof.snapshot, options.passwordProof.upgradedHash));
+  }
   if (options.deactivateExisting !== false) {
     operations.push(prisma.apiKey.updateMany({
       where: { userId, kind, isActive: true },

@@ -1,26 +1,26 @@
-import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
-import { PASSWORD_HASH_ROUNDS } from '../lib/security';
+import { hashPassword, verifyPassword, isPasswordInput } from '../lib/password-hash';
+import { passwordCredentialWhere } from '../lib/api-key-auth';
 
-const prisma = new PrismaClient();
+const bootstrapPrisma = new PrismaClient();
 
-export const ensureAdminUser = async () => {
+export const ensureAdminUser = async (prisma: PrismaClient = bootstrapPrisma) => {
   const adminEmail = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
-  const adminPassword = (process.env.DRAPIXAI_ADMIN_PASSWORD || '').trim();
+  const adminPassword = process.env.DRAPIXAI_ADMIN_PASSWORD || '';
 
   if (!adminEmail || !adminPassword) {
     console.warn('Admin bootstrap skipped because DRAPIXAI_ADMIN_EMAIL or DRAPIXAI_ADMIN_PASSWORD is missing.');
     return;
   }
+  if (!isPasswordInput(adminPassword)) throw new Error('ADMIN_BOOTSTRAP_PASSWORD_INVALID');
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
-  const passwordHash = await bcrypt.hash(adminPassword, PASSWORD_HASH_ROUNDS);
 
   if (!existing) {
     await prisma.user.create({
       data: {
         email: adminEmail,
-        passwordHash,
+        passwordHash: await hashPassword(adminPassword),
         role: 'system_admin',
         companyName: 'DrapixAI Admin',
         planType: 'pro',
@@ -35,29 +35,39 @@ export const ensureAdminUser = async () => {
     return;
   }
 
-  const passwordMatches = await bcrypt.compare(adminPassword, existing.passwordHash);
+  const verified = await verifyPassword(adminPassword, existing.passwordHash);
+  const credentialChanged = !verified.matches || existing.role !== 'system_admin';
   if (
-    !passwordMatches ||
+    !verified.matches || verified.needsUpgrade ||
     existing.companyName !== 'DrapixAI Admin' ||
     existing.role !== 'system_admin' ||
     existing.planType !== 'pro' ||
     existing.subscriptionPlan !== 'pro' ||
     existing.subscriptionStatus !== 'active'
   ) {
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: {
-        passwordHash,
-        role: 'system_admin',
-        companyName: 'DrapixAI Admin',
-        planType: 'pro',
-        selectedPlan: 'pro',
-        subscriptionPlan: 'pro',
-        subscriptionStatus: 'active',
-        subscriptionProvider: 'internal',
-        trialExpiresAt: null,
-        subscriptionCurrentPeriodEndsAt: null,
-      },
-    });
+    const passwordHash = !verified.matches || verified.needsUpgrade ? await hashPassword(adminPassword) : existing.passwordHash;
+    const revokedAt = new Date();
+    await prisma.$transaction([
+      prisma.user.update({
+        where: passwordCredentialWhere(existing),
+        data: {
+          passwordHash,
+          ...(credentialChanged ? { authVersion: { increment: 1 } } : {}),
+          role: 'system_admin',
+          companyName: 'DrapixAI Admin',
+          planType: 'pro',
+          selectedPlan: 'pro',
+          subscriptionPlan: 'pro',
+          subscriptionStatus: 'active',
+          subscriptionProvider: 'internal',
+          trialExpiresAt: null,
+          subscriptionCurrentPeriodEndsAt: null,
+        },
+      }),
+      ...(credentialChanged ? [
+        prisma.apiKey.updateMany({ where: { userId: existing.id, isActive: true }, data: { isActive: false, revokedAt } }),
+        prisma.verificationCode.updateMany({ where: { userId: existing.id, consumedAt: null }, data: { consumedAt: revokedAt } }),
+      ] : []),
+    ]);
   }
 };

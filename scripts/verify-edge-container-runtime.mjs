@@ -12,9 +12,10 @@ const postgresImage = 'postgres:16-bookworm@sha256:0ea6700a3b4f0ae6ce74651907355
 const runId = crypto.randomBytes(6).toString('hex');
 const network = `drapixai-edge-runtime-${runId}`;
 const database = `drapixai-edge-db-${runId}`;
+const databaseName = 'drapixai_edge_test';
 const web = `drapixai-edge-web-${runId}`;
 const password = crypto.randomBytes(24).toString('hex');
-const probeEnv = { ...process.env, POSTGRES_PASSWORD: password, DATABASE_URL: `postgresql://postgres:${password}@${database}:5432/postgres`, DASHBOARD_SESSION_SECRET: crypto.randomBytes(32).toString('hex') };
+const probeEnv = { ...process.env, POSTGRES_PASSWORD: password, DATABASE_URL: `postgresql://postgres:${password}@${database}:5432/${databaseName}`, DASHBOARD_SESSION_SECRET: crypto.randomBytes(32).toString('hex') };
 const evidenceRoot = path.join(root, 'runtime/launch-evidence');
 fs.mkdirSync(evidenceRoot, { recursive: true });
 const reportFile = path.join(evidenceRoot, `edge-runtime-${runId}.json`);
@@ -33,14 +34,14 @@ report.source = {
   dockerfilesScope: 'current verifier checkout inputs; not an attestation of tested image build inputs',
   verifierSha256: crypto.createHash('sha256').update(fs.readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
 };
-const invoke = (args, env = process.env) => spawnSync('docker', args, { env, encoding: 'utf8', timeout: 180000, maxBuffer: 4 * 1024 * 1024 });
+const invoke = (args, env = process.env, input) => spawnSync('docker', args, { env, input, encoding: 'utf8', timeout: 180000, maxBuffer: 4 * 1024 * 1024 });
 const docker = (args, env) => {
   const result = invoke(args, env);
   assert.equal(result.status, 0, `Docker operation failed: ${result.error?.message || result.stderr || result.stdout}`);
   return result.stdout.trim();
 };
 const pause = () => new Promise((resolve) => setTimeout(resolve, 500));
-const safety = ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m'];
+const safety = ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--memory', '512m', '--cpus', '2', '--pids-limit', '128', '--ulimit', 'core=0', '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m'];
 const commonProbe = String.raw`
   const assert = require('node:assert/strict');
   const fs = require('node:fs');
@@ -69,14 +70,26 @@ try {
   }
   docker(['network', 'create', '--internal', '--label', 'drapixai.purpose=disposable-edge-runtime-test', network]);
   networkCreated = true;
-  docker(['run', '-d', '--name', database, '--network', network, '--label', 'drapixai.purpose=disposable-edge-runtime-test', '-e', 'POSTGRES_PASSWORD', postgresImage], probeEnv);
+  docker(['run', '-d', '--name', database, '--network', network, '--label', 'drapixai.purpose=disposable-edge-runtime-test',
+    '--memory', '512m', '--cpus', '2', '--pids-limit', '128', '-e', 'POSTGRES_PASSWORD', '-e', `POSTGRES_DB=${databaseName}`, postgresImage], probeEnv);
   databaseCreated = true;
   let ready = false;
   for (let i = 0; i < 60; i++) {
-    if (invoke(['exec', database, 'pg_isready', '-U', 'postgres']).status === 0) { ready = true; break; }
+    const probe = invoke(['exec', database, 'psql', '-X', '-t', '-A', '-h', '127.0.0.1', '-U', 'postgres', '-d', databaseName, '-c', 'SELECT 1;']);
+    if (probe.status === 0 && probe.stdout.trim() === '1') { ready = true; break; }
     await pause();
   }
   assert.ok(ready, 'Disposable PostgreSQL failed to start');
+  const migrationRoot = path.join(root, 'apps/api/prisma/migrations');
+  report.source.migrationSha256 = {};
+  for (const name of fs.readdirSync(migrationRoot).sort()) {
+    const file = path.join(migrationRoot, name, 'migration.sql');
+    if (!fs.existsSync(file)) continue;
+    const bytes = fs.readFileSync(file);
+    report.source.migrationSha256[`apps/api/prisma/migrations/${name}/migration.sql`] = crypto.createHash('sha256').update(bytes).digest('hex');
+    const applied = invoke(['exec', '-i', database, 'psql', '-X', '-q', '-h', '127.0.0.1', '-U', 'postgres', '-d', databaseName, '-v', 'ON_ERROR_STOP=1'], probeEnv, bytes);
+    assert.equal(applied.status, 0, `Disposable schema migration ${name} failed: ${applied.stderr || applied.error?.message || ''}`);
+  }
   docker(['run', '--pull=never', '--rm', ...safety, '--network', network, '-e', 'DATABASE_URL', report.images.api.imageId, '-e', `${commonProbe}
     (async () => {
       const sharp = require('sharp');
@@ -93,6 +106,22 @@ try {
     })().catch(error => { console.error(error.message); process.exit(1); });`], probeEnv);
   report.checks.push('api-nonroot-readonly-debian13-native-sharp-prisma-and-offline-mail');
   console.log('API native runtime compatibility passed against disposable PostgreSQL.');
+  // Share only the owned database's network namespace, so the fixture's strict
+  // loopback/disposable-DB guard remains intact. No host port is published.
+  const passwordEnv = { ...probeEnv, DATABASE_URL: `postgresql://postgres:${password}@127.0.0.1:5432/${databaseName}?connection_limit=6&pool_timeout=10`,
+    NODE_ENV: 'test', DRAPIXAI_DISPOSABLE_DB_APPROVAL: 'I_ACKNOWLEDGE_DISPOSABLE_DATABASE', DRAPIXAI_AUDIT_LOG_SECRET: crypto.randomBytes(48).toString('hex') };
+  const databaseOutput = docker(['run', '--pull=never', '--rm', ...safety, '--network', `container:${database}`,
+    '-e', 'DATABASE_URL', '-e', 'NODE_ENV', '-e', 'DRAPIXAI_DISPOSABLE_DB_APPROVAL', '-e', 'DRAPIXAI_AUDIT_LOG_SECRET',
+    report.images.api.imageId, '-e', `${commonProbe}
+      require('node:assert/strict').equal(require('./dist/lib/password-hash.js').PASSWORD_WORK_LIMIT,2);
+      require('node:assert/strict').equal(typeof require('./dist/scripts/password-session-database-tests.js').verifyPasswordSessions,'function');
+      require('./dist/scripts/p0-database-tests.js');`], passwordEnv);
+  assert.ok(databaseOutput.includes('PASS real PostgreSQL observed reset/issuer lock race denies stale login'));
+  assert.ok(databaseOutput.includes('PASS real PostgreSQL key-insert failure rolls back'));
+  report.passwordDatabaseFixture = { nodeEnv: 'test', scope: 'compiled P0 fixture in actual API image; not deployed production configuration',
+    output: databaseOutput, outputSha256: crypto.createHash('sha256').update(databaseOutput).digest('hex') };
+  report.checks.push('api-compiled-p0-password-reset-race-rollback-bootstrap-mfa-and-retention');
+  console.log('Actual API image passed compiled password/MFA/retention database fixtures.');
   docker(['run', '--pull=never', '--rm', ...safety, '--network', 'none', report.images.web.imageId, '-e', `${commonProbe}
     (async () => { const sharp = require('sharp'); const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#31725b' } }).webp().toBuffer(); assert.ok(bytes.length > 0); console.log('Web native image fixture passed.'); })().catch(error => { console.error(error.message); process.exit(1); });`]);
   report.checks.push('web-nonroot-readonly-debian13-native-sharp');

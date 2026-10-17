@@ -2,13 +2,14 @@ import path from 'path';
 import fs from 'fs';
 import type { Request } from 'express';
 import sharp from 'sharp';
-
-export const PASSWORD_HASH_ROUNDS = 12;
+import { isPasswordInput } from './password-hash';
 
 export const validatePasswordStrength = (value: unknown) => {
-  const password = String(value || '');
+  if (typeof value !== 'string') return 'INVALID_PASSWORD';
+  const password = value;
   if (password.length < 12) return 'PASSWORD_TOO_SHORT';
   if (password.length > 128) return 'PASSWORD_TOO_LONG';
+  if (!isPasswordInput(password)) return 'INVALID_PASSWORD';
   if (!/[a-z]/.test(password)) return 'PASSWORD_REQUIRES_LOWERCASE';
   if (!/[A-Z]/.test(password)) return 'PASSWORD_REQUIRES_UPPERCASE';
   if (!/[0-9]/.test(password)) return 'PASSWORD_REQUIRES_NUMBER';
@@ -213,6 +214,8 @@ export const sanitizeUpstreamError = (fallback: string, raw: string) => {
 
 export const redactSensitiveText = (value: unknown) =>
   String(value ?? '')
+    .replace(/scrypt\$v\d+\$\d+\$\d+\$\d+\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+/g, '[redacted-password-hash]')
+    .replace(/\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}/g, '[redacted-password-hash]')
     .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [redacted]')
     .replace(/\b(dpx(?:st|sf|pv|api)?_[A-Za-z0-9_-]{12,})\b/g, '[redacted-api-key]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')

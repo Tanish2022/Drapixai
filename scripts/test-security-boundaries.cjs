@@ -73,6 +73,12 @@ function routeFixture(user, key = { kind: 'dashboard', scopes: 'dashboard', user
   const load = loader({
     express: { Router: () => router }, '@prisma/client': { PrismaClient: class { constructor() { return database; } } },
     bcryptjs: { compare: async (password) => password === 'correct-fixture-password', hash: async () => 'fixture-hash' },
+    '../lib/password-hash': {
+      verifyPassword: async (password) => ({ matches: password === 'correct-fixture-password', needsUpgrade: false, resetRequired: false }),
+      hashPassword: async () => 'fixture-hash',
+      hashPasswordAfterAuthorization: async (_password, authorize) => await authorize() ? 'fixture-hash' : null,
+      isPasswordHashBusy: () => false, LOGIN_TIMING_SENTINEL_HASH: 'fixture-sentinel',
+    },
     '../lib/rate-limit': { createRateLimitMiddleware: () => (_q, _s, next) => next() },
     redis: { createClient: () => ({ on() {}, connect: async () => {} }) },
     '../lib/api-key-auth': { issueApiKeyForUser: async (_db, _id, options) => { issued.push(options); return 'synthetic-key'; }, resolveActiveApiKey: async () => key },
@@ -587,7 +593,7 @@ function browserSessionFixture(purpose = 'admin', mode = 'production') {
   const env = { NODE_ENV: mode, NEXT_PUBLIC_WEB_BASE_URL: 'https://app.example.test', ADMIN_SESSION_SECRET: 'synthetic-admin-browser-cookie-secret-32-plus', DASHBOARD_SESSION_SECRET: 'synthetic-dashboard-browser-cookie-secret-32-plus', DRAPIXAI_DASHBOARD_PROXY_TOKEN: 'synthetic-proxy-fixture' };
   const store = { get: (name) => values.has(name) ? { value: values.get(name) } : undefined,
     set: (cookie) => { writes.push(cookie); if (cookie.maxAge === 0) values.delete(cookie.name); else values.set(cookie.name, cookie.value); } };
-  const fixture = { status: 200, expectedPassword: 'fixture-password' };
+  const fixture = { status: 200, loginStatus: 200, expectedPassword: 'fixture-password' };
   const load = loader({
     'next/headers': { cookies: async () => store },
     '@/app/lib/server-env': { SERVER_API_BASE_URL: 'https://internal-api.example.test' },
@@ -596,6 +602,7 @@ function browserSessionFixture(purpose = 'admin', mode = 'production') {
     calls.push({ url: String(url), init });
     if (String(url).endsWith('/auth/login')) {
       const payload = JSON.parse(init.body);
+      if (fixture.loginStatus !== 200) return Response.json({ error: 'AUTHENTICATION_BUSY' }, { status: fixture.loginStatus });
       return payload.password === fixture.expectedPassword ? Response.json({ apiKey: 'synthetic-browser-key' }) : Response.json({ error: 'INVALID' }, { status: 401 });
     }
     return Response.json({ ok: true }, { status: fixture.status });
@@ -610,6 +617,16 @@ function browserSessionFixture(purpose = 'admin', mode = 'production') {
 }
 
 for (const purpose of ['admin', 'dashboard']) {
+  test(`${purpose} sign-in overload remains retryable and does not alter cookies`, async () => {
+    const f = browserSessionFixture(purpose), token = await f.create('synthetic-browser-key');
+    f.values.set(f.name, token); f.config.loginStatus = 503;
+    const result = await f.load(`apps/web/app/api/${purpose}/session/route.ts`).POST(new Request('https://app.example.test/session', {
+      method: 'POST', headers: { origin: 'https://app.example.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'login', email: 'merchant@example.test', password: 'fixture-password' }),
+    }));
+    assert.equal(result.status, 503); assert.equal(result.headers.get('retry-after'), '1');
+    assert.match((await result.json()).error, /try again/i); assert.equal(f.writes.length, 0); assert.equal(f.values.get(f.name), token);
+  });
   test(`${purpose} cookie uses a host prefix in production and retains HTTP development naming`, async () => {
     const prod = browserSessionFixture(purpose), dev = browserSessionFixture(purpose, 'development');
     assert.equal(prod.name, `__Host-drapixai_${purpose}_session`);
@@ -914,7 +931,8 @@ test('Malformed admin credential types fail before an upstream authentication re
   assert.equal(response.status, 400); assert.equal(f.calls.length, 0);
 });
 
-(async () => {
+module.exports = { loader, response, matchesWhere };
+if (require.main === module) (async () => {
   let failures = 0;
   for (const { name, run } of tests) {
     try { await run(); console.log(`PASS ${name}`); }

@@ -65,6 +65,15 @@ fixture reports include the exact verifier/helper hashes and native report hash.
 
 No production Dockerfile, inference dependency, Standard setting, threshold or
 capacity was changed. The [OpenSSL candidate](../deploy/security/node/README.md)
-still needs its own terminal build, crypto/TLS/native/application/scanner results
-and qualified downstream review. Live infrastructure, GPU measurements,
+has since completed its component build and crypto/TLS tests; application/native
+and scanner results and qualified downstream review remain required. Live infrastructure, GPU measurements,
 independent penetration testing, legal rights and pilot approvals remain open.
+
+The subsequent [password-storage follow-up](password-storage-security-2026-10-18.md)
+extends native verification with the compiled P0 database suite in the actual API
+image. The expanded verifier requires four check groups and six immutable-image
+executions. The historical three-group/five-execution reports above apply to the
+earlier verifier hash. Use freshly built application images containing the new
+password fixture; older baseline images cannot satisfy the expanded check.
+The shared runtime's [component crypto/TLS tests](node-shared-openssl-review-2026-10-18.md)
+have since passed; actual new application/native/scan evidence is still required.

@@ -78,21 +78,45 @@ subsystems, TODOs, expected failures or a nonzero runner exit. It cleans up only
 containers bearing its own exact random label, including when its Docker client
 times out. Upstream tests run in the source-build image and cover a subset of
 Node CI; final distroless core/TLS and actual application/native checks remain
-separate requirements. **The shared-OpenSSL candidate has not passed these
-upstream tests yet.**
+separate requirements. The actual review candidate has now passed this subset;
+its exact component evidence follows.
 
-The two-job source compilation remains running in the original build session at
-this checkpoint. Docker clipped the verbose compiler step after its output
-limit; that observation is not a terminal result. Do not start a duplicate build
-merely because its output is quiet. After it reaches a terminal result, the final
-recipe must also include the license notices added after the initial snapshot
-and the updated provenance wording; the source compilation layer can be reused.
+### Completed review-component tests
 
-Runtime dynamic linking, crypto/TLS positive and negative controls, native
-Sharp/Prisma behavior, full candidate application tests and fresh exact-image
-scans remain unverified. The successful ordinary production CI for preparation
-commit `bc21abb15e95fc00fa40fa02053c145b09151875` does not execute this candidate.
-Its known Accelerate audit failure also remains open.
+The original two-job compilation completed successfully. The final notices and
+provenance layers were rebuilt from the successful cache; no second source
+compilation was started. The recipe/helper revision was
+`1bc8cbbb687a8e95e1f48e67d303be98c757b3d2`; later application work was not included
+in these component images.
+
+| Component / result | Exact evidence |
+|---|---|
+| Review runtime image ID | `sha256:a669f066061d612f69d6d2e7bd69a93d180e77d5541e8b79c0e24d45843a646b` |
+| Matching source-build image ID | `sha256:6c02359ad4bee5288f0939189ee8705902dacd2b269ab6a5959a1c55b4380d6d` |
+| Actual Node binary SHA-256 in both | `49d27fc7c4e0fced85925dae5ce26a9700917dd1c4199ef39dffca27771acdd5` |
+| Node / OpenSSL / package | Node 22.23.3, ABI 127, dynamically loaded OpenSSL 3.5.7 from Debian `3.5.7-1~deb13u3` |
+| Final distroless runtime | Non-root, read-only, shell-free; actual node/library hashes, package metadata and loaded mappings matched; notices present |
+| Trust / crypto | Bundled root set and ICU matched stock; SHA-256, RSA/ECDSA and WebCrypto AES-GCM round trip/tamper checks passed |
+| Actual runtime TLS | Valid mutual TLS 1.2/1.3 succeeded; missing client identity, wrong CA/hostname, expiry and TLS 1.1 were rejected |
+| Verifier negative controls | Static stock runtime with mounted candidate metadata rejected; altered node digest rejected |
+| Actual upstream subset | 660 planned/results, zero failures/TODOs/expected failures; **656 non-skipped**, four skips matching the CLI calibration |
+
+Runtime report:
+`runtime/security-candidate/node-shared-openssl/verify-6499fd0101231643aff01376/report.json`.
+Upstream report and raw stdout/stderr:
+`runtime/security-candidate/node-shared-openssl/upstream-7c6fed0a6c15ec9896a3bc1c/`.
+Reports retain source/library/helper hashes, exact image IDs and truthful dirty
+checkout state. The source-build tests used Node's actual shared binary, the
+recorded Debian CLI and a bounded offline container. These are component
+compatibility results, not a clean application-release attestation, full Node CI,
+complete ABI/cryptographic certification or independent advisory review.
+
+Actual API/web native compatibility, full candidate application tests and fresh
+exact-image scans remain to be recorded after the new
+[password-storage remediation](password-storage-security-2026-10-18.md) is
+committed and materialized. Ordinary production CI still builds the unchanged
+stock-runtime Dockerfiles and cannot establish this candidate's approval. The
+known Accelerate audit failure remains open.
 
 Qualified downstream maintenance/ABI/crypto review, live staging drills,
 independent penetration testing, legal/model rights, delivered GPU acceptance,

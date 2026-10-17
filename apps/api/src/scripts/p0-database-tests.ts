@@ -8,6 +8,7 @@ import { createVerifiedStorefrontOriginCache } from '../lib/cors-origin-cache';
 import { verifySecurityAuditChain } from '../lib/audit-log';
 import { runTryOnReviewRetention } from '../services/review-retention';
 import { verifyAdminSessions } from './admin-session-database-tests';
+import { verifyPasswordSessions } from './password-session-database-tests';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +39,7 @@ async function main() {
       userIds.push(user.id);
     }
     await verifyAdminSessions(prisma, userIds);
+    await verifyPasswordSessions(prisma, userIds);
     const cases = [
       { domain: 'verified.example.invalid', userId: userIds[0], kind: 'manual', active: true, allowed: true },
       { domain: 'revoked.example.invalid', userId: userIds[0], kind: 'manual', active: false, allowed: false },

@@ -137,10 +137,12 @@ No added recurring CI build or paid resource is provisioned by this candidate.
 ## Required review and promotion evidence
 
 The broader offline upstream check runs Node's own parallel crypto, TLS, HTTPS
-and HTTP/2 tests. **It has not yet passed for this candidate.** After the original
-compilation has reached a terminal result and the final runtime/metadata build
-has succeeded, retain the matching source-build stage locally (the unchanged
-compilation layer should be cached):
+and HTTP/2 tests. The recorded review component has passed **656 non-skipped
+checks, with four recorded skips**, plus the separate final-runtime core/TLS
+probe. [Exact component evidence](../../../docs/node-shared-openssl-review-2026-10-18.md)
+records the binary and image identities. Application/native builds, fresh scans
+and qualified downstream review remain required. After a successful source
+build, retain its matching source-build stage locally using the cached layers:
 
 ```powershell
 docker build --target build -f deploy/security/node/Dockerfile.shared-openssl -t drapixai-node22-shared:build-review deploy/security/node
@@ -163,7 +165,8 @@ TLS/core checks and application/native probes remain required. Review every
 upstream exclusion/skip; a passing subset is not downstream certification. The
 input-policy suite includes twelve adversarial TAP parsing controls, and an
 actual static baseline was rejected at the review-channel boundary. Neither
-result claims the candidate passed upstream tests.
+result alone proves candidate compatibility; use the actual retained upstream
+and final-runtime reports for the tested component.
 
 Runtime compilation, core/TLS smoke tests, full application/native compatibility,
 fresh scans and qualified downstream ABI/crypto/maintenance review must all be

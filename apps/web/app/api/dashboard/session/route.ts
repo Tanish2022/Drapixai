@@ -108,6 +108,9 @@ export async function POST(request: Request) {
 
   const authPayload = (await authResponse.json().catch(() => null)) as { apiKey?: string; error?: string } | null;
   if (!authResponse.ok) {
+    if (authResponse.status === 503) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
+      status: 503, headers: { 'Retry-After': '1' },
+    });
     return noStoreJson({ error: authPayload?.error || 'AUTH_FAILED' }, { status: authResponse.status });
   }
 

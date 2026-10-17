@@ -1,16 +1,16 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
-import { resolveActiveApiKey } from '../lib/api-key-auth';
+import { resolveActiveApiKey, applyVerifiedPassword } from '../lib/api-key-auth';
 import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { parseCatalogFeed } from '../lib/catalog-feed';
 import { upsertCatalogProductsForUser } from '../lib/catalog-matching';
 import { normalizePublicDomain, safeFetchText } from '../lib/remote-fetch';
 import { consumeVerificationCode, issueVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail } from '../services/emailer';
-import { PASSWORD_HASH_ROUNDS, validatePasswordStrength } from '../lib/security';
+import { validatePasswordStrength } from '../lib/security';
+import { hashPassword, verifyPassword, isPasswordHashBusy } from '../lib/password-hash';
 import { hasPermission } from '../lib/authorization';
 
 const router = Router();
@@ -150,25 +150,32 @@ router.post('/password', async (req, res) => {
   const passwordError = validatePasswordStrength(newPassword);
   if (passwordError) return res.status(400).json({ error: passwordError });
 
-  const matches = await bcrypt.compare(String(currentPassword), resolved.user.passwordHash);
-  if (!matches) {
-    return res.status(400).json({ error: 'CURRENT_PASSWORD_INCORRECT' });
+  try {
+    const verified = await verifyPassword(currentPassword, resolved.user.passwordHash);
+    if (!verified.matches) {
+      return res.status(400).json({ error: 'CURRENT_PASSWORD_INCORRECT' });
+    }
+
+    const nextPasswordHash = await hashPassword(newPassword);
+    const revokedAt = new Date();
+    await prisma.$transaction([
+      applyVerifiedPassword(prisma, resolved.user, nextPasswordHash, true),
+      prisma.apiKey.updateMany({
+        where: { userId: resolved.user.id, isActive: true },
+        data: { isActive: false, revokedAt },
+      }),
+      prisma.verificationCode.updateMany({ where: { userId: resolved.user.id, consumedAt: null }, data: { consumedAt: revokedAt } }),
+    ]);
+
+    return res.json({ ok: true, sessionsRevoked: true });
+  } catch (error) {
+    if (isPasswordHashBusy(error)) {
+      res.setHeader('Retry-After', '1');
+      return res.status(503).json({ error: 'AUTHENTICATION_BUSY' });
+    }
+    if ((error as { code?: string })?.code === 'P2025') return res.status(400).json({ error: 'CURRENT_PASSWORD_INCORRECT' });
+    return res.status(500).json({ error: 'PASSWORD_CHANGE_FAILED' });
   }
-
-  const nextPasswordHash = await bcrypt.hash(String(newPassword), PASSWORD_HASH_ROUNDS);
-  const revokedAt = new Date();
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: resolved.user.id },
-      data: { passwordHash: nextPasswordHash, authVersion: { increment: 1 } },
-    }),
-    prisma.apiKey.updateMany({
-      where: { userId: resolved.user.id, isActive: true },
-      data: { isActive: false, revokedAt },
-    }),
-  ]);
-
-  return res.json({ ok: true, sessionsRevoked: true });
 });
 
 router.post('/email/request-change', async (req, res) => {

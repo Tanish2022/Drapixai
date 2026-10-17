@@ -30,6 +30,9 @@ export async function POST(request: Request) {
   });
 
   if (!loginResponse.ok) {
+    if (loginResponse.status === 503) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
+      status: 503, headers: { 'Retry-After': '1' },
+    });
     return noStoreJson({ error: 'ADMIN_ACCESS_DENIED' }, { status: 403 });
   }
 

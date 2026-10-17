@@ -187,6 +187,7 @@ const analyticsRoute = read('apps/api/src/routes/analytics.ts');
 const accountRoute = read('apps/api/src/routes/account.ts');
 const publicRoute = read('apps/api/src/routes/public.ts');
 const securityHelpers = read('apps/api/src/lib/security.ts');
+const passwordHashHelpers = read('apps/api/src/lib/password-hash.ts');
 const remoteFetchHelpers = read('apps/api/src/lib/remote-fetch.ts');
 const dashboardProxyAuth = read('apps/api/src/lib/dashboard-proxy-auth.ts');
 const plansLib = read('apps/api/src/lib/plans.ts');
@@ -672,7 +673,8 @@ assertIncludes(accountRoute, 'sessionsRevoked: true', 'Password changes must rep
 assertIncludes(accountRoute, 'emailVerifiedAt: revokedAt', 'Email changes must establish the verified identity and revocation time atomically');
 assertIncludes(accountRoute, 'authVersion: { increment: 1 }', 'Email changes must advance account credential versioning');
 assertIncludes(accountRoute, 'where: { userId: resolved.user.id, isActive: true }', 'Sensitive account changes must revoke active API keys');
-assertIncludes(securityHelpers, 'PASSWORD_HASH_ROUNDS = 12', 'Passwords must use strengthened bcrypt parameters');
+assertIncludes(passwordHashHelpers, 'N: 32768, r: 8, p: 3', 'New passwords must use the reviewed memory-hard scrypt parameters');
+assertNotIncludes(authRoute, 'bcrypt.hash(', 'Authentication must use the shared versioned password storage boundary');
 assertIncludes(adminMfa, 'createHmac', 'Administrator MFA must validate TOTP server-side');
 assertIncludes(adminMfa, 'timingSafeEqual', 'Administrator MFA comparisons must be timing safe');
 assertIncludes(adminMfa, 'requireForRole', 'Administrator MFA must support fail-closed role-based enforcement');
@@ -788,7 +790,7 @@ assertIncludes(apiKeyAuth, "audience: 'drapixai-sdk-preview'", 'Dashboard previe
 assertIncludes(apiKeyAuth, "expiresIn: '15m'", 'Dashboard preview credentials must be short lived');
 assertIncludes(apiKeyAuth, "kind: 'dashboard-preview'", 'Dashboard preview credentials must carry a dedicated token purpose');
 assertIncludes(apiKeyAuth, 'export const resolveSdkApiKey', 'Preview credentials must be accepted only through the SDK-specific resolver');
-assertIncludes(authRoute, "import { issueApiKeyForUser } from '../lib/api-key-auth';", 'Authentication routes must use centralized modern API-key issuance');
+assertIncludes(authRoute, "issueApiKeyForUser, applyVerifiedPassword } from '../lib/api-key-auth';", 'Authentication routes must use centralized modern API-key issuance with credential guards');
 assertIncludes(analyticsRoute, 'issueApiKeyForUser', 'Dashboard key rotation must use centralized modern API-key issuance');
 assertNotIncludes(authRoute, "uuidv4().replace(/-/g, '')", 'Authentication must not issue legacy 128-bit UUID API keys');
 assertNotIncludes(analyticsRoute, "uuidv4().replace(/-/g, '')", 'Dashboard rotation must not issue legacy 128-bit UUID API keys');
@@ -2117,6 +2119,7 @@ assertIncludes(launchWorkflow, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41
 // cases; these controls must not rely only on source-string assertions.
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-website-privacy.cjs')], { stdio: 'inherit' });
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-security-boundaries.cjs')], { stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-password-security.cjs')], { stdio: 'inherit' });
 // The shell scanner's failure controls run on Linux CI; Windows runs the same
 // suite in an isolated Linux container rather than depending on a WSL install.
 if (process.platform !== 'win32') execFileSync('python3', [path.join(repoRoot, 'deploy/scripts/test-container-scanner.py')], { stdio: 'inherit' });

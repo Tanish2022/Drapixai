@@ -70,14 +70,14 @@ if (require.main !== module) {
     report.events = JSON.parse(fs.readFileSync(events, 'utf8'));
     assert.equal(report.events.filter(event => event.action === 'tag-moved-after-inspect').length, 2);
     const runs = report.events.filter(event => event.action === 'run-image');
-    assert.equal(runs.length, 5, 'Both version probes and all three native/application runs must execute');
+    assert.equal(runs.length, 6, 'Both version probes, compiled database fixtures and all native/application runs must execute');
     for (const event of runs) assert.ok(Object.values(report.images).some(item => item.imageId === event.image));
     const evidence = /^Evidence: (.+)$/m.exec(result.stdout)?.[1].trim();
     assert.ok(evidence);
     const nativeReport = path.resolve(output, evidence);
     assert.ok(nativeReport.startsWith(path.join(root, 'runtime/launch-evidence')+path.sep));
     const native = JSON.parse(fs.readFileSync(nativeReport, 'utf8'));
-    assert.equal(native.passed, true); assert.equal(native.checks.length, 3);
+    assert.equal(native.passed, true); assert.equal(native.checks.length, 4);
     for (const role of ['api', 'web']) assert.equal(native.images[role].imageId, report.images[role].imageId);
     report.nativeReport = nativeReport;
     report.nativeReportSha256 = crypto.createHash('sha256').update(fs.readFileSync(nativeReport)).digest('hex');
