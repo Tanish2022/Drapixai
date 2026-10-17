@@ -72,6 +72,8 @@ const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: numbe
         'User-Agent': 'DrapixAI-SecureFetcher/1.0',
       },
     }, (incoming) => {
+      // Install before any early size rejection can destroy the response.
+      incoming.on('error', reject);
       const status = incoming.statusCode || 0;
       if (status >= 300 && status < 400) {
         incoming.resume();
@@ -108,7 +110,6 @@ const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: numbe
           buffer: body,
         });
       });
-      incoming.on('error', reject);
     });
 
     request.setTimeout(timeoutMs, () => request.destroy(new Error('REMOTE_FETCH_TIMEOUT')));

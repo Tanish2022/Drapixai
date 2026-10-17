@@ -4,7 +4,7 @@ Companion to [the assessment](security-assessment-2026-10-17.md). This record di
 
 ## Completed local checks
 
-- 28/28 behavioral security cases passed, including positive merchant/admin/product/network controls and negative authorization, JWT, upload, origin, rate-limit and SSRF cases.
+- 29/29 behavioral security cases passed, including positive merchant/admin/product/network controls and negative authorization, JWT, upload, origin, rate-limit and SSRF cases.
 - API TypeScript and full launch-readiness suite passed. The launch suite now runs the new behavioral cases in CI.
 - Existing MFA, RBAC, storefront-token, public API, input validation, image upload, log privacy and CORS suites passed. Billing security passed 16 checks; version-aware erasure passed 29 loopback/test-double checks.
 - Production web webpack build and five-route/two-response CSP runtime checks passed. The isolated build's generated configuration changes were restored.
@@ -17,6 +17,10 @@ Local scanner JSON and the initial reproductions are in the ignored directory `r
 ## Hosted and operational evidence
 
 Baseline [CI run 39040941201](https://github.com/Tanish2022/Drapixai/actions/runs/39040941201) at `1f033326eec2efe74c9d0d8a7ec7bf9140f89e96`: application, secret scan, container scan and AI candidate jobs succeeded; AI contracts failed on the existing Accelerate advisory. That run does **not** validate this later patch. Hosted status for the new security commit is recorded in the session's local evidence manifest and should be checked against its exact SHA in [Actions](https://github.com/Tanish2022/Drapixai/actions/workflows/launch-readiness.yml), rather than assumed green from local tests.
+
+First security commit `9e3ed774e4fa14a174defb975d41d04413f5ab8e`: [CI run 39045138204](https://github.com/Tanish2022/Drapixai/actions/runs/39045138204) completed with **application, secret-scan, container-scan and AI candidate success**; **AI contracts failed**. The job log confirms `accelerate 1.11.0 / PYSEC-2026-3804`, one known vulnerability and four existing ignored advisories. The application job exercised the then-current 28 security cases, disposable PostgreSQL/Redis/storage regressions, production builds/CSP checks and API/web production/development dependency audits. Local full-history scanning then covered **203 commits with zero unallowlisted findings**.
+
+The final response-error handler fix (SEC-09), its regression and report update follow that commit. Its reproduction failed before the fix; all **29 cases**, the full launch suite and API TypeScript pass afterwards. The preceding run does not certify this follow-up commit; check its own exact-head CI separately. No web, dependency, inference or configuration behavior changed in this follow-up.
 
 Live staging, independent penetration testing/retest, production transport/storage/secret rotation, GPU quality/parity/concurrency and legal/pilot approvals remain outstanding. None of the original 22 launch-gate release-evidence decisions was promoted by this audit.
 

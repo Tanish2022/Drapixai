@@ -257,6 +257,20 @@ test('Outbound public request pins the validated DNS address and preserves its r
   assert.equal(result.text, 'public response'); assert.equal(connections, 1);
 });
 
+test('Oversized declared outbound response rejects through an installed error listener', async () => {
+  const transport = { request: (_url, _options, callback) => {
+    const request = new EventEmitter(); request.setTimeout = () => request;
+    request.end = () => queueMicrotask(() => {
+      const incoming = new EventEmitter(); incoming.statusCode = 200; incoming.headers = { 'content-length': '100' };
+      incoming.destroy = (error) => incoming.emit('error', error);
+      try { callback(incoming); } catch { request.emit('error', new Error('UNHANDLED_RESPONSE_ERROR')); }
+    });
+    return request;
+  } };
+  const load = loader({ 'dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, https: transport });
+  await assert.rejects(load('apps/api/src/lib/remote-fetch.ts').safeFetchText('https://controlled.example.test', { maxBytes: 8 }), /REMOTE_RESPONSE_TOO_LARGE/);
+});
+
 for (const address of ['100.64.1.2', '198.18.0.1', '::ffff:7f00:1', 'fe90::1']) {
   test(`Outbound SSRF guard rejects nonpublic address ${address} before connection`, async () => {
     let connections = 0;
