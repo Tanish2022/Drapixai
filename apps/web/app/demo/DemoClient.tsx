@@ -45,6 +45,7 @@ export default function DemoClient() {
   const [resultUrl, setResultUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
+  const [loadVideo, setLoadVideo] = useState(false);
   const demoVideoKind = getDemoVideoKind(DEMO_VIDEO_URL);
 
   const selectImage = (
@@ -160,7 +161,7 @@ export default function DemoClient() {
           <ol className="border-t border-black/10">
             {['Upload a clear front-facing person', 'Add one garment-only product image', 'Review the Standard-quality result'].map((label, index) => (
               <li key={label} className="grid grid-cols-[3rem_1fr] border-b border-black/10 py-5 text-sm">
-                <span className="font-bold text-[#8d9890]">0{index + 1}</span>
+                <span className="font-bold text-[#58665d]">0{index + 1}</span>
                 <span className="font-semibold">{label}</span>
               </li>
             ))}
@@ -176,12 +177,17 @@ export default function DemoClient() {
             <p className="mt-3 leading-7 text-[#68736b]">Inputs are validated first. Generation only runs through the launch Standard path, then the result is returned for your own inspection.</p>
           </div>
           {demoVideoKind ? (
-            demoVideoKind === 'embed' ? (
+            !loadVideo ? (
+              <div className="border border-black/15 bg-white p-6">
+                <p className="text-sm leading-6">Loading this video connects to {new URL(DEMO_VIDEO_URL).hostname}, which receives your IP address and browser information and may use its own storage. You can use the demo without loading the video.</p>
+                <button type="button" onClick={() => setLoadVideo(true)} className="mt-4 min-h-11 border border-[#183f32] px-4 py-2 font-semibold text-[#183f32]">Load external video</button>
+              </div>
+            ) : demoVideoKind === 'embed' ? (
               <div className="aspect-video overflow-hidden border border-black/10 bg-[#101712]">
-                <iframe src={DEMO_VIDEO_URL} title="DrapixAI demo walkthrough" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                <iframe src={DEMO_VIDEO_URL} title="DrapixAI demo walkthrough" referrerPolicy="no-referrer" className="h-full w-full" allow="encrypted-media; picture-in-picture" allowFullScreen />
               </div>
             ) : (
-              <video src={DEMO_VIDEO_URL} controls className="w-full border border-black/10 bg-[#101712]" />
+              <video src={DEMO_VIDEO_URL} controls preload="none" className="w-full border border-black/10 bg-[#101712]" />
             )
           ) : (
             <div className="grid border-y border-black/10 md:grid-cols-3 md:divide-x md:divide-black/10">
@@ -242,12 +248,12 @@ export default function DemoClient() {
           <div className="bg-white px-5 py-14 sm:px-8 lg:px-12 lg:py-16">
             <div className="flex items-center justify-between border-b border-black/10 pb-4">
               <div><p className="text-xs font-bold uppercase text-[#31725b]">Output</p><h2 className="mt-2 text-2xl font-semibold">Try-on result</h2></div>
-              <span className="text-xs font-semibold text-[#78837b]">Standard</span>
+              <span className="text-xs font-semibold text-[#5d6961]">Standard</span>
             </div>
             {resultUrl ? (
               <img src={resultUrl} alt="DrapixAI demo result" className="mt-6 aspect-[3/4] w-full border border-black/10 bg-[#f4f5f2] object-contain" />
             ) : (
-              <div className="mt-6 flex aspect-[3/4] w-full items-center justify-center border border-dashed border-black/20 bg-[#f4f5f2] px-8 text-center text-sm leading-6 text-[#768179]">Your output will appear here after the AI service accepts and processes both images.</div>
+              <div className="mt-6 flex aspect-[3/4] w-full items-center justify-center border border-dashed border-black/20 bg-[#f4f5f2] px-8 text-center text-sm leading-6 text-[#5d6961]">Your output will appear here after the AI service accepts and processes both images.</div>
             )}
 
             <div className="mt-6 border-t border-black/10 pt-6">

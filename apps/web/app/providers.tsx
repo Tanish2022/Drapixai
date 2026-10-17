@@ -3,6 +3,7 @@
 import { SessionProvider, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import SiteAnalytics from './components/SiteAnalytics';
+import PrivacyPreferences from './components/PrivacyPreferences';
 
 const THEME_STORAGE_KEY = 'drapixai-theme';
 
@@ -12,7 +13,8 @@ function ThemeSync() {
       document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
     };
 
-    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'dark';
+    let storedTheme = 'dark';
+    try { storedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'dark'; } catch { /* Optional preference storage may be blocked. */ }
     applyTheme(storedTheme);
   }, []);
 
@@ -34,6 +36,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <ThemeSync />
       <SiteAnalytics />
+      <PrivacyPreferences />
       <SessionSync />
       {children}
     </SessionProvider>

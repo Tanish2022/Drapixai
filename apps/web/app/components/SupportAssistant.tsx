@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Mail, MessageSquare, Send, Sparkles, X } from 'lucide-react';
 
 type SupportLink = {
@@ -255,6 +255,17 @@ const helpResponse: Omit<Extract<ChatMessage, { role: 'assistant' }>, 'id'> = {
 export default function SupportAssistant() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isOpen || !dialog) return;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+      triggerRef.current?.focus();
+    };
+  }, [isOpen]);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -333,22 +344,33 @@ export default function SupportAssistant() {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         className={isOpen ? 'hidden' : 'fixed bottom-4 right-4 z-[70] inline-flex h-12 w-12 items-center justify-center rounded-full border border-black/15 bg-[#fbfcf9] text-[#1f6048] shadow-[0_12px_36px_rgba(24,40,31,0.18)] transition-colors hover:bg-[#e7eee8] sm:bottom-6 sm:right-6'}
         aria-label={isOpen ? 'Close support assistant' : 'Open support assistant'}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? 'support-assistant-dialog' : undefined}
         title={isOpen ? 'Close support assistant' : 'Open support assistant'}
       >
         <MessageSquare className="h-5 w-5" />
       </button>
 
       {isOpen ? (
-        <div className="fixed inset-x-3 bottom-3 top-3 z-[70] flex flex-col overflow-hidden rounded-lg border border-black/15 bg-[#fbfcf9] text-[#172019] shadow-[0_24px_70px_rgba(24,40,31,0.22)] sm:inset-x-auto sm:bottom-24 sm:right-6 sm:top-auto sm:max-h-[calc(100vh-7rem)] sm:w-[420px]">
+        <dialog ref={dialogRef} id="support-assistant-dialog" aria-labelledby="support-assistant-heading" aria-modal="true" onCancel={() => setIsOpen(false)} onClose={() => setIsOpen(false)} onKeyDown={(event) => {
+          if (event.key !== 'Tab') return;
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex="0"]')).filter((element) => element.getClientRects().length > 0);
+          const first = controls[0];
+          const last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }} className="fixed inset-x-3 bottom-3 top-3 m-0 z-[70] open:flex flex-col overflow-hidden rounded-lg border border-black/15 bg-[#fbfcf9] text-[#172019] shadow-[0_24px_70px_rgba(24,40,31,0.22)] backdrop:bg-black/30 sm:inset-x-auto sm:bottom-24 sm:right-6 sm:top-auto sm:max-h-[calc(100vh-7rem)] sm:w-[420px]">
           <div className="border-b border-black/10 bg-[#b8d8c7] px-5 py-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase text-[#276149]">Support</p>
-                <h2 className="mt-1 text-lg font-semibold text-[#172019]">DrapixAI assistant</h2>
+                <h2 id="support-assistant-heading" className="mt-1 text-lg font-semibold text-[#172019]">DrapixAI assistant</h2>
               </div>
               <button
                 type="button"
@@ -361,7 +383,7 @@ export default function SupportAssistant() {
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+          <div role="log" aria-label="Support conversation" aria-live="polite" aria-relevant="additions" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
             {messages.map((message) =>
               message.role === 'user' ? (
                 <div key={message.id} className="flex justify-end">
@@ -461,7 +483,7 @@ export default function SupportAssistant() {
               </a>
             </div>
           </div>
-        </div>
+        </dialog>
       ) : null}
     </>
   );

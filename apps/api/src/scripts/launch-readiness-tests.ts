@@ -2098,4 +2098,8 @@ assertIncludes(securityOperations, '## Customer deletion', 'Operations must docu
 assertIncludes(launchWorkflow, 'gitleaks_8.30.1_linux_x64.tar.gz', 'CI must scan repository history for secrets');
 assertIncludes(launchWorkflow, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb', 'The secret scanner download must be checksum pinned');
 
+// Exercise the actual browser preference/tracking modules, including failure
+// cases; these controls must not rely only on source-string assertions.
+execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-website-privacy.cjs')], { stdio: 'inherit' });
+
 console.log('Launch readiness tests passed.');

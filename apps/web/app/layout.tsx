@@ -3,6 +3,7 @@ import { connection } from 'next/server';
 import './globals.css';
 import Providers from './providers';
 import SupportAssistant from './components/SupportAssistant';
+import SkipToContent from './components/SkipToContent';
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_BASE_URL || 'http://localhost:3000'),
@@ -75,6 +76,7 @@ export default async function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body className="bg-background text-foreground antialiased">
+        <SkipToContent />
         <Providers>
           <SupportAssistant />
           {children}

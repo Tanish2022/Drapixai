@@ -2,21 +2,20 @@
 
 import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
-const VISITOR_STORAGE_KEY = 'drapixaiVisitorId';
+import { clearAnalyticsIdentifier, hasAnalyticsConsent, VISITOR_STORAGE_KEY } from './privacy-preferences';
 
 const getVisitorId = () => {
   if (typeof window === 'undefined') {
     return '';
   }
 
-  const existing = window.localStorage.getItem(VISITOR_STORAGE_KEY);
-  if (existing) {
-    return existing;
-  }
-
-  const created = crypto.randomUUID();
-  window.localStorage.setItem(VISITOR_STORAGE_KEY, created);
-  return created;
+  try {
+    const existing = window.localStorage.getItem(VISITOR_STORAGE_KEY);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(VISITOR_STORAGE_KEY, created);
+    return created;
+  } catch { return ''; }
 };
 
 type TrackEventInput = {
@@ -29,11 +28,19 @@ export const trackEvent = (event: string, input: TrackEventInput = {}) => {
     return;
   }
 
+  if (!hasAnalyticsConsent()) {
+    clearAnalyticsIdentifier();
+    return;
+  }
+  const visitorId = getVisitorId();
+  if (!visitorId) return;
+
   const payload = JSON.stringify({
     event,
     path: input.path || window.location.pathname,
-    visitorId: getVisitorId(),
-    referrer: document.referrer || '',
+    visitorId,
+    // Referrers may contain private document names or identifiers. Do not send them.
+    referrer: '',
     metadata: input.metadata || {},
   });
 

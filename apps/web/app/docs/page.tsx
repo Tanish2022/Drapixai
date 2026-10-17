@@ -74,10 +74,10 @@ export default function DocsPage() {
             <p className="text-sm font-semibold text-[#172019]">Expected first integration</p>
             <p className="mt-2 text-3xl font-semibold text-[#183f32]">About one afternoon</p>
             <dl className="mt-10 grid grid-cols-2 gap-x-8 gap-y-7 border-t border-black/10 pt-7 text-sm">
-              <div><dt className="text-[#748078]">Generation mode</dt><dd className="mt-1 font-semibold">Standard</dd></div>
-              <div><dt className="text-[#748078]">Garment source</dt><dd className="mt-1 font-semibold">Approved cache</dd></div>
-              <div><dt className="text-[#748078]">Storefront install</dt><dd className="mt-1 font-semibold">Theme block</dd></div>
-              <div><dt className="text-[#748078]">API response</dt><dd className="mt-1 font-semibold">Image bytes</dd></div>
+              <div><dt className="text-[#5d6961]">Generation mode</dt><dd className="mt-1 font-semibold">Standard</dd></div>
+              <div><dt className="text-[#5d6961]">Garment source</dt><dd className="mt-1 font-semibold">Approved cache</dd></div>
+              <div><dt className="text-[#5d6961]">Storefront install</dt><dd className="mt-1 font-semibold">Theme block</dd></div>
+              <div><dt className="text-[#5d6961]">API response</dt><dd className="mt-1 font-semibold">Image bytes</dd></div>
             </dl>
           </div>
         </div>
@@ -91,7 +91,7 @@ export default function DocsPage() {
               <article key={step.title} className="border-b border-black/10 py-8 last:border-b-0 lg:border-b-0 lg:px-8 lg:first:pl-0 lg:last:pr-0">
                 <div className="flex items-center justify-between">
                   <Icon className="h-5 w-5 text-[#31725b]" />
-                  <span className="text-xs font-bold text-[#9aa39c]">0{index + 1}</span>
+                  <span className="text-xs font-bold text-[#5d6961]">0{index + 1}</span>
                 </div>
                 <h2 className="mt-8 text-xl font-semibold">{step.title}</h2>
                 <p className="mt-3 min-h-24 leading-7 text-[#637068]">{step.body}</p>
@@ -153,9 +153,9 @@ export default function DocsPage() {
               {apiPlans.map((plan) => (
                 <div key={plan.name} className="border-b border-black/10 py-7 last:border-b-0 sm:border-b-0 sm:px-7">
                   <p className="text-sm font-bold text-[#31725b]">{plan.name}</p>
-                  <p className="mt-4 font-serif text-4xl">{plan.price}<span className="ml-1 font-sans text-xs text-[#748078]">/ month</span></p>
+                  <p className="mt-4 font-serif text-4xl">{plan.price}<span className="ml-1 font-sans text-xs text-[#5d6961]">/ month</span></p>
                   <p className="mt-5 font-semibold">{plan.quota} successful try-ons</p>
-                  <p className="mt-1 text-sm text-[#748078]">{plan.effective}</p>
+                  <p className="mt-1 text-sm text-[#5d6961]">{plan.effective}</p>
                 </div>
               ))}
             </div>

@@ -16,7 +16,7 @@ const buildContentSecurityPolicy = (nonce: string) => {
     ...parseAllowedOrigins(process.env.DRAPIXAI_WEB_CSP_CONNECT_SRC || process.env.NEXT_PUBLIC_CSP_CONNECT_SRC || ''),
   ].filter(Boolean);
   const demoVideoUrl = String(process.env.NEXT_PUBLIC_DEMO_VIDEO_URL || '').trim();
-  const frameSources = ["'self'", 'https://www.youtube.com', 'https://youtube.com', 'https://player.vimeo.com'];
+  const frameSources = ["'self'", 'https://www.youtube.com', 'https://youtube.com', 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'];
   const mediaSources = ["'self'", 'blob:', 'data:', 'https:'];
   try {
     if (demoVideoUrl) {

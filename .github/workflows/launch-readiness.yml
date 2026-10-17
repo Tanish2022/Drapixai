@@ -30,7 +30,9 @@ jobs:
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
       - name: Scan repository history for secrets
-        run: /tmp/gitleaks git --config .gitleaks.toml --redact --exit-code 1 .
+        run: |
+          python deploy/scripts/test-secret-scanner-policy.py --gitleaks /tmp/gitleaks
+          /tmp/gitleaks git --config .gitleaks.toml --redact --exit-code 1 .
 
   application:
     runs-on: ubuntu-22.04

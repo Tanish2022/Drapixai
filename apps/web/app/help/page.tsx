@@ -221,7 +221,7 @@ export default function HelpPage() {
                 <Search className="mt-0.5 h-4 w-4 shrink-0 text-[#667169]" />
                 <div className="min-w-0">
                   <p className="text-sm font-bold">Browse help topics</p>
-                  <p className="mt-1 text-xs leading-5 text-[#748078]">
+                  <p className="mt-1 text-xs leading-5 text-[#5d6961]">
                     Use the section list below for setup help, troubleshooting, and support questions.
                   </p>
                 </div>
@@ -305,7 +305,7 @@ export default function HelpPage() {
 
               <div className="mt-8">
                 <p className="mb-3 text-sm font-semibold">Web SDK quick start</p>
-                <pre className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
+                <pre tabIndex={0} role="region" aria-label="Code example" className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {quickStartEmbed}
                 </pre>
                 <div className="mt-4">
@@ -401,7 +401,7 @@ export default function HelpPage() {
 
               <div className="mt-8">
                 <p className="mb-3 text-sm font-semibold">Direct API try-on example</p>
-                <pre className="overflow-x-auto whitespace-pre-wrap border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
+                <pre tabIndex={0} role="region" aria-label="Code example" className="overflow-x-auto whitespace-pre-wrap border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {curlTryOn}
                 </pre>
               </div>
@@ -434,21 +434,21 @@ export default function HelpPage() {
 
               <div className="mb-8 border-t border-black/10 pt-6">
                 <h3 className="text-lg font-semibold mb-3">Browser SDK single-product install</h3>
-                <pre className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
+                <pre tabIndex={0} role="region" aria-label="Code example" className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {quickStartEmbed}
                 </pre>
               </div>
 
               <div className="mb-8 border-t border-black/10 pt-6">
                 <h3 className="text-lg font-semibold mb-3">Browser SDK auto-attach install</h3>
-                <pre className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
+                <pre tabIndex={0} role="region" aria-label="Code example" className="overflow-x-auto border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {autoAttachSnippet}
                 </pre>
               </div>
 
               <div className="border-t border-black/10 pt-6">
                 <h3 className="text-lg font-semibold mb-3">Python example</h3>
-                <pre className="overflow-x-auto whitespace-pre-wrap border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
+                <pre tabIndex={0} role="region" aria-label="Code example" className="overflow-x-auto whitespace-pre-wrap border border-black/10 bg-[#101712] p-5 text-sm leading-7 text-[#d3ddd5]">
 {pythonExample}
                 </pre>
               </div>

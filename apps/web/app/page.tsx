@@ -269,7 +269,7 @@ export default function Home() {
               ].map(([value, label]) => (
                 <div key={label} className="py-4 text-center sm:py-5">
                   <p className="text-lg font-bold text-[#172019] sm:text-2xl">{value}</p>
-                  <p className="mt-1 text-[10px] uppercase text-[#68736b] sm:text-xs">{label}</p>
+                  <p className="mt-1 text-[10px] uppercase text-[#5d6961] sm:text-xs">{label}</p>
                 </div>
               ))}
             </div>
@@ -349,7 +349,7 @@ export default function Home() {
                 <div className="flex items-center justify-between border-b border-black/10 py-5">
                   <div>
                     <p className="font-bold">Product accuracy report</p>
-                    <p className="mt-1 text-sm text-[#68736b]">Structured teal blouse / SKU SH-2071</p>
+                    <p className="mt-1 text-sm text-[#5d6961]">Structured teal blouse / SKU SH-2071</p>
                   </div>
                   <span className="flex items-center gap-2 bg-[#d9ecdf] px-3 py-2 text-sm font-bold text-[#1c6047]"><BadgeCheck className="h-4 w-4" />Excellent</span>
                 </div>
@@ -368,7 +368,7 @@ export default function Home() {
                   ['0.95', 'Quality'], ['<12s', 'Target'], ['None', 'Warnings'],
                 ].map(([value, label]) => (
                   <div key={label} className="px-3 py-4 text-center">
-                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#68736b]">{label}</p>
+                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#5d6961]">{label}</p>
                   </div>
                 ))}
               </div>
@@ -426,7 +426,7 @@ export default function Home() {
                 <div className="flex items-center justify-between border-b border-black/10 py-5">
                   <div>
                     <p className="font-bold">Product accuracy report</p>
-                    <p className="mt-1 text-sm text-[#68736b]">Structured green shirt / SKU SH-1042</p>
+                    <p className="mt-1 text-sm text-[#5d6961]">Structured green shirt / SKU SH-1042</p>
                   </div>
                   <span className="flex items-center gap-2 bg-[#d9ecdf] px-3 py-2 text-sm font-bold text-[#1c6047]"><BadgeCheck className="h-4 w-4" />Excellent</span>
                 </div>
@@ -445,7 +445,7 @@ export default function Home() {
                   ['0.95', 'Quality'], ['<12s', 'Target'], ['None', 'Warnings'],
                 ].map(([value, label]) => (
                   <div key={label} className="px-3 py-4 text-center">
-                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#68736b]">{label}</p>
+                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#5d6961]">{label}</p>
                   </div>
                 ))}
               </div>
@@ -493,7 +493,7 @@ export default function Home() {
               {supportedDetails.map((detail, index) => (
                 <div key={detail} className="flex min-h-28 items-end justify-between border-b border-r border-black/10 p-5">
                   <span className="max-w-[180px] text-lg font-bold">{detail}</span>
-                  <span className="font-mono text-xs text-[#7a857c]">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="font-mono text-xs text-[#5d6961]">{String(index + 1).padStart(2, '0')}</span>
                 </div>
               ))}
             </div>
@@ -527,7 +527,7 @@ export default function Home() {
                     <span className="flex items-center gap-2 font-semibold text-white"><Code2 className="h-4 w-4 text-[#8cd3b3]" />Storefront SDK</span>
                     <span className="text-xs text-[#8ea095]">Standard mode</span>
                   </div>
-                  <pre>{`<script src="https://cdn.drapixai.com/sdk.js"></script>
+                  <pre tabIndex={0} role="region" aria-label="SDK installation example">{`<script src="https://cdn.drapixai.com/sdk.js"></script>
 
 <div id="drapixai-container"></div>
 

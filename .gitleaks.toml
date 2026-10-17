@@ -1,5 +1,8 @@
 title = "DrapixAI secret scanning policy"
 
+[extend]
+useDefault = true
+
 # These patterns are public model identifiers or documentation placeholders,
 # not credentials. Keep this list narrow: production secrets must never match it.
 [allowlist]
@@ -12,3 +15,29 @@ regexes = [
   '''(?i)^\s*DRAPIXAI_S3_ENDPOINT\s*=\s*https?://(?:minio|localhost|127\.0\.0\.1)(?::\d+)?\s*$''',
   '''(?i)authorization\s*:\s*bearer\s+(?:\$[A-Z_][A-Z0-9_]*|\{\{[A-Z_][A-Z0-9_]*\}\}|<[^>]+>)''',
 ]
+
+# Exact public literals reviewed against the history findings. Do not allow an
+# entire file, commit, environment-variable prefix, or any issued token pattern.
+[[rules]]
+id = "curl-auth-header"
+  [[rules.allowlists]]
+  description = "Literal documentation placeholder names, not credentials"
+  regexTarget = "secret"
+  regexes = ['''^(?:SERVER_API_KEY|YOUR_API_KEY)$''']
+
+[[rules]]
+id = "generic-api-key"
+  [[rules.allowlists]]
+  description = "Exact public model identifier and configuration literals"
+  regexTarget = "secret"
+  regexes = [
+    '''^zhengchong/CatVTON$''',
+    '''^DRAPIXAI_ALLOW_LEGACY_API_KEYS=0$''',
+    '''^DRAPIXAI_S3_BUCKET=drapixai-prod$''',
+  ]
+  [[rules.allowlists]]
+  description = "RFC 6238 SHA-1 test-vector seed only in the TOTP test file"
+  condition = "AND"
+  paths = ['''^apps/api/src/scripts/admin-mfa-tests\.ts$''']
+  regexTarget = "secret"
+  regexes = ['''^GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ$''']

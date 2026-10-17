@@ -187,7 +187,7 @@ function RegisterPageContent() {
             <p className="mt-5 leading-7 text-[#5d6961]">We’ll guide you through a private preview before you set up anything on your store.</p>
             <ol className="mt-10 border-t border-black/10">
               {['Add one product and its photo', 'Preview and review the result', 'Connect your store when ready'].map((item, index) => (
-                <li key={item} className="grid grid-cols-[3rem_1fr] border-b border-black/10 py-5 text-sm font-semibold"><span className="text-[#8d9890]">0{index + 1}</span>{item}</li>
+                <li key={item} className="grid grid-cols-[3rem_1fr] border-b border-black/10 py-5 text-sm font-semibold"><span className="text-[#58665d]">0{index + 1}</span>{item}</li>
               ))}
             </ol>
             <div className="mt-10 border-l-4 border-[#183f32] bg-white px-5 py-5">
