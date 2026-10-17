@@ -9,6 +9,18 @@ type Entry = {
 };
 
 const buckets = new Map<string, Entry>();
+// Expiry precedes increment: Redis scripts isolate operations but do not roll
+// back earlier writes on a later command error. Repair old non-expiring buckets
+// without resetting their count; never extend an already bounded bucket.
+export const RATE_LIMIT_CONSUME_SCRIPT = `
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl == -2 then
+  redis.call('SET', KEYS[1], '0', 'PX', ARGV[1])
+elseif ttl == -1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+return redis.call('INCR', KEYS[1])
+`;
 const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
 let redisConnectPromise: Promise<unknown> | null = null;
 
@@ -59,9 +71,18 @@ const consumeRedis = async (key: string, windowMs: number) => {
   const resetAt = (bucket + 1) * windowMs;
   const digest = crypto.createHash('sha256').update(key).digest('hex');
   const redisKey = `drapixai:rate-limit:${digest}:${bucket}`;
-  const count = await redis.incr(redisKey);
-  if (count === 1) await redis.pExpire(redisKey, Math.max(1000, resetAt - now + 1000));
+  const count = await redis.eval(RATE_LIMIT_CONSUME_SCRIPT, {
+    keys: [redisKey], arguments: [String(Math.max(1000, resetAt - now + 1000))],
+  });
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) {
+    throw new Error('RATE_LIMIT_COUNTER_INVALID');
+  }
   return { count, resetAt };
+};
+
+export const closeRateLimitForTests = async () => {
+  if (process.env.NODE_ENV !== 'test') throw new Error('TEST_ONLY_OPERATION');
+  if (redis.isOpen) await redis.quit();
 };
 
 export const createRateLimitMiddleware = (

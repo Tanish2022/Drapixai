@@ -176,7 +176,8 @@ test('CSRF rejects null/malformed/foreign Origin even with a same-site Referer',
 
 test('Changing object IDs cannot reset a route rate-limit bucket', async () => {
   const counters = new Map();
-  const redis = { isReady: true, on() {}, incr: async (key) => { const count = (counters.get(key) || 0) + 1; counters.set(key, count); return count; }, pExpire: async () => {} };
+  const increment = async (key) => { const count = (counters.get(key) || 0) + 1; counters.set(key, count); return count; };
+  const redis = { isReady: true, on() {}, incr: increment, pExpire: async () => {}, eval: async (_script, options) => increment(options.keys[0]) };
   const { createRateLimitMiddleware, rateLimitRouteKey } = loader({ redis: { createClient: () => redis } })('apps/api/src/lib/rate-limit.ts');
   const guard = createRateLimitMiddleware(1, 60000);
   let successes = 0;
@@ -727,6 +728,32 @@ test('Ordinary backend failure does not permanently expire the admin request hel
   assert.equal((await adminFetch('overview')).status, 503);
   assert.equal((await adminFetch('overview')).status, 200);
   assert.equal(redirects, 0); assert.equal(calls, 2);
+});
+
+test('Rate-limit expiry failure cannot create a persistent new counter', async () => {
+  let persistent = false, calls = 0;
+  const redis = { isReady: true, on() {},
+    incr: async () => { persistent = true; return 1; },
+    pExpire: async () => { throw Error('SYNTHETIC_EXPIRY_DENIED'); },
+    eval: async () => { calls++; throw Error('SYNTHETIC_EXPIRY_DENIED'); },
+  };
+  const { createRateLimitMiddleware } = loader({ redis: { createClient: () => redis } }, {
+    process: { env: { NODE_ENV: 'production' } }, console: { error() {} },
+  })('apps/api/src/lib/rate-limit.ts');
+  const res = response(); let allowed = false;
+  await createRateLimitMiddleware(5, 60000)( { ip: 'fixture', baseUrl: '/test', path: '/' }, res, () => { allowed = true; });
+  assert.equal(persistent, false); assert.equal(calls, 1);
+  assert.equal(res.statusCode, 503); assert.equal(res.body.error, 'RATE_LIMITER_UNAVAILABLE'); assert.equal(allowed, false);
+});
+
+test('Malformed Redis count fails closed in production', async () => {
+  const redis = { isReady: true, on() {}, incr: async () => 'invalid', pExpire: async () => {}, eval: async () => 'invalid' };
+  const { createRateLimitMiddleware } = loader({ redis: { createClient: () => redis } }, {
+    process: { env: { NODE_ENV: 'production' } }, console: { error() {} },
+  })('apps/api/src/lib/rate-limit.ts');
+  const res = response(); let allowed = false;
+  await createRateLimitMiddleware(5, 60000)({ ip: 'fixture', baseUrl: '/test', path: '/' }, res, () => { allowed = true; });
+  assert.equal(res.statusCode, 503); assert.equal(allowed, false);
 });
 
 test('Malformed admin credential types fail before an upstream authentication request', async () => {

@@ -62,7 +62,12 @@ const main = async () => {
     if (result.ok) await concurrency.releaseTryOnSlot(result.lease);
   }
   await concurrency.closeTryOnConcurrencyForTests();
-  await controlRedis.quit();
+  try {
+    const { verifyRateLimitRedis } = await import('./rate-limit-redis-tests');
+    await verifyRateLimitRedis(controlRedis, redisUrl);
+  } finally {
+    await controlRedis.quit();
+  }
 
   let claimed = false;
   const mockPrisma = {

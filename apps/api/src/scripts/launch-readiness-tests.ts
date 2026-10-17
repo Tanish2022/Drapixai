@@ -844,8 +844,9 @@ assertIncludes(productionReadiness, 'Production SDK requests must also require a
 assertIncludes(productionReadiness, 'New API keys use high-entropy `dpx_` values', 'Production guide must document indexed modern API keys and pre-launch rotation');
 assertIncludes(rateLimit, "req.ip || 'unknown'", 'Rate limiting must rely on Express trusted proxy IP handling');
 assertNotIncludes(rateLimit, "req.headers['x-forwarded-for']", 'Rate limiting must not trust spoofable x-forwarded-for directly');
-assertIncludes(rateLimit, 'redis.incr(redisKey)', 'Public API rate limiting must use shared Redis state');
-assertIncludes(rateLimit, 'redis.pExpire(redisKey', 'Redis rate-limit windows must expire automatically');
+assertIncludes(rateLimit, 'redis.eval(RATE_LIMIT_CONSUME_SCRIPT', 'Public API rate limiting must atomically consume shared Redis state');
+assertIncludes(rateLimit, "redis.call('SET', KEYS[1], '0', 'PX', ARGV[1])", 'New Redis rate-limit counters must have expiry before increment');
+assertIncludes(rateLimit, "redis.call('PEXPIRE', KEYS[1], ARGV[1])", 'Existing non-expiring Redis counters must be repaired without resetting their count');
 assertIncludes(rateLimit, "process.env.NODE_ENV === 'production'", 'Production rate limiting must distinguish fail-closed behavior');
 assertIncludes(rateLimit, "error: 'RATE_LIMITER_UNAVAILABLE'", 'Production must fail closed when shared rate limiting is unavailable');
 assertIncludes(analyticsRoute, 'resolveActiveApiKey', 'Analytics routes must use the shared API-key resolver');
