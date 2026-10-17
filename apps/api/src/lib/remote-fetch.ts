@@ -21,6 +21,40 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.DRAPIXAI_REMOTE_FETCH_TIMEOUT_MS |
 
 const normalizeHostname = normalizeRemoteHostname;
 
+// One budget covers DNS, connection/TLS, upload and the complete response.
+// A socket inactivity timeout alone can be extended indefinitely by a slow drip.
+const withRemoteDeadline = async <T>(
+  options: SafeFetchOptions,
+  defaultMaxBytes: number,
+  operation: (signal: AbortSignal, maxBytes: number) => Promise<T>,
+): Promise<T> => {
+  const maxBytes = options.maxBytes ?? defaultMaxBytes;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0
+    || !Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2147483647) {
+    throw new Error('REMOTE_FETCH_LIMITS_INVALID');
+  }
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('REMOTE_FETCH_TIMEOUT');
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([operation(controller.signal, maxBytes), deadline]);
+  } catch (error) {
+    const failure = controller.signal.aborted ? controller.signal.reason : error;
+    // Also close the request on redirects, oversized responses and decode errors.
+    controller.abort(failure);
+    throw failure;
+  } finally {
+    clearTimeout(timer!);
+  }
+};
+
 const assertSafeUrl = async (rawUrl: string, allowedProtocols: string[]): Promise<PinnedUrl> => {
   let parsed: URL;
   try {
@@ -59,11 +93,13 @@ const assertSafeUrl = async (rawUrl: string, allowedProtocols: string[]): Promis
   };
 };
 
-const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: number) => {
+const fetchPinned = async (target: PinnedUrl, maxBytes: number, signal: AbortSignal) => {
+  signal.throwIfAborted();
   const transport = target.url.protocol === 'https:' ? https : http;
 
   return new Promise<{ response: Response; buffer: Buffer }>((resolve, reject) => {
     const request = transport.request(target.url, {
+      signal,
       family: target.family,
       servername: target.url.hostname,
       lookup: (_hostname, _options, callback) => callback(null, target.address, target.family),
@@ -76,7 +112,6 @@ const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: numbe
       incoming.on('error', reject);
       const status = incoming.statusCode || 0;
       if (status >= 300 && status < 400) {
-        incoming.resume();
         reject(new Error('REMOTE_REDIRECT_NOT_ALLOWED'));
         return;
       }
@@ -104,15 +139,16 @@ const fetchPinned = async (target: PinnedUrl, maxBytes: number, timeoutMs: numbe
         chunks.push(Buffer.from(chunk));
       });
       incoming.on('end', () => {
-        const body = Buffer.concat(chunks);
-        resolve({
-          response: new Response(body, { status, headers }),
-          buffer: body,
-        });
+        try {
+          const body = Buffer.concat(chunks);
+          resolve({
+            response: new Response(body.byteLength ? body : null, { status, headers }),
+            buffer: body,
+          });
+        } catch (error) { reject(error); }
       });
     });
 
-    request.setTimeout(timeoutMs, () => request.destroy(new Error('REMOTE_FETCH_TIMEOUT')));
     request.on('error', reject);
     request.end();
   });
@@ -123,14 +159,14 @@ export const safePostJson = async (
   body: string,
   headers: Record<string, string>,
   options: SafeFetchOptions = {},
-) => {
+) => withRemoteDeadline(options, 64 * 1024, async (signal, maxBytes) => {
   const target = await assertSafeUrl(rawUrl, options.allowedProtocols || ['https:']);
-  const maxBytes = options.maxBytes || 64 * 1024;
-  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  signal.throwIfAborted();
   const transport = target.url.protocol === 'https:' ? https : http;
 
   return new Promise<{ status: number; body: Buffer }>((resolve, reject) => {
     const request = transport.request(target.url, {
+      signal,
       method: 'POST',
       family: target.family,
       servername: target.url.hostname,
@@ -144,7 +180,6 @@ export const safePostJson = async (
     }, (incoming) => {
       const status = incoming.statusCode || 0;
       if (status >= 300 && status < 400) {
-        incoming.resume();
         reject(new Error('REMOTE_REDIRECT_NOT_ALLOWED'));
         return;
       }
@@ -161,19 +196,14 @@ export const safePostJson = async (
       incoming.on('end', () => resolve({ status, body: Buffer.concat(chunks) }));
       incoming.on('error', reject);
     });
-    request.setTimeout(timeoutMs, () => request.destroy(new Error('REMOTE_FETCH_TIMEOUT')));
     request.on('error', reject);
     request.write(body);
     request.end();
   });
-};
+});
 
 export const safeFetchText = async (rawUrl: string, options: SafeFetchOptions = {}) => {
-  const allowedProtocols = options.allowedProtocols || ['https:'];
-  const maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
-  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const target = await assertSafeUrl(rawUrl, allowedProtocols);
-  const { response, buffer } = await fetchPinned(target, maxBytes, timeoutMs);
+  const { response, buffer } = await safeFetchBuffer(rawUrl, options);
 
   return {
     response,
@@ -182,11 +212,10 @@ export const safeFetchText = async (rawUrl: string, options: SafeFetchOptions = 
 };
 
 export const safeFetchBuffer = async (rawUrl: string, options: SafeFetchOptions = {}) => {
-  const allowedProtocols = options.allowedProtocols || ['https:'];
-  const maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
-  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const target = await assertSafeUrl(rawUrl, allowedProtocols);
-  return fetchPinned(target, maxBytes, timeoutMs);
+  return withRemoteDeadline(options, DEFAULT_MAX_BYTES, async (signal, maxBytes) => {
+    const target = await assertSafeUrl(rawUrl, options.allowedProtocols || ['https:']);
+    return fetchPinned(target, maxBytes, signal);
+  });
 };
 
 export const normalizePublicDomain = (value: string) => {

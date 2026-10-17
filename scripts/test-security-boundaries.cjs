@@ -1,5 +1,6 @@
 // Executes real route/module code with synthetic identities, fake DB/transport
-// adapters and bounded streams. No network, GPU, mail, secrets or real records.
+// adapters and bounded streams. Native HTTP uses only a disposable loopback
+// fixture. No external network, GPU, mail, secrets or real records.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -288,6 +289,179 @@ for (const address of ['100.64.1.2', '198.18.0.1', '::ffff:7f00:1', 'fe90::1']) 
     assert.equal(connections, 0);
   });
 }
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const boundedFixture = async (operation, safetyMs = 250) => {
+  let timer;
+  try { return await Promise.race([operation, new Promise((_resolve, reject) => { timer = setTimeout(() => reject(Error('FIXTURE_SAFETY_TIMEOUT')), safetyMs); })]); }
+  finally { clearTimeout(timer); }
+};
+
+for (const method of ['GET', 'POST']) test(`${method} slow-drip response hits total deadline and closes transport`, async () => {
+  let destroyed = false, interval, idleTimer, idleMs, idleCallback;
+  const clear = () => { clearInterval(interval); clearTimeout(idleTimer); };
+  const resetIdle = () => { clearTimeout(idleTimer); if (idleCallback) idleTimer = setTimeout(idleCallback, idleMs); };
+  const transport = { request: (_url, options, callback) => {
+    const request = new EventEmitter();
+    request.setTimeout = (ms, cb) => { idleMs = ms; idleCallback = cb; resetIdle(); return request; };
+    request.write = () => request;
+    request.destroy = (error) => { destroyed = true; clear(); queueMicrotask(() => request.emit('error', error)); return request; };
+    options.signal?.addEventListener('abort', () => request.destroy(options.signal.reason), { once: true });
+    request.end = () => queueMicrotask(() => {
+      const incoming = new EventEmitter(); incoming.statusCode = 200; incoming.headers = {};
+      callback(incoming);
+      let chunks = 0;
+      interval = setInterval(() => {
+        resetIdle(); incoming.emit('data', Buffer.from('x'));
+        if (++chunks === 24) { clear(); incoming.emit('end'); }
+      }, 5);
+    });
+    return request;
+  } };
+  const remote = loader({ 'dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, https: transport })('apps/api/src/lib/remote-fetch.ts');
+  try {
+    const result = method === 'GET' ? remote.safeFetchText('https://controlled.example.test', { timeoutMs: 25 })
+      : remote.safePostJson('https://controlled.example.test', '{}', {}, { timeoutMs: 25 });
+    await assert.rejects(boundedFixture(result), /REMOTE_FETCH_TIMEOUT/);
+    assert.equal(destroyed, true);
+  } finally { clear(); }
+});
+
+test('Outbound deadline includes a DNS lookup that never settles', async () => {
+  const remote = loader({ 'dns/promises': { lookup: () => new Promise(() => {}) } })('apps/api/src/lib/remote-fetch.ts');
+  await assert.rejects(boundedFixture(remote.safeFetchText('https://controlled.example.test', { timeoutMs: 20 })), /REMOTE_FETCH_TIMEOUT/);
+});
+
+test('DNS completion after the deadline cannot start a late connection', async () => {
+  let connections = 0;
+  const transport = { request: () => { connections++; throw Error('LATE_CONNECTION'); } };
+  const remote = loader({ 'dns/promises': { lookup: async () => { await delay(60); return [{ address: '8.8.8.8', family: 4 }]; } }, https: transport })('apps/api/src/lib/remote-fetch.ts');
+  await assert.rejects(boundedFixture(remote.safeFetchText('https://controlled.example.test', { timeoutMs: 20 })), /REMOTE_FETCH_TIMEOUT/);
+  await delay(80); assert.equal(connections, 0);
+});
+
+test('Rejected redirect closes its transport instead of draining an unbounded body', async () => {
+  let destroyed = false;
+  const transport = { request: (_url, options, callback) => {
+    const request = new EventEmitter(); request.setTimeout = () => request;
+    request.destroy = (error) => { destroyed = true; queueMicrotask(() => request.emit('error', error)); return request; };
+    options.signal?.addEventListener('abort', () => request.destroy(options.signal.reason), { once: true });
+    request.end = () => queueMicrotask(() => {
+      const incoming = new EventEmitter(); incoming.statusCode = 302; incoming.headers = {}; incoming.resume = () => {};
+      callback(incoming);
+    });
+    return request;
+  } };
+  const remote = loader({ 'dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, https: transport })('apps/api/src/lib/remote-fetch.ts');
+  await assert.rejects(remote.safeFetchText('https://controlled.example.test'), /REMOTE_REDIRECT_NOT_ALLOWED/);
+  assert.equal(destroyed, true);
+});
+
+test('Normal webhook POST preserves payload, response and caller timeout', async () => {
+  let written;
+  const transport = { request: (_url, options, callback) => {
+    assert.equal(options.method, 'POST'); assert.equal(options.headers['Content-Length'], '7');
+    const request = new EventEmitter(); request.setTimeout = () => request;
+    request.write = (body) => { written = body; return request; };
+    request.end = () => queueMicrotask(() => {
+      const incoming = new EventEmitter(); incoming.statusCode = 202; incoming.headers = {};
+      callback(incoming); incoming.emit('data', Buffer.from('ok')); incoming.emit('end');
+    });
+    return request;
+  } };
+  const remote = loader({ 'dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, https: transport })('apps/api/src/lib/remote-fetch.ts');
+  const result = await remote.safePostJson('https://controlled.example.test', '{"a":1}', {}, { timeoutMs: 100 });
+  assert.equal(result.status, 202); assert.equal(result.body.toString(), 'ok'); assert.equal(written, '{"a":1}');
+});
+
+test('Invalid outbound byte/time budgets fail before DNS or transport', async () => {
+  let lookups = 0;
+  const remote = loader({ 'dns/promises': { lookup: async () => { lookups++; throw Error('DNS_NOT_ALLOWED'); } } })('apps/api/src/lib/remote-fetch.ts');
+  for (const options of [{ timeoutMs: 0 }, { timeoutMs: NaN }, { timeoutMs: Infinity }, { timeoutMs: -1 }, { timeoutMs: 2147483648 }, { maxBytes: 0 }, { maxBytes: -1 }, { maxBytes: NaN }]) {
+    await assert.rejects(remote.safeFetchText('https://controlled.example.test', options), /REMOTE_FETCH_LIMITS_INVALID/);
+  }
+  assert.equal(lookups, 0);
+});
+
+for (const status of [204, 205]) test(`Empty HTTP ${status} response resolves without an event-handler exception`, async () => {
+  const transport = { request: (_url, _options, callback) => {
+    const request = new EventEmitter(); request.setTimeout = () => request;
+    request.end = () => queueMicrotask(() => {
+      try {
+        const incoming = new EventEmitter(); incoming.statusCode = status; incoming.headers = {};
+        callback(incoming); incoming.emit('end');
+      } catch (error) { request.emit('error', error); }
+    });
+    return request;
+  } };
+  const remote = loader({ 'dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, https: transport })('apps/api/src/lib/remote-fetch.ts');
+  const result = await remote.safeFetchText('https://controlled.example.test');
+  assert.equal(result.response.status, status); assert.equal(result.text, '');
+});
+
+test('Native Node HTTP aborts slow GET/POST and redirect sockets while normal POST succeeds', async () => {
+  const http = require('node:http');
+  const closed = new Set(), received = new Set();
+  let payload = '';
+  const server = http.createServer((req, res) => {
+    received.add(req.url);
+    if (req.url === '/fast') {
+      req.setEncoding('utf8'); req.on('data', (chunk) => { payload += chunk; });
+      req.on('end', () => { res.writeHead(202); res.end('ok'); });
+      return;
+    }
+    res.writeHead(req.url === '/redirect' ? 302 : 200);
+    res.write('x');
+    const drip = setInterval(() => res.write('x'), 5);
+    res.once('close', () => { clearInterval(drip); closed.add(req.url); });
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  try {
+    // Only the transport adapter points to the synthetic loopback fixture.
+    // Real ClientRequest/IncomingMessage implement the AbortSignal handling.
+    const transport = { request: (url, options, callback) => http.request(`http://127.0.0.1:${server.address().port}${url.pathname}`, options, callback) };
+    const remote = loader({ 'dns/promises': { lookup: async () => [{ address: '8.8.8.8', family: 4 }] }, http: transport, https: transport })('apps/api/src/lib/remote-fetch.ts');
+    for (const method of ['GET', 'POST']) {
+      const url = `https://controlled.example.test/${method}`;
+      const result = method === 'GET' ? remote.safeFetchText(url, { timeoutMs: 150 }) : remote.safePostJson(url, '{}', {}, { timeoutMs: 150 });
+      await assert.rejects(boundedFixture(result, 1000), /REMOTE_FETCH_TIMEOUT/);
+      for (let attempt = 0; attempt < 40 && !closed.has(`/${method}`); attempt++) await delay(5);
+      assert.equal(received.has(`/${method}`), true, 'Fixture must receive the request before cancellation');
+      assert.equal(closed.has(`/${method}`), true, 'Deadline must close the real response socket');
+    }
+    await assert.rejects(boundedFixture(remote.safeFetchText('https://controlled.example.test/redirect'), 1000), /REMOTE_REDIRECT_NOT_ALLOWED/);
+    for (let attempt = 0; attempt < 40 && !closed.has('/redirect'); attempt++) await delay(5);
+    assert.equal(closed.has('/redirect'), true);
+    const result = await boundedFixture(remote.safePostJson('https://controlled.example.test/fast', '{"a":1}', {}, { timeoutMs: 1000 }), 2000);
+    assert.equal(result.status, 202); assert.equal(result.body.toString(), 'ok'); assert.equal(payload, '{"a":1}');
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('Timed-out webhook delivery preserves bounded retry accounting instead of hanging or marking delivered', async () => {
+  const updates = [];
+  const env = { NODE_ENV: 'test', DRAPIXAI_WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64') };
+  const load = loader({
+    'dns/promises': { lookup: () => new Promise(() => {}) },
+    '../lib/operational-metrics': { observeWebhookFailure() {} },
+  }, {
+    process: { env }, console: { ...console, error() {} },
+    setTimeout: (callback) => setTimeout(callback, 20),
+  });
+  const service = load('apps/api/src/services/webhooks.ts');
+  const delivery = { id: 'synthetic-delivery', attemptCount: 0, eventId: 'synthetic-event', eventType: 'tryon.completed', payload: { synthetic: true },
+    endpoint: { isActive: true, url: 'https://controlled.example.test', encryptedSecret: service.encryptWebhookSecret('synthetic-webhook-signing-secret') } };
+  const database = { webhookDelivery: {
+    findMany: async () => [delivery], updateMany: async () => ({ count: 1 }),
+    update: async ({ data }) => { updates.push(data); },
+  } };
+  assert.equal(await boundedFixture(service.processPendingWebhookDeliveries(database)), 1);
+  assert.equal(updates.length, 1); assert.equal(updates[0].status, 'retrying');
+  assert.equal(updates[0].attemptCount, 1); assert.equal(updates[0].errorCode, 'REMOTE_FETCH_TIMEOUT');
+  assert.equal(updates[0].responseCode, null); assert.ok(updates[0].nextAttemptAt.getTime() > Date.now());
+});
 
 (async () => {
   let failures = 0;
