@@ -25,7 +25,7 @@ record = {
     'productionApproved': False,
     'source': {'url': 'https://nodejs.org/download/release/v22.23.3/node-v22.23.3.tar.xz',
                'sha256': 'bd97093e1a1e9243338950c174a693a64d4e0926a9c6ce259962bc58d5e96909',
-               'authentication': 'HTTPS and reviewed pinned SHA-256; no independent GPG signature verification'},
+               'authentication': 'HTTPS and reviewed pinned SHA-256; separate GPG evidence is not an in-build signature check'},
     'configure': ['--prefix=/opt/drapixai-node', '--shared-openssl', '--with-intl=full-icu'],
     'runtime': runtime,
     'nodeSha256': digest(node),

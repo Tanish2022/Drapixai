@@ -9,8 +9,10 @@ unchanged. Do not deploy or relabel this candidate as an approved release.
 The exact source archive is pinned to SHA-256
 `bd97093e1a1e9243338950c174a693a64d4e0926a9c6ce259962bc58d5e96909`.
 Its checksum was checked against the [official Node release record](https://nodejs.org/en/blog/release/v22.23.3)
-and official checksum endpoint. This build authenticates the download using HTTPS
-and that reviewed pin; it does not claim independent GPG verification.
+and official checksum endpoint. The Dockerfile authenticates the download using
+HTTPS and that reviewed pin. A separate offline GPG verification now proves that
+the official signed checksum matches this pin; it is not an in-build GPG step.
+See the [18 October evidence and limitations](../../../docs/node-shared-openssl-review-2026-10-18.md).
 
 ## Why this candidate exists
 
@@ -40,6 +42,24 @@ marks [CVE-2026-84783](https://security-tracker.debian.org/tracker/CVE-2026-8478
 not affected, rather than requiring a blanket waiver for the entire advisory.
 
 ## Build and verify, without a GPU
+
+Before a candidate build, obtain the public
+[signed manifest](https://nodejs.org/download/release/v22.23.3/SHASUMS256.txt.asc)
+and [reviewed official keyring snapshot](https://raw.githubusercontent.com/nodejs/release-keys/481637f813e912c4aa3622d7964ab426c97b8e8d/gpg/pubring.kbx)
+into an ignored local directory. With an existing trusted `gpgv` executable, run:
+
+```powershell
+python deploy/security/node/verify-source-signature.py --gpgv PATH_TO_GPGV --manifest PATH_TO_SHASUMS256.txt.asc --keyring PATH_TO_pubring.kbx --keyring-revision 481637f813e912c4aa3622d7964ab426c97b8e8d --output-dir runtime/security-candidate/node-source-signature-review
+```
+
+The output directory must be new. This verifier pins the reviewed keyring bytes,
+revision, release signer, source version and checksum; it checks the GPG status
+and SHA-256-or-stronger signature digest and rejects tampered signed content and
+an untrusted key in real negative controls. It does not download keys, install
+software, edit personal keyrings or attest independent key identity/revocation
+review. Keys came from the official HTTPS repository and the fingerprint was
+cross-checked with the versioned Node README. Future source/key changes require
+review; a historical signature alone does not approve a future runtime.
 
 Run from the repository root with local Docker, Node 22, Python 3 and test-only
 Python `cryptography` already available. No script installs host packages or
