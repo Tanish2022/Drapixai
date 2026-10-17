@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import { aiFetch } from '../lib/ai-client';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { createClient } from 'redis';
+import { createRequestRedis } from '../lib/request-redis';
 import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
 import { requireTryOnIntake } from '../lib/tryon-intake';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -122,14 +122,7 @@ const getGarmentValidationMessage = (code: string) => {
   }
 };
 
-// Initialize Redis client
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (error) => {
-  console.error('SDK Redis client error:', formatLogError(error));
-});
-redis.connect().catch((error) => {
-  console.error('Redis connection error:', formatLogError(error));
-});
+const redis = createRequestRedis('Legacy render queue');
 
 // Initialize S3 client (MinIO)
 const s3 = createStorageClient();
@@ -825,7 +818,7 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnInt
 
     // Add job to Redis queue
     await markUsageDispatched(prisma, usageTicket, render.id);
-    await redis.lPush('render_queue', JSON.stringify({ 
+    await redis.run(client => client.lPush('render_queue', JSON.stringify({
       jobId: render.id,
       inputKey: inputKey,
       productId: productId || 'default',
@@ -833,7 +826,7 @@ router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnInt
       userPlan: plan.normalizedPlan,
       userId: user.id,
       apiKeyId: apiKey.id
-    }));
+    })));
 
     // Update usage count
     await commitLegacyRenderUsage(prisma, usageTicket);

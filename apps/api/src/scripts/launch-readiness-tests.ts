@@ -191,6 +191,7 @@ const remoteFetchHelpers = read('apps/api/src/lib/remote-fetch.ts');
 const dashboardProxyAuth = read('apps/api/src/lib/dashboard-proxy-auth.ts');
 const plansLib = read('apps/api/src/lib/plans.ts');
 const rateLimit = read('apps/api/src/lib/rate-limit.ts');
+const requestRedis = read('apps/api/src/lib/request-redis.ts');
 const corsOriginCache = read('apps/api/src/lib/cors-origin-cache.ts');
 const nginxConfig = read('deploy/nginx/drapixai.conf');
 const usageLib = read('apps/api/src/lib/usage.ts');
@@ -646,7 +647,8 @@ assertIncludes(apiServer, "error.type === 'entity.parse.failed'", 'API server mu
 assertIncludes(apiServer, "error.message === 'CORS_ORIGIN_NOT_ALLOWED'", 'API server must return sanitized JSON for blocked CORS origins');
 assertIncludes(apiServer, 'status = 403;', 'API server must return 403 for blocked CORS origins');
 assertIncludes(apiServer, "res.status(404).json({ error: 'NOT_FOUND' });", 'API server must return JSON 404s');
-assertIncludes(apiServer, "redis.on('error'", 'API server Redis client must handle socket errors without crashing');
+assertIncludes(apiServer, "createRequestRedis('API readiness')", 'API server must use bounded Redis request handling');
+assertIncludes(requestRedis, "client.on('error'", 'Shared request Redis clients must handle socket errors without crashing');
 assertIncludes(apiServer, 'formatLogError', 'API server must sanitize operational error logs');
 assertIncludes(apiServer, "requireHttpsUrl('DRAPIXAI_AI_URL')", 'Production API must require a non-local HTTPS AI endpoint');
 assertIncludes(storageLib, 'getStorageEncryptionParams', 'All object writes must request server-side encryption');
@@ -790,7 +792,7 @@ assertIncludes(authRoute, "import { issueApiKeyForUser } from '../lib/api-key-au
 assertIncludes(analyticsRoute, 'issueApiKeyForUser', 'Dashboard key rotation must use centralized modern API-key issuance');
 assertNotIncludes(authRoute, "uuidv4().replace(/-/g, '')", 'Authentication must not issue legacy 128-bit UUID API keys');
 assertNotIncludes(analyticsRoute, "uuidv4().replace(/-/g, '')", 'Dashboard rotation must not issue legacy 128-bit UUID API keys');
-assertIncludes(sdkRoute, "redis.on('error'", 'SDK Redis client must handle socket errors without crashing');
+assertIncludes(sdkRoute, "createRequestRedis('Legacy render queue')", 'Legacy SDK queue writes must use bounded Redis request handling');
 assertIncludes(sdkRoute, 'formatLogError', 'SDK route must sanitize operational error logs');
 assertNotIncludes(sdkRoute, "console.error('SDK Redis client error:', error);", 'SDK route must not log raw Redis client errors');
 assertNotIncludes(sdkRoute, "console.error('Try-on error:', error);", 'SDK route must not log raw try-on exceptions');
@@ -844,7 +846,12 @@ assertIncludes(productionReadiness, 'Production SDK requests must also require a
 assertIncludes(productionReadiness, 'New API keys use high-entropy `dpx_` values', 'Production guide must document indexed modern API keys and pre-launch rotation');
 assertIncludes(rateLimit, "req.ip || 'unknown'", 'Rate limiting must rely on Express trusted proxy IP handling');
 assertNotIncludes(rateLimit, "req.headers['x-forwarded-for']", 'Rate limiting must not trust spoofable x-forwarded-for directly');
-assertIncludes(rateLimit, 'redis.eval(RATE_LIMIT_CONSUME_SCRIPT', 'Public API rate limiting must atomically consume shared Redis state');
+assertIncludes(rateLimit, 'client.eval(RATE_LIMIT_CONSUME_SCRIPT', 'Public API rate limiting must atomically consume shared Redis state');
+assertIncludes(rateLimit, "createRequestRedis('Rate-limit')", 'Rate-limit admission must bound Redis connection and command waits');
+assertIncludes(requestRedis, 'disableOfflineQueue: true', 'Request-scoped Redis commands must not replay from an offline backlog');
+assertIncludes(requestRedis, 'reconnectStrategy: false', 'Failed request-scoped Redis connections must not retry indefinitely');
+assertIncludes(requestRedis, 'const REQUEST_TIMEOUT_MS = 3000', 'Request Redis connect and command time must share one bounded budget');
+assertIncludes(requestRedis, 'commandsQueueMaxLength: MAX_PENDING_REQUESTS', 'Request Redis client queues must have a capacity limit');
 assertIncludes(rateLimit, "redis.call('SET', KEYS[1], '0', 'PX', ARGV[1])", 'New Redis rate-limit counters must have expiry before increment');
 assertIncludes(rateLimit, "redis.call('PEXPIRE', KEYS[1], ARGV[1])", 'Existing non-expiring Redis counters must be repaired without resetting their count');
 assertIncludes(rateLimit, "process.env.NODE_ENV === 'production'", 'Production rate limiting must distinguish fail-closed behavior');
@@ -901,7 +908,7 @@ assertNotIncludes(proveLiveShell, 'eval(', 'Live stack proof script must not eva
 
 assertIncludes(adminRoute, "filter === 'low_quality'", 'Admin API must support low quality review filter');
 assertIncludes(adminRoute, 'resolveActiveApiKey', 'Admin routes must use the shared API-key resolver');
-assertIncludes(adminRoute, "redis.on('error'", 'Admin Redis client must handle socket errors without crashing');
+assertIncludes(adminRoute, "createRequestRedis('Admin operations')", 'Admin operations must use bounded Redis request handling');
 assertIncludes(adminRoute, 'formatLogError', 'Admin route must sanitize operational error logs');
 assertNotIncludes(adminRoute, "console.error('Admin Redis client error:', error);", 'Admin route must not log raw Redis client errors');
 assertNotIncludes(adminRoute, "authorization?.replace('Bearer ', '')", 'Admin routes must not hand-roll bearer parsing');

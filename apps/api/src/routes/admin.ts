@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { aiFetch } from '../lib/ai-client';
 import { PrismaClient } from '@prisma/client';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { createClient } from 'redis';
+import { createRequestRedis } from '../lib/request-redis';
 import { sendGarmentApprovalEmail } from '../services/emailer';
 import { createStorageClient, getStorageSummary } from '../lib/storage';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
@@ -20,11 +20,7 @@ const prisma = new PrismaClient();
 const ADMIN_EMAIL = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
 const ADMIN_USER_ID = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
 const s3 = createStorageClient();
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (error) => {
-  console.error('Admin Redis client error:', formatLogError(error));
-});
-redis.connect().catch(() => undefined);
+const redis = createRequestRedis('Admin operations');
 const adminRateLimit = createRateLimitMiddleware(60, 15 * 60 * 1000);
 
 const auditAdminAction = (req: any, input: {
@@ -250,8 +246,9 @@ router.get('/ops', async (_req, res) => {
   }
 
   try {
-    redisReady = (await withOperationTimeout(redis.ping(), 3000, 'REDIS_OPS_TIMEOUT')) === 'PONG';
-    queueDepth = await withOperationTimeout(redis.lLen('render_queue'), 3000, 'REDIS_QUEUE_TIMEOUT');
+    const [pong, depth] = await redis.run(client => Promise.all([client.ping(), client.lLen('render_queue')]), 'REDIS_OPS_TIMEOUT');
+    redisReady = pong === 'PONG';
+    queueDepth = depth;
   } catch {
     redisReady = false;
     queueDepth = 0;

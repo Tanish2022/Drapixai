@@ -4,7 +4,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { PrismaClient } from '@prisma/client';
-import { createClient } from 'redis';
+import { createRequestRedis } from './lib/request-redis';
 import authRoutes from './routes/auth';
 import sdkRoutes from './routes/sdk';
 import analyticsRoutes from './routes/analytics';
@@ -34,13 +34,7 @@ import { assertStripeEnvironment } from './lib/billing';
 
 const app = express();
 const prisma = new PrismaClient();
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-redis.on('error', (error) => {
-  console.error('Redis client error:', formatLogError(error));
-});
-redis.connect().catch((error) => {
-  console.error('Redis connection error:', formatLogError(error));
-});
+const redis = createRequestRedis('API readiness');
 const aiBaseUrl = (process.env.DRAPIXAI_AI_URL || '').trim();
 const shopifyEnabled = process.env.DRAPIXAI_SHOPIFY_ENABLED === '1';
 const shopifyAutoPrepare = process.env.DRAPIXAI_SHOPIFY_AUTO_PREPARE === '1';
@@ -375,7 +369,7 @@ app.get('/ready', async (req, res) => {
     })(),
     (async () => {
       try {
-        redisReady = (await withOperationTimeout(redis.ping(), 3000, 'REDIS_READY_TIMEOUT')) === 'PONG';
+        redisReady = (await redis.run(client => client.ping(), 'REDIS_READY_TIMEOUT')) === 'PONG';
       } catch {
         redisReady = false;
       }
@@ -429,7 +423,10 @@ app.get('/internal/metrics', async (req, res) => {
     return res.status(404).json({ error: 'NOT_FOUND' });
   }
   try {
-    const metrics = await renderOperationalMetrics(prisma, redis);
+    const metrics = await renderOperationalMetrics(prisma, {
+      lLen: key => redis.run(client => client.lLen(key)),
+      zCard: key => redis.run(client => client.zCard(key)),
+    });
     res.type('text/plain; version=0.0.4; charset=utf-8').send(metrics);
   } catch (error) {
     console.error('Operational metrics collection failed:', formatLogError(error));

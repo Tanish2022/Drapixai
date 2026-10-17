@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
-import { createClient } from 'redis';
+import { createRequestRedis } from './request-redis';
 import { formatLogError } from './security';
 
 type Entry = {
@@ -21,24 +21,7 @@ elseif ttl == -1 then
 end
 return redis.call('INCR', KEYS[1])
 `;
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-let redisConnectPromise: Promise<unknown> | null = null;
-
-redis.on('error', (error) => {
-  if (process.env.NODE_ENV !== 'test') {
-    console.error('Rate-limit Redis error:', formatLogError(error));
-  }
-});
-
-const ensureRedis = async () => {
-  if (redis.isReady) return;
-  if (!redisConnectPromise) {
-    redisConnectPromise = redis.connect().finally(() => {
-      redisConnectPromise = null;
-    });
-  }
-  await redisConnectPromise;
-};
+const redis = createRequestRedis('Rate-limit');
 
 // Matched templates keep identifier changes in one bucket. Before Express has
 // matched a route, apply the mount-wide cap rather than attacker-chosen paths.
@@ -64,25 +47,24 @@ const consumeMemory = (key: string, maxRequests: number, windowMs: number) => {
   return existing;
 };
 
-const consumeRedis = async (key: string, windowMs: number) => {
-  await ensureRedis();
+const consumeRedis = (key: string, windowMs: number) => redis.run(async client => {
   const now = Date.now();
   const bucket = Math.floor(now / windowMs);
   const resetAt = (bucket + 1) * windowMs;
   const digest = crypto.createHash('sha256').update(key).digest('hex');
   const redisKey = `drapixai:rate-limit:${digest}:${bucket}`;
-  const count = await redis.eval(RATE_LIMIT_CONSUME_SCRIPT, {
+  const count = await client.eval(RATE_LIMIT_CONSUME_SCRIPT, {
     keys: [redisKey], arguments: [String(Math.max(1000, resetAt - now + 1000))],
   });
   if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) {
     throw new Error('RATE_LIMIT_COUNTER_INVALID');
   }
   return { count, resetAt };
-};
+});
 
 export const closeRateLimitForTests = async () => {
   if (process.env.NODE_ENV !== 'test') throw new Error('TEST_ONLY_OPERATION');
-  if (redis.isOpen) await redis.quit();
+  await redis.close();
 };
 
 export const createRateLimitMiddleware = (

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { createClient } from 'redis';
+import { createRequestRedis } from './request-redis';
 import { formatLogError } from './security';
 
 type TryOnLease = {
@@ -12,24 +12,7 @@ type AcquireResult =
   | { ok: true; lease: TryOnLease }
   | { ok: false; reason: 'TENANT_CONCURRENCY_LIMIT' | 'GLOBAL_CAPACITY_BUSY' | 'CONCURRENCY_CONTROL_UNAVAILABLE' };
 
-const redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
-let connectPromise: Promise<unknown> | null = null;
-
-redis.on('error', (error) => {
-  if (process.env.NODE_ENV !== 'test') {
-    console.error('Try-on concurrency Redis error:', formatLogError(error));
-  }
-});
-
-const ensureRedis = async () => {
-  if (redis.isReady) return;
-  if (!connectPromise) {
-    connectPromise = redis.connect().finally(() => {
-      connectPromise = null;
-    });
-  }
-  await connectPromise;
-};
+const redis = createRequestRedis('Try-on concurrency');
 
 const ACQUIRE_SCRIPT = `
 local global_key = KEYS[1]
@@ -75,25 +58,27 @@ export const acquireTryOnSlot = async (tenantId: number): Promise<AcquireResult>
     globalLimit,
   );
   const leaseMs = positiveInteger(process.env.DRAPIXAI_TRYON_SLOT_LEASE_MS, 120_000);
-  const now = Date.now();
   const token = crypto.randomUUID();
   const globalKey = 'drapixai:tryon-concurrency:global';
   const tenantKey = `drapixai:tryon-concurrency:tenant:${tenantId}`;
 
   try {
-    await ensureRedis();
-    const result = Number(await redis.eval(ACQUIRE_SCRIPT, {
-      keys: [globalKey, tenantKey],
-      arguments: [
-        String(now),
-        String(now + leaseMs),
-        String(globalLimit),
-        String(tenantLimit),
-        token,
-      ],
-    }));
+    const result = await redis.run(client => {
+      const now = Date.now();
+      return client.eval(ACQUIRE_SCRIPT, {
+        keys: [globalKey, tenantKey],
+        arguments: [
+          String(now),
+          String(now + leaseMs),
+          String(globalLimit),
+          String(tenantLimit),
+          token,
+        ],
+      });
+    });
     if (result === 1) return { ok: false, reason: 'TENANT_CONCURRENCY_LIMIT' };
     if (result === 2) return { ok: false, reason: 'GLOBAL_CAPACITY_BUSY' };
+    if (result !== 0) throw new Error('CONCURRENCY_REPLY_INVALID');
     return { ok: true, lease: { token, tenantKey, globalKey } };
   } catch (error) {
     console.error('Try-on concurrency acquire failed:', formatLogError(error));
@@ -103,11 +88,10 @@ export const acquireTryOnSlot = async (tenantId: number): Promise<AcquireResult>
 
 export const releaseTryOnSlot = async (lease: TryOnLease) => {
   try {
-    await ensureRedis();
-    await redis.eval(RELEASE_SCRIPT, {
+    await redis.run(client => client.eval(RELEASE_SCRIPT, {
       keys: [lease.globalKey, lease.tenantKey],
       arguments: [lease.token],
-    });
+    }));
   } catch (error) {
     // The lease expires automatically; log release failures without masking the try-on response.
     console.error('Try-on concurrency release failed:', formatLogError(error));
@@ -116,5 +100,5 @@ export const releaseTryOnSlot = async (lease: TryOnLease) => {
 
 export const closeTryOnConcurrencyForTests = async () => {
   if (process.env.NODE_ENV !== 'test') throw new Error('TEST_ONLY_OPERATION');
-  if (redis.isOpen) await redis.quit();
+  await redis.close();
 };

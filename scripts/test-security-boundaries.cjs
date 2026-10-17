@@ -1,5 +1,5 @@
 // Executes real route/module code with synthetic identities, fake DB/transport
-// adapters and bounded streams. Native HTTP uses only a disposable loopback
+// adapters and bounded streams. Native HTTP/Redis use only disposable loopback
 // fixture. No external network, GPU, mail, secrets or real records.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -754,6 +754,155 @@ test('Malformed Redis count fails closed in production', async () => {
   const res = response(); let allowed = false;
   await createRateLimitMiddleware(5, 60000)({ ip: 'fixture', baseUrl: '/test', path: '/' }, res, () => { allowed = true; });
   assert.equal(res.statusCode, 503); assert.equal(allowed, false);
+});
+
+async function redisTransportFixture(run) {
+  const net = require('node:net');
+  const realRedis = require('../apps/api/node_modules/redis');
+  const clients = [], sockets = new Set();
+  const state = { mode: 'silent', connections: 0, evals: 0 };
+  const server = net.createServer((socket) => {
+    sockets.add(socket); state.connections++; socket.on('close', () => sockets.delete(socket)); socket.on('error', () => {});
+    let buffered = Buffer.alloc(0);
+    socket.on('data', (chunk) => {
+      if (state.mode === 'silent') return;
+      buffered = Buffer.concat([buffered, chunk]);
+      // Minimal RESP array/bulk parser for this native transport fixture only.
+      while (buffered.length) {
+        const end = buffered.indexOf('\r\n'); if (end < 0) return;
+        const count = Number(buffered.subarray(1, end).toString());
+        assert.ok(buffered[0] === 42 && count > 0 && count < 100);
+        let cursor = end+2; const args = [];
+        for (let i = 0; i < count; i++) {
+          const sizeEnd = buffered.indexOf('\r\n', cursor); if (sizeEnd < 0) return;
+          assert.equal(buffered[cursor], 36);
+          const size = Number(buffered.subarray(cursor+1, sizeEnd).toString());
+          if (buffered.length < sizeEnd+2+size+2) return;
+          args.push(buffered.subarray(sizeEnd+2, sizeEnd+2+size).toString()); cursor = sizeEnd+2+size+2;
+        }
+        buffered = buffered.subarray(cursor);
+        if (args[0].toUpperCase() === 'EVAL') {
+          state.evals++;
+          if (state.mode !== 'stall-replies') socket.write(args[1].includes('ZCARD') ? ':0\r\n' : ':1\r\n');
+        } else socket.write('+OK\r\n');
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const url = `redis://127.0.0.1:${server.address().port}`;
+  const load = loader({ redis: { createClient: (options) => { const client = realRedis.createClient({ ...options, url }); clients.push(client); return client; } } }, {
+    process: { env: { NODE_ENV: 'production' } }, console: { error() {} },
+  });
+  const bounded = async (operation) => {
+    let timer;
+    try { return await Promise.race([operation, new Promise((_resolve, reject) => { timer = setTimeout(() => reject(Error('NATIVE_REDIS_TEST_DEADLINE_EXCEEDED')), 4500); })]); }
+    finally { clearTimeout(timer); }
+  };
+  try { await run({ load, state, sockets, bounded }); }
+  finally {
+    for (const client of clients) if (client.isOpen) await client.disconnect().catch(() => {});
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+for (const purpose of ['rate', 'concurrency']) {
+  test(`Native Redis silent handshake fails closed and closes the ${purpose} request transport`, async () => redisTransportFixture(async (f) => {
+    const mod = f.load(`apps/api/src/lib/${purpose === 'rate' ? 'rate-limit' : 'tryon-concurrency'}.ts`);
+    if (purpose === 'rate') {
+      const res = response(); let admitted = false;
+      await f.bounded(mod.createRateLimitMiddleware(5, 60000)({ ip: 'fixture', path: '/', baseUrl: '/test' }, res, () => { admitted = true; }));
+      assert.equal(res.statusCode, 503); assert.equal(admitted, false);
+    } else {
+      assert.equal((await f.bounded(mod.acquireTryOnSlot(991))).reason, 'CONCURRENCY_CONTROL_UNAVAILABLE');
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(f.sockets.size, 0); assert.equal(f.state.connections, 1);
+  }));
+
+  test(`Native Redis stalled ${purpose} command is not retried and a later request recovers`, async () => redisTransportFixture(async (f) => {
+    f.state.mode = 'reply';
+    const mod = f.load(`apps/api/src/lib/${purpose === 'rate' ? 'rate-limit' : 'tryon-concurrency'}.ts`);
+    const request = async () => {
+      if (purpose === 'concurrency') return mod.acquireTryOnSlot(992);
+      const res = response(); let admitted = false;
+      await mod.createRateLimitMiddleware(5, 60000)({ ip: 'fixture', path: '/', baseUrl: '/test' }, res, () => { admitted = true; });
+      return { ok: admitted, reason: res.body?.error };
+    };
+    assert.equal((await f.bounded(request())).ok, true);
+    f.state.mode = 'stall-replies';
+    const denied = await f.bounded(request()); assert.equal(denied.ok, false);
+    assert.equal(denied.reason, purpose === 'rate' ? 'RATE_LIMITER_UNAVAILABLE' : 'CONCURRENCY_CONTROL_UNAVAILABLE');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(f.sockets.size, 0); assert.equal(f.state.connections, 1); assert.equal(f.state.evals, 2);
+    f.state.mode = 'reply';
+    assert.equal((await f.bounded(request())).ok, true);
+    assert.equal(f.state.connections, 2); assert.equal(f.state.evals, 3);
+  }));
+}
+
+test('Redis connection and command share one deadline; late failure cannot retire a recovered connection', async () => {
+  let created = 0, disconnected = 0;
+  const mock = () => {
+    const client = { isReady: ++created > 1, isOpen: true, on() {},
+      connect: async () => { await new Promise(resolve => setTimeout(resolve, 20)); client.isReady = true; },
+      disconnect: async () => { disconnected++; client.isOpen = false; },
+    }; return client;
+  };
+  const { createRequestRedis } = loader({ redis: { createClient: mock } }, {
+    setTimeout: (fn, ms, ...args) => setTimeout(fn, ms === 3000 ? 30 : ms, ...args),
+  })('apps/api/src/lib/request-redis.ts');
+  const boundary = createRequestRedis('fixture');
+  await assert.rejects(boundary.run(async () => { await new Promise(resolve => setTimeout(resolve, 20)); throw Error('SYNTHETIC_LATE_FAILURE'); }), /REDIS_REQUEST_TIMEOUT/);
+  assert.equal(await boundary.run(async () => 17), 17);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(await boundary.run(async () => 18), 18);
+  assert.equal(created, 2); assert.equal(disconnected, 1);
+  await boundary.close();
+});
+
+test('Redis connection completing after expiry cannot dispatch a stale application command', async () => {
+  const client = new EventEmitter(); let commands = 0, closed = false;
+  Object.assign(client, { isReady: false, isOpen: true,
+    connect: async () => { await new Promise(resolve => setTimeout(resolve, 50)); client.isReady = true; client.emit('connect'); },
+    disconnect: async () => { client.isOpen = false; closed = true; },
+  });
+  const { createRequestRedis } = loader({ redis: { createClient: () => client } }, {
+    setTimeout: (fn, ms, ...args) => setTimeout(fn, ms === 3000 ? 20 : ms, ...args),
+  })('apps/api/src/lib/request-redis.ts');
+  const boundary = createRequestRedis('fixture');
+  await assert.rejects(boundary.run(async () => { commands++; return 0; }), /REDIS_REQUEST_TIMEOUT/);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(commands, 0); assert.equal(closed, true);
+});
+
+test('Redis pending-request cap rejects overflow without disrupting admitted work', async () => {
+  const client = { isReady: true, isOpen: true, on() {}, disconnect: async () => {} };
+  const { createRequestRedis } = loader({ redis: { createClient: () => client } })('apps/api/src/lib/request-redis.ts');
+  const boundary = createRequestRedis('fixture'); const finishes = [];
+  const accepted = Array.from({ length: 256 }, () => boundary.run(() => new Promise(resolve => finishes.push(resolve))));
+  await assert.rejects(boundary.run(async () => 'overflow'), /REDIS_REQUEST_CAPACITY/);
+  finishes.forEach(resolve => resolve('ok'));
+  assert.equal((await Promise.all(accepted)).length, 256);
+  await assert.rejects(boundary.run(async () => { throw null; }), error => error === null);
+  assert.equal(await boundary.run(async () => 'recovered'), 'recovered');
+  await boundary.close();
+});
+
+test('Rate-limit bucket time is measured after connection readiness', async () => {
+  let now = 59000, consumed;
+  class Clock extends Date { static now() { return now; } }
+  const client = { isReady: false, on() {}, connect: async () => { now = 61000; client.isReady = true; },
+    eval: async (_script, options) => { consumed = options.keys[0]; return 1; } };
+  const mod = loader({ redis: { createClient: () => client } }, { Date: Clock })('apps/api/src/lib/rate-limit.ts');
+  await mod.createRateLimitMiddleware(5, 60000)({ ip: 'fixture', path: '/', baseUrl: '/test' }, response(), () => {});
+  assert.ok(consumed.endsWith(':1'), 'Connecting across a boundary must not consume the previous window');
+});
+
+test('Unexpected concurrency replies never grant a GPU lease', async () => {
+  const redis = { isReady: true, on() {}, eval: async () => null };
+  const mod = loader({ redis: { createClient: () => redis } }, { console: { error() {} } })('apps/api/src/lib/tryon-concurrency.ts');
+  assert.equal((await mod.acquireTryOnSlot(1)).reason, 'CONCURRENCY_CONTROL_UNAVAILABLE');
 });
 
 test('Malformed admin credential types fail before an upstream authentication request', async () => {
