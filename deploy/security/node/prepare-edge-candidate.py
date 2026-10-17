@@ -137,6 +137,11 @@ FROM node-source-build AS application-checks
 ENV PATH=/opt/drapixai-node/bin:${PATH} NODE_ENV=test NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 COPY . .
+# This index supplies the launch suite's file inventory only. It is not release
+# history or provenance; build-inputs.json binds the original raw Git objects.
+RUN apt-get update && apt-get install -y --no-install-recommends git \\
+    && rm -rf /var/lib/apt/lists/* \\
+    && git init --quiet && git add --all
 RUN node -e "require('node:assert/strict').equal(process.config.variables.node_shared_openssl,true)" \\
     && npm --prefix apps/api ci --include=dev \\
     && npm --prefix apps/web ci --include=dev

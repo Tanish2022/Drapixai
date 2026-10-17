@@ -176,6 +176,13 @@ results must remain visible. The build is not claimed hermetic or byte-for-byte
 reproducible; public source/base digests and effective package/output hashes are
 retained, and Debian security packages can change between builds.
 
+The application-check stage installs Git and creates a temporary index before
+dependency installation. Existing launch tests need that source-file inventory;
+the index is not commit history or release provenance. The materializer's raw
+Git-object hashes and build-input record establish the actual release inputs.
+The first application-check attempt failed on missing Git; it is retained as a
+failed attempt and must not be counted as a completed application check.
+
 Keep the existing production path until a concrete reviewed integration is
 verified. Do not use a scanner exception or an unsupported Node jump to hide the
 embedded-library question. Real TLS/proxy/secret rotation, independent deployed

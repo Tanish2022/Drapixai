@@ -101,7 +101,11 @@ class CandidateInputs(unittest.TestCase):
             for filename in ['apps/api/Dockerfile', 'apps/web/Dockerfile', 'deploy/release/standard-catvton-rc1.env']:
                 original = subprocess.check_output(['git', 'show', f'{commit}:{filename}'], cwd=candidate.ROOT)
                 self.assertEqual((output/'context'/filename).read_bytes(), original)
-            self.assertIn('node_shared_openssl,true', Path(record['applicationChecksDockerfile']['path']).read_text())
+            checks = Path(record['applicationChecksDockerfile']['path']).read_text()
+            self.assertIn('node_shared_openssl,true', checks)
+            self.assertIn('apt-get install -y --no-install-recommends git', checks)
+            self.assertIn('git init --quiet && git add --all', checks)
+            self.assertLess(checks.index('git init --quiet'), checks.index('npm --prefix apps/api ci'))
 
 
 if __name__ == '__main__':
