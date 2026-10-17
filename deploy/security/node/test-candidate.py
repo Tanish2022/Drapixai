@@ -106,6 +106,10 @@ class CandidateInputs(unittest.TestCase):
             self.assertIn('apt-get install -y --no-install-recommends git', checks)
             self.assertIn('git init --quiet && git add --all', checks)
             self.assertLess(checks.index('git init --quiet'), checks.index('npm --prefix apps/api ci'))
+            ignore = Path(record['applicationChecksDockerignore']['path'])
+            self.assertEqual(ignore.name, Path(record['applicationChecksDockerfile']['path']).name+'.dockerignore')
+            self.assertEqual(ignore.read_bytes(), b'.git\n**/.git\n')
+            self.assertEqual(record['applicationChecksDockerignore']['sha256'], candidate.sha(ignore.read_bytes()))
 
 
 if __name__ == '__main__':

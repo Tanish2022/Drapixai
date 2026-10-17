@@ -132,6 +132,12 @@ def materialize(commit, output):
         file.write_bytes(content)
         generated[role] = {'dockerfile': str(file), 'sha256': sha(content), 'originalSha256': sha(original)}
     checks = output/'Dockerfile.application-checks.candidate'
+    # Production's .dockerignore omits documentation and .gitignore, both read
+    # by the full launch suite. This context contains only authenticated commit
+    # blobs plus the two recorded overlays, never the live worktree. A dedicated
+    # test-stage ignore retains that source inventory and still excludes Git DBs.
+    checks_ignore = output/'Dockerfile.application-checks.candidate.dockerignore'
+    checks_ignore.write_bytes(b'.git\n**/.git\n')
     checks.write_text(render((context/'apps/api/Dockerfile').read_text(), node, 'api')+'''
 FROM node-source-build AS application-checks
 ENV PATH=/opt/drapixai-node/bin:${PATH} NODE_ENV=test NEXT_TELEMETRY_DISABLED=1
@@ -157,7 +163,8 @@ RUN NODE_ENV=production npm --prefix apps/web run build \\
               'contextOverlayPaths': [f'deploy/security/node/{file}' for file in inputs],
               'committedSourceSha256': source_hashes,
               'candidateToolSha256': sha(Path(__file__).read_bytes()), 'generated': generated,
-              'applicationChecksDockerfile': {'path': str(checks), 'sha256': sha(checks.read_bytes())}}
+              'applicationChecksDockerfile': {'path': str(checks), 'sha256': sha(checks.read_bytes())},
+              'applicationChecksDockerignore': {'path': str(checks_ignore), 'sha256': sha(checks_ignore.read_bytes())}}
     (output/'build-inputs.json').write_text(json.dumps(record, indent=2)+'\n')
     return record
 

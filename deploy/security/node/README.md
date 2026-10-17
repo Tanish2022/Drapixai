@@ -181,7 +181,12 @@ dependency installation. Existing launch tests need that source-file inventory;
 the index is not commit history or release provenance. The materializer's raw
 Git-object hashes and build-input record establish the actual release inputs.
 The first application-check attempt failed on missing Git; it is retained as a
-failed attempt and must not be counted as a completed application check.
+failed attempt and must not be counted as a completed application check. A second
+attempt exposed production's intentional omission of `.gitignore` and docs from
+the Docker context. The test-only Dockerfile now has a recorded, dedicated ignore
+file retaining the complete authenticated source inventory. Production image
+ignore rules are unchanged; no live worktree, ignored secrets or Git history is
+exported into this test context.
 
 Keep the existing production path until a concrete reviewed integration is
 verified. Do not use a scanner exception or an unsupported Node jump to hide the
