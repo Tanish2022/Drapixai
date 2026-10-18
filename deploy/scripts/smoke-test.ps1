@@ -145,7 +145,7 @@ if ($PersonImage -and $ClothImage) {
     "-F", "garment_type=upper",
     "-F", "quality=standard",
     "-F", "shopper_consent=true",
-    "-F", "privacy_policy_version=2026-08-04",
+    "-F", "privacy_policy_version=2026-10-18",
     "-D", $HeadersFile,
     "-o", $OutputFile
   )

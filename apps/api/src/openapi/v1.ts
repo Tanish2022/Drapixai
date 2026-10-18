@@ -82,7 +82,7 @@ const openApiV1 = {
                   garment_type: { type: 'string', enum: ['upper'] },
                   quality: { type: 'string', enum: ['standard'] },
                   shopper_consent: { type: 'string', enum: ['true'], description: 'Explicit permission for transient try-on processing.' },
-                  privacy_policy_version: { type: 'string', enum: ['2026-08-04'] },
+                  privacy_policy_version: { type: 'string', enum: ['2026-10-18'] },
                 },
               },
             },

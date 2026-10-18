@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const { chromium } = require(path.join(process.env.DRAPIXAI_BROWSER_MODULES, 'playwright'));
 const base = new URL(process.env.DRAPIXAI_AUDIT_URL || 'http://127.0.0.1:3107');
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)) throw Error('LOCAL_AUDIT_TARGET_REQUIRED');
-const output = path.resolve(__dirname, '../runtime/launch-evidence/website-compliance-2026-10-17');
+const output = path.resolve(__dirname, '../runtime/launch-evidence/website-compliance-2026-10-18');
 const report = { target: base.origin, time: new Date().toISOString(), scope: 'anonymous local sample; API and external traffic intercepted', browser: '', behaviors: [], accessibility: [], network: [], pageErrors: [], reflow: [] };
 
 (async () => {
@@ -37,7 +37,7 @@ const report = { target: base.origin, time: new Date().toISOString(), scope: 'an
     const scanPage = async (route) => {
       await page.evaluate(axe);
       const result = await page.evaluate(async () => window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }));
-      report.accessibility.push({ route, passes: result.passes.length, incomplete: result.incomplete.map((item) => ({ id: item.id, count: item.nodes.length })), violations: result.violations.map((item) => ({ id: item.id, impact: item.impact, help: item.help, nodes: item.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })) })) });
+      report.accessibility.push({ route, passes: result.passes.length, incomplete: result.incomplete.map((item) => ({ id: item.id, count: item.nodes.length, nodes: item.nodes.map(node => node.target) })), violations: result.violations.map((item) => ({ id: item.id, impact: item.impact, help: item.help, nodes: item.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })) })) });
     };
     page.on('pageerror', (error) => report.pageErrors.push(error.message));
     await page.goto(base.href, { waitUntil: 'networkidle' });
@@ -93,6 +93,18 @@ const report = { target: base.origin, time: new Date().toISOString(), scope: 'an
       await page.goto(`${base.origin}${route}`, { waitUntil: 'networkidle' });
       await scanPage(route);
     }
+    await page.goto(`${base.origin}/auth/register`, { waitUntil: 'networkidle' });
+    const terms = page.getByRole('checkbox', { name: 'I accept the Terms of Service.' });
+    assert.equal(await terms.isChecked(), false);
+    assert.equal(await page.getByRole('button', { name: 'Send verification code', exact: true }).isDisabled(), true);
+    const google = page.getByRole('button', { name: 'Continue with Google', exact: true });
+    if (await google.count()) assert.equal(await google.isDisabled(), true);
+    await terms.focus(); await page.keyboard.press('Space');
+    assert.equal(await terms.isChecked(), true);
+    assert.equal(await page.getByRole('button', { name: 'Send verification code', exact: true }).isDisabled(), false);
+    if (await google.count()) assert.equal(await google.isDisabled(), false);
+    assert.equal(await page.getByRole('link', { name: 'Privacy Policy', exact: true }).count(), 1);
+    report.behaviors.push('PASS keyboard terms choice gates password and configured Google signup; privacy notice and analytics choice remain separate (not server assent certification)');
     await page.setViewportSize({ width: 320, height: 800 });
     for (const route of ['/', '/privacy', '/auth/register']) {
       await page.goto(`${base.origin}${route}`, { waitUntil: 'networkidle' });
@@ -112,6 +124,9 @@ const report = { target: base.origin, time: new Date().toISOString(), scope: 'an
     await page.screenshot({ path: path.join(output, 'demo-320.png') });
     const serious = report.accessibility.flatMap((item) => item.violations).filter((item) => ['serious', 'critical'].includes(item.impact));
     console.log(JSON.stringify({ behaviors: report.behaviors, routes: report.accessibility.length, violations: report.accessibility.map((item) => ({ route: item.route, ids: item.violations.map((v) => `${v.id}:${v.nodes.length}`) })), serious: serious.length, reflow: report.reflow, pageErrors: report.pageErrors.length }, null, 2));
+    assert.equal(report.accessibility.flatMap((item) => item.violations).length, 0, 'All reported accessibility violations require review');
+    assert.equal(report.pageErrors.length, 0, 'Browser sample must not contain uncaught JavaScript errors');
+    assert.equal(report.reflow.some((item) => item.overflow), false, 'Sampled 320px pages must not overflow');
   } finally {
     fs.writeFileSync(path.join(output, 'browser-report.json'), JSON.stringify(report, null, 2) + '\n');
     await context.close(); await browser.close();

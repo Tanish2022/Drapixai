@@ -15,19 +15,18 @@
 
 ## Supported launch scope
 
-Launch-ready focus: shirts, t-shirts, polos, blouses, and clean tops.
-Carefully reviewed beta scope: short kurtis, hoodies, and sweatshirts.
+Current upper-body evaluation scope includes eligible shirts, t-shirts, polos, blouses and clean tops. Each product needs review; listing a garment category is not proof that every product or generated result is suitable for publication.
 The public shopper pipeline uses Standard quality only.
 
 ## Browser SDK
 
-Load `/sdk.js` from the DrapixAI web origin. Initialize the SDK with a domain-bound API key and a confirmed product ID. Live products require a prepared garment cache and confirmed product mapping.
+Load `/sdk.js` from the DrapixAI web origin. Initialize it with a short-lived, product-scoped storefront token (or a token provider) and a confirmed product ID on a verified storefront domain. Permanent server API keys must not be put in browsers. Live products require a prepared garment cache and confirmed product mapping.
 
 Important SDK result metadata includes quality score, confidence badge, latency, warnings, candidate count, garment source, and cache status.
 
 ## Quality policy
 
-Confidence badges are Excellent, Review, and Not publishable. Blocking identity, pose, body, garment-color, structure, coverage, artifact, or realism risks cause automatic rejection. Rejected images are not shown to shoppers.
+Automated checks can reject outputs with detected identity, pose, garment, coverage or realism defects. A score or badge is not a guarantee of visual accuracy, physical fit or commercial results; human product review remains necessary.
 
 ## Privacy
 

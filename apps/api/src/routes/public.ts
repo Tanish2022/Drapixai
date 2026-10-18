@@ -16,6 +16,7 @@ import { shouldAutoRejectTryOn } from '../lib/tryon-quality';
 import { validateMultipartFields } from '../lib/input-validation';
 import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
 import { requireTryOnIntake } from '../lib/tryon-intake';
+import { parseWebsiteAnalytics } from '../lib/website-analytics';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -26,7 +27,6 @@ const getAiHeaders = (headers: Record<string, string> = {}) => ({
   ...headers,
   ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
 });
-const PUBLIC_WEBSITE_EVENTS = new Set(['page_view', 'cta_click', 'trial_signup', 'user_login']);
 const PUBLIC_GARMENT_VALIDATION_CODES = new Set([
   'MODEL_WORN_GARMENT',
   'GARMENT_TOO_LONG',
@@ -34,30 +34,6 @@ const PUBLIC_GARMENT_VALIDATION_CODES = new Set([
   'IMAGE_BLURRY',
   'GARMENT_CATEGORY_UNSUPPORTED',
 ]);
-
-const sanitizeReferrer = (value: unknown) => {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  try {
-    const parsed = new URL(value);
-    if (!['https:', 'http:'].includes(parsed.protocol)) return null;
-    return `${parsed.origin}${parsed.pathname}`.slice(0, 255);
-  } catch {
-    return null;
-  }
-};
-
-const sanitizeEventMetadata = (value: unknown) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .slice(0, 10)
-      .filter(([, item]) => item === null || ['string', 'number', 'boolean'].includes(typeof item))
-      .map(([key, item]) => [
-        key.slice(0, 40),
-        typeof item === 'string' ? item.slice(0, 160) : item,
-      ])
-  );
-};
 
 const UPLOAD_ROOT = getUploadRoot();
 const upload = multer({
@@ -116,7 +92,8 @@ const trackWebsiteEvent = async (
       event,
       path: path || null,
       visitorId: visitorId || null,
-      referrer: referrer || null,
+      // Operational demo events also discard raw HTTP referrers.
+      referrer: null,
       metadata: metadata as Prisma.InputJsonValue,
     },
   });
@@ -127,18 +104,9 @@ router.post(
   createRateLimitMiddleware(120, 15 * 60 * 1000),
   async (req, res) => {
     try {
-      const { event, path, visitorId, referrer, metadata } = req.body || {};
-      if (!event || typeof event !== 'string' || !PUBLIC_WEBSITE_EVENTS.has(event)) {
-        return res.status(400).json({ error: 'INVALID_EVENT' });
-      }
-
-      await trackWebsiteEvent(
-        event.slice(0, 80),
-        typeof path === 'string' ? path.slice(0, 255) : null,
-        typeof visitorId === 'string' ? visitorId.slice(0, 120) : null,
-        sanitizeReferrer(referrer),
-        sanitizeEventMetadata(metadata)
-      );
+      const event = parseWebsiteAnalytics(req.body);
+      if (!event) return res.status(400).json({ error: 'INVALID_EVENT' });
+      await trackWebsiteEvent(event.event, event.path, event.visitorId, null, event.metadata);
 
       return res.json({ ok: true });
     } catch (error) {

@@ -1,11 +1,11 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import BrandLogo from '@/app/components/BrandLogo';
+import MarketingFooter from '@/app/components/MarketingFooter';
 import {
   ArrowRight,
   BadgeCheck,
@@ -26,15 +26,6 @@ import {
   X,
 } from 'lucide-react';
 
-const inspectionRows = [
-  ['Color match', 'Excellent'],
-  ['Print and logo', 'Excellent'],
-  ['Sleeve match', 'Excellent'],
-  ['Hem match', 'Excellent'],
-  ['Collar structure', 'Excellent'],
-  ['Texture match', 'Excellent'],
-];
-
 const supportedDetails = [
   'Structured collars',
   'Folded cuffs',
@@ -44,33 +35,6 @@ const supportedDetails = [
   'Complex sleeves',
   'Dark and white garments',
   'Low-contrast fabrics',
-];
-
-const skuQualityChecks = [
-  ['01', 'Face + pose retained'],
-  ['02', 'Collar retained'],
-  ['03', 'Green tone matched'],
-  ['04', 'Cuff shape retained'],
-  ['05', 'Fabric detail restored'],
-  ['06', 'Hem above belt line'],
-];
-
-const femaleQualityChecks = [
-  ['01', 'Face + pose retained'],
-  ['02', 'Collar retained'],
-  ['03', 'Teal tone matched'],
-  ['04', 'Sleeve length retained'],
-  ['05', 'Fabric detail restored'],
-  ['06', 'Curved hem retained'],
-];
-
-const femaleInspectionRows = [
-  ['Color match', 'Excellent'],
-  ['Buttons and placket', 'Excellent'],
-  ['Sleeve match', 'Excellent'],
-  ['Hem match', 'Excellent'],
-  ['Collar structure', 'Excellent'],
-  ['Texture match', 'Excellent'],
 ];
 
 export default function Home() {
@@ -145,7 +109,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#f7f8f5] text-[#172019]">
-      <header className="fixed inset-x-0 top-0 z-50 border-b border-black/10 bg-[#fbfcf9]/95 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-black/10 bg-[#fbfcf9]/95 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
           <Link href="/" className="flex items-center" aria-label="DrapixAI home">
             <BrandLogo />
@@ -165,14 +129,14 @@ export default function Home() {
                   type="button"
                   onClick={() => setProfileOpen((current) => !current)}
                   className="inline-flex h-11 items-center gap-2 border border-black/15 bg-white px-4 text-sm font-semibold text-[#172019] hover:border-black/30"
-                  aria-expanded={profileOpen}
+                  aria-expanded={profileOpen} aria-controls="home-profile-links"
                 >
                   <UserCircle2 className="h-4 w-4 text-[#21634e]" />
                   {profileName}
                   <ChevronDown className={`h-4 w-4 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {profileOpen ? (
-                  <div className="absolute right-0 mt-2 w-72 border border-black/10 bg-white p-3 shadow-[0_24px_70px_rgba(25,35,28,0.16)]">
+                  <div id="home-profile-links" className="absolute right-0 mt-2 w-72 border border-black/10 bg-white p-3 shadow-[0_24px_70px_rgba(25,35,28,0.16)]">
                     <div className="border-b border-black/10 px-3 pb-3">
                       <p className="font-semibold text-[#172019]">{profileName}</p>
                       <p className="mt-1 break-all text-xs text-[#6a756c]">{profileSubtitle}</p>
@@ -203,13 +167,13 @@ export default function Home() {
             )}
           </div>
 
-          <button type="button" onClick={() => setMobileOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center border border-black/15 lg:hidden" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}>
+          <button type="button" onClick={() => setMobileOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center border border-black/15 lg:hidden" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-controls="home-mobile-navigation">
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
 
         {mobileOpen ? (
-          <nav className="border-t border-black/10 bg-[#fbfcf9] px-5 py-5 lg:hidden" aria-label="Mobile navigation">
+          <nav id="home-mobile-navigation" className="border-t border-black/10 bg-[#fbfcf9] px-5 py-5 lg:hidden" aria-label="Mobile navigation">
             <div className="mx-auto grid max-w-[1440px] gap-1">
               {[
                 ['/demo', 'Demo'], ['/pricing', 'Pricing'], ['/docs', 'Developers'], ['/help', 'Help'], ['/status', 'Status'],
@@ -225,7 +189,7 @@ export default function Home() {
       </header>
 
       <main>
-        <section className="relative mt-20 overflow-hidden border-b border-black/10 bg-[#f2f4f1]">
+        <section className="relative overflow-hidden border-b border-black/10 bg-[#f2f4f1]">
           <div className="relative mx-auto grid max-w-[1440px] items-center gap-12 px-5 pb-32 pt-16 sm:px-8 md:min-h-[620px] md:grid-cols-[1.2fr_0.8fr] md:pb-28 lg:px-12">
             <div className="max-w-[760px]">
               <p className="mb-5 flex items-center gap-3 text-xs font-bold uppercase text-[#2b654f]">
@@ -236,7 +200,7 @@ export default function Home() {
                 DrapixAI virtual try-on
               </h1>
               <p className="mt-7 max-w-[570px] text-lg leading-8 text-[#3f4a42] sm:text-xl">
-                Let shoppers see your real products on themselves while preserving garment color, structure, and identity. Start with one product and publish only after it passes review.
+                Offer shoppers an AI-generated preview of an upper-body garment. Start with one product, compare the details and review the result before publishing.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="inline-flex h-14 items-center justify-center gap-2 bg-[#183f32] px-7 py-4 font-semibold text-white hover:bg-[#245a48]">
@@ -263,9 +227,9 @@ export default function Home() {
           <div className="absolute inset-x-0 bottom-0 border-t border-black/10 bg-[rgba(247,248,245,0.96)] backdrop-blur-md">
             <div className="mx-auto grid max-w-[1440px] grid-cols-3 divide-x divide-black/10 px-5 sm:px-8 lg:px-12">
               {[
-                ['0.95', 'Reference quality score'],
+                ['Upper-body', 'Current garment scope'],
                 ['Standard', 'One production mode'],
-                ['10-12s', 'Warm latency target'],
+                ['Review', 'Before publishing'],
               ].map(([value, label]) => (
                 <div key={label} className="py-4 text-center sm:py-5">
                   <p className="text-lg font-bold text-[#172019] sm:text-2xl">{value}</p>
@@ -279,7 +243,7 @@ export default function Home() {
         <section className="border-b border-black/10 bg-white">
           <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[0.75fr_1.25fr]">
             <div className="border-b border-black/10 px-5 py-16 sm:px-8 lg:border-b-0 lg:border-r lg:px-12 lg:py-24">
-              <p className="text-xs font-bold uppercase text-[#2b654f]">Why brands use it</p>
+              <p className="text-xs font-bold uppercase text-[#2b654f]">How it works</p>
               <h2 className="mt-5 max-w-md font-serif text-4xl font-normal leading-tight sm:text-5xl">Protect the product, not just the picture.</h2>
               <p className="mt-6 max-w-lg text-lg leading-8 text-[#59645c]">A try-on is useful only when the shopper still sees the garment the brand is selling.</p>
             </div>
@@ -299,157 +263,19 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="border-b border-black/10 bg-[#eef2ec] py-20 lg:py-28">
-          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-12">
-            <div className="w-full max-w-[583px] justify-self-center">
-              <div className="relative overflow-hidden bg-[#dde3de]">
-                <Image src="/hero-female-tryon-v2.png?v=sh2071-20260717" alt="Standard DrapixAI output for structured teal blouse SKU SH-2071" width={583} height={777} unoptimized className="h-auto w-full object-cover" />
-                <div className="absolute left-4 top-4 border border-black/15 bg-white/90 px-3 py-2 text-[11px] font-bold uppercase text-[#183f32] backdrop-blur-sm">SKU SH-2071</div>
-
-                {[
-                  ['01', 'left-[68%] top-[15%]'],
-                  ['02', 'left-[49%] top-[27%]'],
-                  ['03', 'left-[59%] top-[40%]'],
-                  ['04', 'left-[30%] top-[48%]'],
-                  ['05', 'left-[52%] top-[47%]'],
-                  ['06', 'left-[49%] top-[65%]'],
-                ].map(([number, position]) => (
-                  <div key={number} className={`absolute ${position} flex h-8 w-8 items-center justify-center rounded-full border border-white bg-[#183f32] text-[10px] font-bold text-white shadow-md`}>
-                    {number}
-                  </div>
-                ))}
-
-                <div className="absolute left-4 top-[21%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">01</span>Face + pose retained</div>
-                <div className="absolute left-4 top-[34%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">02</span>Collar retained</div>
-                <div className="absolute left-4 top-[47%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">04</span>Sleeve length retained</div>
-                <div className="absolute right-4 top-[34%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">03</span>Teal tone matched</div>
-                <div className="absolute right-4 top-[47%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">05</span>Fabric detail restored</div>
-                <div className="absolute right-4 top-[61%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">06</span>Curved hem retained</div>
-
-                <div className="absolute bottom-4 right-4 inline-flex items-center gap-2 bg-[#183f32] px-4 py-2 text-xs font-bold text-white">
-                  <BadgeCheck className="h-4 w-4" /> DrapixAI Ready
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 border border-black/10 bg-white xl:hidden">
-                {femaleQualityChecks.map(([number, label]) => (
-                  <div key={number} className="flex min-h-14 items-center gap-2 border-b border-r border-black/10 px-3 py-2 text-[11px] font-semibold text-[#344038]">
-                    <span className="font-mono font-bold text-[#31725b]">{number}</span><span>{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+        <section className="border-b border-black/10 bg-[#eef2ec] py-16 lg:py-24" aria-labelledby="product-review-heading">
+          <div className="mx-auto grid max-w-[1440px] gap-10 px-5 sm:px-8 lg:grid-cols-2 lg:px-12">
             <div>
-              <p className="text-xs font-bold uppercase text-[#2b654f]">DrapixAI Ready</p>
-              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Garment fidelity, shown point by point.</h2>
-              <p className="mt-6 text-lg leading-8 text-[#59645c]">The approved result retains the model while carrying the blouse&rsquo;s real color, collar, sleeve length, fabric character, and curved hem into the try-on.</p>
-
-              <div className="mt-9 border-y border-black/15">
-                <div className="flex items-center justify-between border-b border-black/10 py-5">
-                  <div>
-                    <p className="font-bold">Product accuracy report</p>
-                    <p className="mt-1 text-sm text-[#5d6961]">Structured teal blouse / SKU SH-2071</p>
-                  </div>
-                  <span className="flex items-center gap-2 bg-[#d9ecdf] px-3 py-2 text-sm font-bold text-[#1c6047]"><BadgeCheck className="h-4 w-4" />Excellent</span>
-                </div>
-                <div className="grid sm:grid-cols-2">
-                  {femaleInspectionRows.map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between border-b border-black/10 py-4 sm:odd:pr-6 sm:even:border-l sm:even:pl-6">
-                      <span className="text-sm text-[#59645c]">{label}</span>
-                      <span className="text-sm font-bold text-[#1f684e]">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-7 grid grid-cols-3 divide-x divide-black/10 border border-black/10 bg-white">
-                {[
-                  ['0.95', 'Quality'], ['<12s', 'Target'], ['None', 'Warnings'],
-                ].map(([value, label]) => (
-                  <div key={label} className="px-3 py-4 text-center">
-                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#5d6961]">{label}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs font-bold uppercase text-[#2b654f]">Product review</p>
+              <h2 id="product-review-heading" className="mt-5 font-serif text-4xl leading-tight">Review the garment before publishing.</h2>
+              <p className="mt-6 text-lg leading-8 text-[#59645c]">Compare the original product with its generated preview. Check the face, pose, garment details and background rather than relying on a score alone.</p>
+              <p className="mt-4 leading-7 text-[#59645c]">AI previews are illustrations, not measurements or guarantees of sizing, physical fit, fabric behaviour or an exact appearance. Review product details and size charts before buying.</p>
             </div>
-          </div>
-        </section>
-
-        <section className="border-b border-black/10 bg-[#f7f8f5] py-20 lg:py-28">
-          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-12">
-            <div className="w-full max-w-[583px] justify-self-center">
-              <div className="relative overflow-hidden bg-[#dde3de]">
-              <Image src="/hero-standard-tryon.png?v=sh1042-20260717" alt="Standard DrapixAI output used for garment inspection" width={583} height={777} unoptimized className="h-auto w-full object-cover" />
-              <div className="absolute left-4 top-4 border border-black/15 bg-white/90 px-3 py-2 text-[11px] font-bold uppercase text-[#183f32] backdrop-blur-sm">SKU SH-1042</div>
-
-              {[
-                ['01', 'left-[68%] top-[12%]'],
-                ['02', 'left-[48%] top-[23%]'],
-                ['03', 'left-[59%] top-[35%]'],
-                ['04', 'left-[29%] top-[48%]'],
-                ['05', 'left-[53%] top-[43%]'],
-                ['06', 'left-[48%] top-[68%]'],
-              ].map(([number, position]) => (
-                <div key={number} className={`absolute ${position} flex h-8 w-8 items-center justify-center rounded-full border border-white bg-[#183f32] text-[10px] font-bold text-white shadow-md`}>
-                  {number}
-                </div>
+            <ul className="divide-y divide-black/10 border-y border-black/10">
+              {['Color and fabric texture', 'Print, logo and embroidery', 'Sleeves, collar and hem', 'Face, pose and background'].map((label) => (
+                <li key={label} className="flex items-center gap-3 py-5 font-semibold"><ScanLine aria-hidden="true" className="h-5 w-5 shrink-0 text-[#21634e]" />{label}</li>
               ))}
-
-              <div className="absolute left-4 top-[20%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">01</span>Face + pose retained</div>
-              <div className="absolute left-4 top-[32%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">02</span>Collar retained</div>
-              <div className="absolute left-4 top-[45%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">04</span>Cuff shape retained</div>
-              <div className="absolute right-4 top-[31%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">03</span>Green tone matched</div>
-              <div className="absolute right-4 top-[44%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">05</span>Fabric detail restored</div>
-              <div className="absolute right-4 top-[58%] hidden w-40 items-center gap-2 border border-black/10 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#344038] backdrop-blur-sm xl:flex"><span className="font-mono font-bold text-[#31725b]">06</span>Hem above belt line</div>
-
-              <div className="absolute bottom-4 right-4 inline-flex items-center gap-2 bg-[#183f32] px-4 py-2 text-xs font-bold text-white">
-                <BadgeCheck className="h-4 w-4" /> DrapixAI Ready
-              </div>
-              </div>
-
-              <div className="grid grid-cols-2 border border-black/10 bg-white xl:hidden">
-                {skuQualityChecks.map(([number, label]) => (
-                  <div key={number} className="flex min-h-14 items-center gap-2 border-b border-r border-black/10 px-3 py-2 text-[11px] font-semibold text-[#344038]">
-                    <span className="font-mono font-bold text-[#31725b]">{number}</span><span>{label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold uppercase text-[#2b654f]">DrapixAI Ready</p>
-              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Every product earns its place on the storefront.</h2>
-              <p className="mt-6 text-lg leading-8 text-[#59645c]">Products that need review stay internal. Results with unacceptable garment, identity, pose, or background changes are not shown to shoppers.</p>
-
-              <div className="mt-9 border-y border-black/15">
-                <div className="flex items-center justify-between border-b border-black/10 py-5">
-                  <div>
-                    <p className="font-bold">Product accuracy report</p>
-                    <p className="mt-1 text-sm text-[#5d6961]">Structured green shirt / SKU SH-1042</p>
-                  </div>
-                  <span className="flex items-center gap-2 bg-[#d9ecdf] px-3 py-2 text-sm font-bold text-[#1c6047]"><BadgeCheck className="h-4 w-4" />Excellent</span>
-                </div>
-                <div className="grid sm:grid-cols-2">
-                  {inspectionRows.map(([label, value]) => (
-                    <div key={label} className="flex items-center justify-between border-b border-black/10 py-4 sm:odd:pr-6 sm:even:border-l sm:even:pl-6">
-                      <span className="text-sm text-[#59645c]">{label}</span>
-                      <span className="text-sm font-bold text-[#1f684e]">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-7 grid grid-cols-3 divide-x divide-black/10 border border-black/10 bg-white">
-                {[
-                  ['0.95', 'Quality'], ['<12s', 'Target'], ['None', 'Warnings'],
-                ].map(([value, label]) => (
-                  <div key={label} className="px-3 py-4 text-center">
-                    <p className="text-xl font-bold">{value}</p><p className="mt-1 text-xs uppercase text-[#5d6961]">{label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            </ul>
           </div>
         </section>
 
@@ -466,7 +292,7 @@ export default function Home() {
                 {[
                   { Icon: ScanLine, title: 'Product accuracy', body: 'Color, print, sleeve, hem, collar, and texture checks for approved products.' },
                   { Icon: ShieldCheck, title: 'Bad-result rejection', body: 'Unpublishable results are blocked before they can weaken shopper trust.' },
-                  { Icon: Gauge, title: 'Quality-preserving speed', body: 'A100-backed Standard generation targets warm results in 10-12 seconds without a lower-quality fast mode.' },
+                  { Icon: Gauge, title: 'Quality-preserving speed', body: 'Evaluate performance with your own catalog and storefront before setting shopper expectations. Standard uses one consistent quality mode.' },
                   { Icon: Fingerprint, title: 'Direct and SDK parity', body: 'The same garment, settings, resolution, postprocessing, and quality decision across service paths.' },
                   { Icon: Globe2, title: 'Brand-native SDK', body: 'Theme adaptation, shopper privacy, downloads, and purchase actions stay on the storefront.' },
                   { Icon: BarChart3, title: 'Reviewable operations', body: 'Quality, warnings, latency, approvals, usage, and cache readiness remain visible.' },
@@ -567,32 +393,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="bg-[#101712] py-12 text-white">
-        <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
-          <div className="flex flex-col justify-between gap-8 border-b border-white/15 pb-10 md:flex-row md:items-end">
-            <div>
-              <div className="inline-flex bg-white px-2 py-1">
-                <BrandLogo className="h-10 w-auto" />
-              </div>
-              <p className="mt-4 max-w-md text-sm leading-6 text-[#9fac9f]">Standard upper-body AI try-on infrastructure for fashion commerce.</p>
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#bdc7bf]">
-              {[
-                ['/help', 'Help'], ['/docs', 'Developers'], ['/status', 'Status'], ['/changelog', 'Changelog'], ['/pricing', 'Pricing'], ['/contact', 'Contact'],
-              ].map(([href, label]) => <Link key={href} href={href} className="hover:text-white">{label}</Link>)}
-            </div>
-          </div>
-          <div className="flex flex-col justify-between gap-5 pt-8 text-xs text-[#7f8d82] sm:flex-row">
-            <p>Copyright 2026 DrapixAI. All rights reserved.</p>
-            <div className="flex flex-wrap gap-5">
-              <Link href="/privacy" className="hover:text-white">Privacy</Link>
-              <Link href="/terms" className="hover:text-white">Terms</Link>
-              <Link href="/refund-policy" className="hover:text-white">Refunds</Link>
-              <Link href="/cookies" className="hover:text-white">Cookies</Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

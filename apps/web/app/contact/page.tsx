@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import LegalPage from '@/app/components/LegalPage';
+import { businessIdentitySections } from '@/app/lib/business-details';
 
 export const metadata: Metadata = {
   title: 'Contact',
@@ -11,13 +12,14 @@ export default function ContactPage() {
     <LegalPage
       eyebrow="Contact"
       title="Contact DrapixAI"
-      summary="Use this page for product support, launch questions, sales conversations, and privacy-related requests. Include your account email, store domain, and a short description of the issue so we can help faster."
+      summary="Contact us about support, sales, billing or privacy. Describe your request briefly and include an account reference only when needed. Do not send passwords, API keys, payment-card details or shopper photos."
       sections={[
+        ...businessIdentitySections(),
         {
           heading: 'General Support',
           body: [
             'For product support, account access issues, and general inquiries, contact support@drapixai.com.',
-            'When contacting support, include your account email, verified domain, garment or product ID if relevant, and whether the issue happened in demo, staging, or production.',
+            'For an account-specific issue, include only the account email or product reference needed to investigate. Do not attach shopper photos or identity documents unless a proportionate, secure process has been agreed.',
           ],
         },
         {

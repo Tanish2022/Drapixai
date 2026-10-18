@@ -101,5 +101,30 @@ function fixture() {
   crossTab.storage.delete(crossTab.prefs.PRIVACY_STORAGE_KEY);
   crossTab.analytics.trackEvent('page_view');
   assert.equal(crossTab.requests.length, 0, 'read current storage for every event after other-tab withdrawal');
-  console.log('PASS website privacy: default/reject/accept/withdraw/expiry/malformed/blocked/read-only/cross-tab/referrer minimization');
+  const minimal = fixture();
+  minimal.prefs.savePrivacyPreferences(true);
+  for (const path of ['/dashboard', '/onboarding/private-id', '/auth/login', '/settings?email=private@example.test']) {
+    minimal.analytics.trackEvent('page_view', { path });
+  }
+  minimal.analytics.trackEvent('trial_signup');
+  minimal.analytics.trackEvent('cta_click', { metadata: { target: 'private@example.test' } });
+  assert.equal(minimal.requests.length, 0, 'private routes and unapproved events/labels cannot create analytics');
+  minimal.analytics.trackEvent('page_view', { path: '/privacy?token=private#secret', metadata: { email: 'private@example.test' } });
+  const minimalBody = JSON.parse(await minimal.requests[0].body.text());
+  assert.equal(minimalBody.path, '/privacy');
+  assert.deepEqual(minimalBody.metadata, {});
+  assert.equal(minimalBody.analyticsConsent, true);
+  const serverExports = {};
+  const serverSource = fs.readFileSync(path.join(root, 'apps/api/src/lib/website-analytics.ts'), 'utf8');
+  vm.runInNewContext(ts.transpileModule(serverSource, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: serverExports });
+  const parsed = serverExports.parseWebsiteAnalytics({ ...minimalBody, referrer: 'https://private.example.test/user', metadata: { email: 'private@example.test' } });
+  assert.ok(parsed);
+  assert.equal(parsed.referrer, null);
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed.metadata)), { consentVersion: 1 });
+  for (const override of [{ analyticsConsent: false }, { analyticsConsent: 'true' }, { privacyPreferenceVersion: 2 },
+    { path: '/dashboard' }, { path: '/privacy?token=secret' }, { visitorId: 'private@example.test' },
+    { event: ['page_view'] }, { event: 'trial_signup' }, { event: 'cta_click', metadata: { target: 'private@example.test' } }]) {
+    assert.equal(serverExports.parseWebsiteAnalytics({ ...minimalBody, ...override }), null, 'server rejects unapproved or sensitive analytics');
+  }
+  console.log('PASS website privacy: default/reject/accept/withdraw/expiry/malformed/blocked/read-only/cross-tab/referrer/private-route/metadata minimization and server rejection');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

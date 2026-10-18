@@ -47,7 +47,7 @@ curl -X POST https://api.drapixai.com/v1/tryons \
   -F "garment_type=upper" \
   -F "quality=standard" \
   -F "shopper_consent=true" \
-  -F "privacy_policy_version=2026-08-04" \
+  -F "privacy_policy_version=2026-10-18" \
   --output result.png
 ```
 

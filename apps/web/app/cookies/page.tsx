@@ -12,7 +12,7 @@ export default function CookiesPage() {
       eyebrow="Cookie and Data Usage"
       title="Cookie and Data Usage Notice"
       summary="This notice describes the website's session storage, appearance preference, optional analytics, and external demo video controls. You can reopen Cookie preferences at any time."
-      updatedLabel="Cookie controls reviewed: October 17, 2026"
+      updatedLabel="Cookie controls reviewed: October 18, 2026"
       sections={[
         {
           heading: 'Essential Cookies and Session Data',
@@ -32,7 +32,7 @@ export default function CookiesPage() {
         {
           heading: 'Optional Website Analytics',
           body: [
-            'Website page-view and click analytics remains off until you accept it. If accepted, drapixaiVisitorId in local storage identifies this browser for those events. Page-view events send the page path without the page title or referring page address.',
+            'Website page-view and click analytics remains off until you accept it. If accepted, drapixaiVisitorId in local storage identifies this browser for those events on public pages. Private workspace and authentication routes are excluded. The identifier is removed when a choice expires or is withdrawn and the website next checks it, when storage is writable. Public page names and limited interaction labels are sent without the page title, query string, referring page address, form fields or account identifier.',
             'Reject optional leaves this analytics off. You can select Customize to choose analytics separately. Necessary sign-in, security, and records needed to provide a requested try-on continue independently of this optional choice.',
           ],
         },

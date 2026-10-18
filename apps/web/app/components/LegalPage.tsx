@@ -19,7 +19,7 @@ export default function LegalPage({
   title,
   summary,
   sections,
-  updatedLabel = 'Last updated: July 16, 2026',
+  updatedLabel = 'Notice revision: October 18, 2026',
 }: LegalPageProps) {
   return (
     <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">

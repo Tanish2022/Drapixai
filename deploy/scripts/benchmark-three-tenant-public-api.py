@@ -169,7 +169,7 @@ def run_case(
         "garment_type": "upper",
         "quality": "standard",
         "shopper_consent": "true",
-        "privacy_policy_version": "2026-08-04",
+        "privacy_policy_version": "2026-10-18",
     }
     started = time.perf_counter()
     try:

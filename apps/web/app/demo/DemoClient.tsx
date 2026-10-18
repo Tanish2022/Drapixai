@@ -103,7 +103,7 @@ export default function DemoClient() {
       form.append('person_image', personImage);
       form.append('cloth_image', clothImage);
       form.append('shopper_consent', 'true');
-      form.append('privacy_policy_version', '2026-08-04');
+      form.append('privacy_policy_version', '2026-10-18');
 
       const response = await fetch(`${PUBLIC_API_BASE_URL}/demo/tryon`, { method: 'POST', body: form });
       if (!response.ok) {
@@ -231,7 +231,7 @@ export default function DemoClient() {
                   className="mt-1 h-4 w-4 accent-[#183f32]"
                 />
                 <span>
-                  I confirm I have permission to upload this person photo. It is processed transiently, is not persistently stored, and is never used to train AI models.{' '}
+                  I have permission to use this person photo and consent to temporary processing to generate this try-on preview. It is never used to train AI models. This does not opt me into analytics or marketing.{' '}
                   <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()} className="font-semibold text-[#183f32] underline">Privacy Policy</a>
                 </span>
               </label>

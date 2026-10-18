@@ -203,6 +203,11 @@
       '  50% { transform: translateY(-4px); opacity: 0.85; }',
       '  100% { transform: translateY(0px); opacity: 0.55; }',
       '}',
+      '#drapix-modal :focus-visible { outline: 3px solid #075985 !important; outline-offset: 3px !important; }',
+      '#drapix-modal * { box-sizing: border-box; }',
+      '#drapix-card { max-width: 100%; min-width: 0; }',
+      '@media (max-width: 480px) { #drapix-preview-shell > div { grid-template-columns: minmax(0, 1fr) !important; } }',
+      '@media (prefers-reduced-motion: reduce) { #drapix-modal *, #drapix-modal *::before, #drapix-modal *::after { animation: none !important; transition: none !important; } }',
       '.drapix-dropzone.dragover { border-color: rgba(34,211,238,0.7) !important; background: rgba(34,211,238,0.12) !important; }'
     ].join('\n');
     document.head.appendChild(style);
@@ -262,7 +267,7 @@
       primary: sanitizeCssValue(primary, '#111827'),
       primaryGradient: sanitizeCssValue(theme.primaryGradient || config.primaryGradient || primary, '#111827'),
       fontFamily: sanitizeCssValue(fontFamily, 'Arial, sans-serif'),
-      text: sanitizeCssValue(theme.textColor || computedText || '#111827', '#111827'),
+      text: sanitizeCssValue(theme.textColor || '#111827', '#111827'),
       mutedText: sanitizeCssValue(theme.mutedTextColor || '#64748b', '#64748b'),
       surface: sanitizeCssValue(theme.surfaceColor || '#ffffff', '#ffffff'),
       softSurface: sanitizeCssValue(theme.softSurfaceColor || '#f8fafc', '#f8fafc'),
@@ -386,9 +391,18 @@
         var buyUrl = sanitizeNavigationUrl(options.buyUrl || options.checkoutUrl || (productNode ? productNode.getAttribute(config.buyUrlAttribute) : ''));
         var theme = config.adaptBrandTheme ? resolveBrandTheme(productNode || openBtn, options, config) : resolveBrandTheme(document.body, { theme: options.theme || {} }, config);
 
-        var modal = document.createElement('div');
+        var modal = document.createElement('dialog');
+        modal.setAttribute('aria-labelledby', 'drapix-dialog-title');
+        modal.setAttribute('aria-describedby', 'drapix-dialog-description');
         modal.id = 'drapix-modal';
         modal.style.position = 'fixed';
+        modal.style.width = '100vw';
+        modal.style.height = '100dvh';
+        modal.style.maxWidth = 'none';
+        modal.style.maxHeight = 'none';
+        modal.style.margin = '0';
+        modal.style.border = '0';
+        modal.style.boxSizing = 'border-box';
         modal.style.inset = '0';
         modal.style.zIndex = '9999';
         modal.style.display = 'flex';
@@ -400,29 +414,29 @@
 
         modal.innerHTML = [
           '<div id="drapix-card" style="position:relative;width:min(680px,96vw);max-height:92vh;overflow:auto;border-radius:', escapeHtml(theme.cardRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';box-shadow:', escapeHtml(theme.shadow), ';font-family:', escapeHtml(theme.fontFamily), ';">',
-          '  <button id="drapix-close" type="button" aria-label="Close DrapixAI try-on" style="position:absolute;z-index:3;top:16px;right:18px;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border-radius:999px;border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';cursor:pointer;font-size:22px;line-height:1;box-shadow:0 8px 22px rgba(15,23,42,0.08);font-family:', escapeHtml(theme.fontFamily), ';display:inline-flex;align-items:center;justify-content:center;text-align:center;">&times;</button>',
+          '  <button id="drapix-close" type="button" aria-label="Close DrapixAI try-on" style="position:absolute;z-index:3;top:16px;right:18px;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:999px;border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';cursor:pointer;font-size:22px;line-height:1;box-shadow:0 8px 22px rgba(15,23,42,0.08);font-family:', escapeHtml(theme.fontFamily), ';display:inline-flex;align-items:center;justify-content:center;text-align:center;">&times;</button>',
           '  <div style="position:relative;padding:26px;">',
           '    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">',
           '      <img src="', escapeHtml(config.logoUrl), '" alt="DrapixAI" style="display:block;width:132px;height:44px;object-fit:contain;object-position:left center;" />',
           '      <div>',
-          '        <div style="font-size:12px;color:', escapeHtml(theme.mutedText), ';">Premium virtual try-on preview</div>',
+          '        <span aria-hidden="true"></span>',
           '      </div>',
           '    </div>',
-          '    <div style="font-size:24px;font-weight:700;line-height:1.2;margin-bottom:8px;">', escapeHtml(config.modalTitle), '</div>',
-          '    <div style="font-size:13px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';max-width:560px;margin-bottom:20px;">', escapeHtml(config.modalSubtitle), '</div>',
+          '    <h2 id="drapix-dialog-title" style="font-size:24px;font-weight:700;line-height:1.2;margin:0 42px 8px 0;">', escapeHtml(config.modalTitle), '</h2>',
+          '    <div id="drapix-dialog-description" style="font-size:13px;line-height:1.6;color:', escapeHtml(theme.mutedText), ';max-width:560px;margin-bottom:20px;">', escapeHtml(config.modalSubtitle), '</div>',
           '    <div style="display:grid;gap:18px;">',
           '      <div id="drapix-dropzone" class="drapix-dropzone" style="position:relative;border:1px dashed ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.cardRadius), ';padding:24px;background:', escapeHtml(theme.softSurface), ';transition:all .2s ease;">',
-          '        <input id="drapix-person" type="file" accept="image/jpeg,image/png,image/webp" style="display:none;" />',
+          '        <label for="drapix-person" style="display:block;font-weight:700;margin-bottom:8px;">Choose your photo</label><input id="drapix-person" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="drapix-photo-help" style="display:block;width:100%;max-width:100%;min-height:44px;margin-bottom:16px;color:inherit;font:inherit;" />',
           '        <div id="drapix-upload-state">',
           '          <div style="display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.pageSurface), ';margin-bottom:14px;">',
           '            <span style="font-size:22px;color:', escapeHtml(theme.text), ';">&#8593;</span>',
           '          </div>',
           '          <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Upload your front-facing image or drop it here</div>',
-          '          <div style="font-size:13px;color:', escapeHtml(theme.mutedText), ';line-height:1.6;">Clear lighting and a straight-facing pose produce the strongest DrapixAI try-on previews.</div>',
+          '          <div id="drapix-photo-help" style="font-size:13px;color:', escapeHtml(theme.mutedText), ';line-height:1.6;">Clear lighting and a straight-facing pose produce the strongest DrapixAI try-on previews.</div>',
           '        </div>',
           '        <div id="drapix-preview-shell" style="display:none;">',
           '          <div style="display:grid;grid-template-columns:160px 1fr;gap:16px;align-items:center;">',
-          '            <img id="drapix-preview" alt="Preview" style="width:160px;height:200px;object-fit:cover;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.softSurface), ';" />',
+          '            <img id="drapix-preview" alt="Your selected photo before try-on" style="width:160px;height:200px;object-fit:cover;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.softSurface), ';" />',
           '            <div>',
           '              <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Ready to proceed</div>',
           '              <div id="drapix-file-name" style="font-size:13px;color:', escapeHtml(theme.text), ';margin-bottom:10px;"></div>',
@@ -434,11 +448,11 @@
           '      <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;">',
           '        <label style="font-size:12px;color:', escapeHtml(theme.mutedText), ';display:flex;gap:10px;align-items:flex-start;max-width:390px;">',
           '          <input id="drapix-consent" type="checkbox" style="accent-color:', escapeHtml(theme.primary), ';margin-top:2px;" />',
-          '          <span>I confirm I have permission to upload this image for DrapixAI try-on preview processing. <a href="', escapeHtml(config.privacyUrl), '" target="_blank" rel="noopener noreferrer" style="color:', escapeHtml(theme.primary), ';font-weight:700;text-decoration:underline;">Privacy Policy</a></span>',
+          '          <span>I have permission to use this photo and consent to temporary processing to generate this try-on preview. This does not opt me into analytics or marketing. <a href="', escapeHtml(config.privacyUrl), '" target="_blank" rel="noopener noreferrer" style="color:', escapeHtml(theme.primary), ';font-weight:700;text-decoration:underline;">Privacy Policy</a></span>',
           '        </label>',
           '        <div style="display:flex;gap:10px;flex-wrap:wrap;">',
-          '          <button id="drapix-reset" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:600;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Reset</button>',
-          '          <button id="drapix-run" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">Proceed</button>',
+          '          <button id="drapix-reset" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:600;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Reset photo</button>',
+          '          <button id="drapix-run" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:', escapeHtml(theme.buttonRadius), ';border:none;background:', escapeHtml(theme.primaryGradient), ';color:#fff;font-weight:700;cursor:pointer;box-shadow:0 12px 30px rgba(15,23,42,0.14);font-family:', escapeHtml(theme.fontFamily), ';">Generate try-on</button>',
           '        </div>',
           '      </div>',
           '      <div style="display:flex;gap:10px;align-items:flex-start;border:1px solid ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.pageSurface), ';padding:12px 14px;">',
@@ -450,7 +464,7 @@
           '          <div id="drapix-progress-bar" style="height:100%;width:14%;background:', escapeHtml(theme.primaryGradient), ';transition:width .25s ease;"></div>',
           '        </div>',
           '      </div>',
-          '      <div id="drapix-status" style="font-size:13px;color:', escapeHtml(theme.mutedText), ';min-height:20px;"></div>',
+          '      <div id="drapix-status" role="status" aria-live="polite" aria-atomic="true" style="font-size:13px;color:', escapeHtml(theme.mutedText), ';min-height:20px;"></div>',
           '      <div id="drapix-result-shell" style="display:none;border:1px solid ', escapeHtml(theme.border), ';border-radius:', escapeHtml(theme.cardRadius), ';padding:18px;background:', escapeHtml(theme.surface), ';">',
           '        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;">',
           '          <div>',
@@ -463,7 +477,7 @@
           '            <button id="drapix-share" type="button" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:', escapeHtml(theme.buttonRadius), ';border:1px solid ', escapeHtml(theme.border), ';background:', escapeHtml(theme.surface), ';color:', escapeHtml(theme.text), ';font-weight:600;cursor:pointer;font-family:', escapeHtml(theme.fontFamily), ';">Share</button>',
           '          </div>',
           '        </div>',
-          '        <img id="drapix-result" alt="DrapixAI Result" style="width:100%;display:block;border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.softSurface), ';border:1px solid ', escapeHtml(theme.border), ';" />',
+          '        <img id="drapix-result" alt="AI-generated preview of your selected garment; not a guarantee of physical fit" style="width:100%;display:block;border-radius:', escapeHtml(theme.buttonRadius), ';background:', escapeHtml(theme.softSurface), ';border:1px solid ', escapeHtml(theme.border), ';" />',
           '      </div>',
           '      <div style="font-size:11px;color:', escapeHtml(theme.mutedText), ';">', escapeHtml(config.footerText), '</div>',
           '    </div>',
@@ -472,6 +486,9 @@
         ].join('');
 
         document.body.appendChild(modal);
+        var previousBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        modal.showModal();
 
         var personInput = modal.querySelector('#drapix-person');
         var dropzone = modal.querySelector('#drapix-dropzone');
@@ -509,17 +526,32 @@
           if (activeResultUrl) {
             URL.revokeObjectURL(activeResultUrl);
           }
-          document.removeEventListener('keydown', handleEscape);
+          modal.close();
           modal.remove();
+          document.body.style.overflow = previousBodyOverflow;
+          if (openBtn.isConnected) openBtn.focus();
         }
 
-        function handleEscape(event) {
-          if (event.key === 'Escape') {
-            closeModal();
+        modal.addEventListener('cancel', function (event) {
+          event.preventDefault();
+          closeModal();
+        });
+        modal.addEventListener('keydown', function (event) {
+          if (event.key !== 'Tab') return;
+          var focusable = Array.prototype.slice.call(modal.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')).filter(function (node) {
+            return !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0;
+          });
+          var first = focusable[0];
+          var last = focusable[focusable.length - 1];
+          if (first && event.shiftKey && document.activeElement === first) {
+            event.preventDefault(); last.focus();
+          } else if (last && !event.shiftKey && document.activeElement === last) {
+            event.preventDefault(); first.focus();
           }
-        }
+        });
 
         function updatePreview(file) {
+          modal.querySelector('#drapix-consent').checked = false;
           if (activePreviewUrl) {
             URL.revokeObjectURL(activePreviewUrl);
           }
@@ -549,6 +581,8 @@
           progress.style.display = 'none';
           progressBar.style.width = '14%';
           status.textContent = 'Upload a new front-facing image to continue.';
+          modal.querySelector('#drapix-consent').checked = false;
+          personInput.focus();
         }
 
         function setSelectedFile(file) {
@@ -629,11 +663,7 @@
         modal.querySelector('#drapix-card').addEventListener('click', function (event) {
           event.stopPropagation();
         });
-        document.addEventListener('keydown', handleEscape);
-
-        dropzone.addEventListener('click', function () {
-          personInput.click();
-        });
+        closeBtn.focus();
         personInput.addEventListener('change', function () {
           if (personInput.files && personInput.files[0]) {
             if (!isSupportedImageFile(personInput.files[0])) {
@@ -717,13 +747,17 @@
             form.append('quality', config.quality);
             form.append('garment_type', config.garmentType);
             form.append('shopper_consent', 'true');
-            form.append('privacy_policy_version', '2026-08-04');
+            form.append('privacy_policy_version', '2026-10-18');
             if (config.garmentCategory) {
               form.append('garment_category', config.garmentCategory);
             }
 
             var startedAt = Date.now();
             var tryOnCredential = await resolveCredential(productId || config.productId);
+            if (isClosed || !consent.checked) {
+              if (!isClosed) status.textContent = 'Consent withdrawn. No try-on was submitted.';
+              return;
+            }
             activeController = typeof AbortController !== 'undefined' ? new AbortController() : null;
             var timeoutId = activeController ? setTimeout(function () {
               activeController.abort();

@@ -16,7 +16,7 @@ export default function TermsPage() {
         {
           heading: 'Use of the Service',
           body: [
-            'By accessing or using DrapixAI, you agree to use the platform only for lawful business purposes and in compliance with these terms, applicable laws, and third-party rights.',
+            'Use DrapixAI only for lawful purposes and with the authority needed to act for your business. Read these terms before creating an account or accepting a paid order.',
             'You are responsible for the content you upload, the accuracy of your account information, and the actions taken through your account, API keys, and team members.',
           ],
         },
@@ -38,7 +38,7 @@ export default function TermsPage() {
           heading: 'Billing and Service Changes',
           body: [
             'Paid plans, limits, and billing terms are described on the pricing page or in a separate commercial agreement. Charges, feature availability, and usage limits may change with notice as permitted by law or contract.',
-            'Recurring subscriptions should be cancelled before the next billing cycle to avoid future charges. Unless required by law or stated in a written agreement, fees already paid are generally non-refundable, though verified duplicate billing or platform-caused service failures may be reviewed case by case.',
+            'Review the Refund and Cancellation Policy at /refund-policy for cancellation and refund requests. Any restriction is subject to mandatory legal rights. A no-card trial does not itself authorize recurring charges.',
             'Trial access, promotional offers, and discounts may be limited, revoked for misuse, or modified when the promotional period ends.',
           ],
         },
