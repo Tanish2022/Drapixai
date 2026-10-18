@@ -77,7 +77,9 @@ if (require.main !== module) {
     const nativeReport = path.resolve(output, evidence);
     assert.ok(nativeReport.startsWith(path.join(root, 'runtime/launch-evidence')+path.sep));
     const native = JSON.parse(fs.readFileSync(nativeReport, 'utf8'));
-    assert.equal(native.passed, true); assert.equal(native.checks.length, 4);
+    assert.equal(native.passed, true); assert.equal(native.checks.length, 5);
+    assert.equal(native.authHttpFixture.imageId,report.images.api.imageId);
+    assert.equal(native.authHttpFixture.checks.length,6);
     for (const role of ['api', 'web']) assert.equal(native.images[role].imageId, report.images[role].imageId);
     report.nativeReport = nativeReport;
     report.nativeReportSha256 = crypto.createHash('sha256').update(fs.readFileSync(nativeReport)).digest('hex');

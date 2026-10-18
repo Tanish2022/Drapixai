@@ -2120,6 +2120,7 @@ assertIncludes(launchWorkflow, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-website-privacy.cjs')], { stdio: 'inherit' });
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-security-boundaries.cjs')], { stdio: 'inherit' });
 execFileSync(process.execPath, [path.join(repoRoot, 'scripts/test-password-security.cjs')], { stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(repoRoot, 'apps/api/node_modules/ts-node/dist/bin.js'), '--project', path.join(repoRoot, 'apps/api/tsconfig.json'), path.join(repoRoot, 'apps/api/src/scripts/auth-http-fixture-guard-tests.ts')], { stdio: 'inherit' });
 // The shell scanner's failure controls run on Linux CI; Windows runs the same
 // suite in an isolated Linux container rather than depending on a WSL install.
 if (process.platform !== 'win32') execFileSync('python3', [path.join(repoRoot, 'deploy/scripts/test-container-scanner.py')], { stdio: 'inherit' });

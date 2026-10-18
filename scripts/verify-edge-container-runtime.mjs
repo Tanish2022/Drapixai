@@ -150,6 +150,19 @@ try {
   }
   assert.ok(htmlPassed);
   report.checks.push('web-production-html-matching-csp-nonce-and-protected-onboarding');
+  const authHttp = spawnSync(process.execPath, [path.join(root,'scripts/verify-auth-http-runtime.mjs'),report.images.api.imageId], {
+    cwd:root,encoding:'utf8',windowsHide:true,timeout:240000,maxBuffer:2*1024*1024,
+  });
+  assert.equal(authHttp.status,0,authHttp.error?.message || authHttp.stderr || authHttp.stdout || 'HTTP authentication fixture failed');
+  const authSummary=JSON.parse(authHttp.stdout.trim().split('\n').at(-1));
+  assert.equal(authSummary.passed,true);
+  const authReportPath=path.resolve(root,authSummary.evidence);
+  assert.ok(authReportPath.startsWith(path.join(root,'runtime/launch-evidence')+path.sep));
+  const authBytes=fs.readFileSync(authReportPath), authReport=JSON.parse(authBytes);
+  assert.equal(authReport.images.api.id,report.images.api.imageId);
+  assert.equal(authReport.source.commit,report.source.commit);
+  report.authHttpFixture={report:path.relative(root,authReportPath),sha256:crypto.createHash('sha256').update(authBytes).digest('hex'),imageId:authReport.images.api.id,checks:authReport.checks};
+  report.checks.push('api-real-http-password-recovery-revocation-ownership-and-redis-rate-limits');
   report.passed = true;
   console.log('Web production HTML, CSP nonce and protected onboarding passed without publishing any host port.');
 } catch (error) {
