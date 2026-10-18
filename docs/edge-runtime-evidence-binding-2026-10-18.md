@@ -80,3 +80,9 @@ have since passed. The [new verification record](security-assessment-2026-10-18-
 now records passing actual application/native checks, all six alias-regression
 executions and exact-image scans. Qualified review and live launch requirements
 remain open.
+
+The subsequent [HTTP integration verifier](auth-http-verification-2026-10-18.md)
+requires a fifth parent group. It receives the already inspected immutable API
+ID and embeds its six-group report bytes and digest inside retained native JSON.
+The alias regression verifies that nested binding and hash; historical
+four-group/six-parent-execution reports keep their original scope.

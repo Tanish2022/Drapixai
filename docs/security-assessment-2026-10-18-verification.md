@@ -7,6 +7,12 @@ additional medium-severity weaknesses and diagnostic privacy hardening. This is
 source remediation and bounded local verification, not an independent penetration
 test, complete ASVS verification or permission to launch.
 
+The subsequent [HTTP integration record](auth-http-verification-2026-10-18.md)
+covers exact revision `8e84b203d4661ec1e7a9edd341a0a88ef981a3a7`: actual compiled
+routes, real services, five native/six HTTP groups, complete retained CI evidence
+and fresh exact-image scans. The earlier records below keep their original
+revision and four-group scope.
+
 ## Exact tested source
 
 Implementation revision: `8f2747ee0ab29ee38fb176f95ec306ca1b592b39`.

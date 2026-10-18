@@ -91,6 +91,12 @@ remain unchanged. Exact scans and component binding are recorded in the
 
 ## Rollout requirements and remaining risks
 
+The later [HTTP integration follow-up](auth-http-verification-2026-10-18.md) passed
+six observable route groups against actual disposable PostgreSQL/Redis and
+retains the complete nested report in CI. It supplements the synthetic route
+adapters and direct transaction tests above; it does not verify real SMTP or a
+full deployed server.
+
 Drain/replace old authentication replicas coherently before new-format writes.
 Earlier API builds cannot verify scrypt records: a rollback needs a build that
 retains the versioned reader. No bulk password migration or production deployment

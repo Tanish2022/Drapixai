@@ -8,6 +8,11 @@ Runtime-review follow-ups verify the [Node source signature](node-shared-openssl
 
 The [password-storage follow-up](password-storage-security-2026-10-18.md) addresses full-input hashing, stale credential/reset races, bootstrap revocation and hash-bearing diagnostics. Legacy boundary recovery, coordinated rollout and deployed verification remain required.
 
+The [HTTP follow-up](auth-http-verification-2026-10-18.md) adds actual compiled
+auth/account route execution against owned PostgreSQL/Redis, with embedded and
+hash-verified CI evidence. Its local/hosted fixture scope does not replace live
+staging, SMTP delivery or an independent penetration test.
+
 ## Scope, method and architecture
 
 Baseline: `1f033326eec2efe74c9d0d8a7ec7bf9140f89e96`, branch `codex/public-launch-rc1`. Reviewed the Next.js website and server-side authentication/proxies, Express API and Prisma access paths, JavaScript/React SDK rendering and token use, private Python inference boundary, storage/retention controls, deployment configuration, dependency/security CI and secret-scanning policy. Concurrent lower-body development was present in the worktree and is outside this change set.
