@@ -3,6 +3,10 @@
 This is downstream runtime review evidence. Production API/web Dockerfiles and
 the Standard CatVTON pipeline are unchanged. No original launch gate is closed.
 
+The [qualified-review handoff](runtime-review-handoff-2026-10-18.md) now records
+a frozen local bundle with the Node-only image, checkpoint candidate, source,
+inventories and test evidence. Its integrity checks are not an approval.
+
 ## Public source authentication
 
 The official Node 22.23.3 source archive pin was independently checked against

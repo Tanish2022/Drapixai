@@ -5,6 +5,11 @@ It neither installs into the application nor changes any production or security
 candidate requirements, Dockerfile, audit exception or Standard setting.
 The existing dependency audit must continue to report the upstream finding.
 
+The [dated review handoff](../../../docs/runtime-review-handoff-2026-10-18.md)
+retains an exact passed CI wheel, source comparison and evidence with the Node
+review materials. Its digest verification does not replace independent review,
+GPU parity, image integration/scans or production approval.
+
 The exact official Accelerate 1.11.0 wheel is hash pinned in `build_candidate.py`.
 The builder works offline and refuses any other wheel or loader bytes. It only
 replaces the shard-list construction inside `load_checkpoint_in_model` and adds
