@@ -27,6 +27,8 @@ cleanup removes only containers with this invocation's exact random label.
 
 The native edge verifier runs this fixture against its already inspected API
 image ID. The alias-movement regression also verifies that nested image binding.
+The parent embeds the exact nested JSON bytes and hash, so the existing CI
+artifact upload retains the complete HTTP evidence rather than an orphan link.
 Historical four-group reports retain their original scope; the expanded verifier
 requires five groups, including six HTTP check groups in the nested report.
 
@@ -53,7 +55,9 @@ required by the native container verifier.
 
 ## Status
 
-API TypeScript and one positive/fourteen negative guard controls passed locally.
-Full packaged HTTP execution and the expanded native/alias regressions remain
-pending until fresh exact-source images containing the new fixture are built.
-No original launch gate is promoted by introducing this test.
+At implementation revision `3f0dcc640303fc29c18e9e2a7a527620b69764ef`, API
+TypeScript, one positive/fourteen negative guard controls, the full launch suite
+(86 boundary and 21 password cases), all six packaged HTTP groups and the expanded
+five-group native/alias regressions passed locally. The subsequent evidence
+embedding change requires its own exact-source repeat. No original launch gate
+is promoted by introducing this test.

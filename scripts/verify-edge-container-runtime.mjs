@@ -159,9 +159,12 @@ try {
   const authReportPath=path.resolve(root,authSummary.evidence);
   assert.ok(authReportPath.startsWith(path.join(root,'runtime/launch-evidence')+path.sep));
   const authBytes=fs.readFileSync(authReportPath), authReport=JSON.parse(authBytes);
+  assert.equal(authReport.passed,true);
   assert.equal(authReport.images.api.id,report.images.api.imageId);
   assert.equal(authReport.source.commit,report.source.commit);
-  report.authHttpFixture={report:path.relative(root,authReportPath),sha256:crypto.createHash('sha256').update(authBytes).digest('hex'),imageId:authReport.images.api.id,checks:authReport.checks};
+  // Existing CI retains edge-runtime JSON. Preserve the exact nested bytes in
+  // that artifact as well, rather than leaving an orphaned evidence reference.
+  report.authHttpFixture={report:path.relative(root,authReportPath),sha256:crypto.createHash('sha256').update(authBytes).digest('hex'),imageId:authReport.images.api.id,checks:authReport.checks,reportJson:authBytes.toString('utf8')};
   report.checks.push('api-real-http-password-recovery-revocation-ownership-and-redis-rate-limits');
   report.passed = true;
   console.log('Web production HTML, CSP nonce and protected onboarding passed without publishing any host port.');

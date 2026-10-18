@@ -80,6 +80,10 @@ if (require.main !== module) {
     assert.equal(native.passed, true); assert.equal(native.checks.length, 5);
     assert.equal(native.authHttpFixture.imageId,report.images.api.imageId);
     assert.equal(native.authHttpFixture.checks.length,6);
+    assert.equal(crypto.createHash('sha256').update(native.authHttpFixture.reportJson).digest('hex'),native.authHttpFixture.sha256);
+    const nested=JSON.parse(native.authHttpFixture.reportJson);
+    assert.equal(nested.passed,true);
+    assert.equal(nested.images.api.id,report.images.api.imageId);
     for (const role of ['api', 'web']) assert.equal(native.images[role].imageId, report.images[role].imageId);
     report.nativeReport = nativeReport;
     report.nativeReportSha256 = crypto.createHash('sha256').update(fs.readFileSync(nativeReport)).digest('hex');
