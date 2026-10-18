@@ -16,6 +16,16 @@ an independent penetration test or complete authentication certification.
 
 ## Storage and resource controls
 
+Affected source and regression files:
+
+| Boundary | Implementation / verification |
+|---|---|
+| Full-input storage and work cap | `apps/api/src/lib/password-hash.ts`, `apps/api/src/lib/security.ts`; `scripts/test-password-security.cjs` |
+| Login/reset/creation paths | `apps/api/src/routes/auth.ts`, `apps/api/src/routes/account.ts`, `apps/api/src/services/admin-bootstrap.ts` |
+| Conditional credential transaction | `apps/api/src/lib/api-key-auth.ts`; `apps/api/src/scripts/password-session-database-tests.ts` |
+| Browser overload handling | `apps/web/app/api/admin/session/route.ts`, `apps/web/app/api/dashboard/session/route.ts`; `scripts/test-security-boundaries.cjs` |
+| Automated and packaged checks | `apps/api/src/scripts/launch-readiness-tests.ts`, `apps/api/src/scripts/p0-database-tests.ts`, `scripts/verify-edge-container-runtime.mjs`, `scripts/verify-edge-image-binding.cjs` |
+
 Node 22 supplies asynchronous scrypt without another password library. The
 version fixes `N=32768`, `r=8`, `p=3`, a 16-byte random salt and a 64-byte derived
 key, with a 64 MiB KDF allocation limit. This is the 32 MiB alternative in
@@ -70,8 +80,14 @@ actual API image**, using an owned database namespace, exact migrations and
 `NODE_ENV=test`. It requires the new password module and the observed-race/
 rollback output; an old image cannot satisfy this new check. This supplements
 production-environment native/HTML checks and is not a live configuration test.
-Updated API/web image builds, native execution, alias-movement regression and
-fresh exact-image scans remain to be recorded for this change.
+The exact-source API/web review images at `49b4d712bd681e2ead5fa645c7b42862c75ca9d4`
+have since passed these native checks, including the actual compiled database
+fixtures and six-execution alias-movement regression. The shared-runtime
+application-check build also passed all 86 boundary/21 password cases, MFA,
+RBAC, token, public API, upload and log-privacy suites, production web build and
+five-route CSP checks. These are isolated review images; production Dockerfiles
+remain unchanged. Exact scans and component binding are recorded in the
+[verification record](security-assessment-2026-10-18-verification.md).
 
 ## Rollout requirements and remaining risks
 

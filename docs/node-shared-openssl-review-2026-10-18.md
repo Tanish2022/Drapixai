@@ -112,11 +112,16 @@ compatibility results, not a clean application-release attestation, full Node CI
 complete ABI/cryptographic certification or independent advisory review.
 
 Actual API/web native compatibility, full candidate application tests and fresh
-exact-image scans remain to be recorded after the new
-[password-storage remediation](password-storage-security-2026-10-18.md) is
-committed and materialized. Ordinary production CI still builds the unchanged
-stock-runtime Dockerfiles and cannot establish this candidate's approval. The
-known Accelerate audit failure remains open.
+exact-image scans have since passed at `49b4d712bd681e2ead5fa645c7b42862c75ca9d4`,
+including the [password remediation](password-storage-security-2026-10-18.md).
+The [verification record](security-assessment-2026-10-18-verification.md) binds
+image IDs, 86 boundary/21 password cases, compiled PostgreSQL fixtures, the alias
+regression and zero High/Critical scan findings. Offline OCI archive verification
+matches both final Node/SSL/crypto file hashes to this tested component. The
+subsequent live check also passed for both immutable image IDs, matching actual
+running binary/library hashes, loaded mappings and provenance. Ordinary
+production CI still builds unchanged stock-runtime Dockerfiles and cannot
+establish this candidate's approval. The Accelerate audit failure remains open.
 
 Qualified downstream maintenance/ABI/crypto review, live staging drills,
 independent penetration testing, legal/model rights, delivered GPU acceptance,

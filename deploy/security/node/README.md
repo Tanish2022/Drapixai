@@ -140,8 +140,11 @@ The broader offline upstream check runs Node's own parallel crypto, TLS, HTTPS
 and HTTP/2 tests. The recorded review component has passed **656 non-skipped
 checks, with four recorded skips**, plus the separate final-runtime core/TLS
 probe. [Exact component evidence](../../../docs/node-shared-openssl-review-2026-10-18.md)
-records the binary and image identities. Application/native builds, fresh scans
-and qualified downstream review remain required. After a successful source
+records the binary and image identities. The subsequent
+[application verification](../../../docs/security-assessment-2026-10-18-verification.md)
+records passing application/native builds, fresh exact-image scans and live
+image/component hash and loaded-library binding. Qualified downstream
+review remains required. After a successful source
 build, retain its matching source-build stage locally using the cached layers:
 
 ```powershell

@@ -76,4 +76,7 @@ executions. The historical three-group/five-execution reports above apply to the
 earlier verifier hash. Use freshly built application images containing the new
 password fixture; older baseline images cannot satisfy the expanded check.
 The shared runtime's [component crypto/TLS tests](node-shared-openssl-review-2026-10-18.md)
-have since passed; actual new application/native/scan evidence is still required.
+have since passed. The [new verification record](security-assessment-2026-10-18-verification.md)
+now records passing actual application/native checks, all six alias-regression
+executions and exact-image scans. Qualified review and live launch requirements
+remain open.

@@ -4,7 +4,7 @@
 
 Latest follow-ups: [18 October browser sessions](browser-session-security-2026-10-18.md), [atomic Redis counters](atomic-rate-limits-2026-10-18.md) and [bounded Redis requests/recovery](redis-request-bounds-2026-10-18.md), including native transport faults, real Redis integration and **84/84 security cases**. Counts below describe the original assessment unless explicitly updated. Outbound and administrator follow-ups retain their own evidence and deployment limits.
 
-Runtime-review follow-ups verify the [Node source signature](node-shared-openssl-review-2026-10-18.md) and fix [mutable-image evidence binding](edge-runtime-evidence-binding-2026-10-18.md). They do not close the embedded-OpenSSL review, candidate compatibility or live launch requirements.
+Runtime-review follow-ups verify the [Node source signature](node-shared-openssl-review-2026-10-18.md) and fix [mutable-image evidence binding](edge-runtime-evidence-binding-2026-10-18.md). The [18 October verification record](security-assessment-2026-10-18-verification.md) records passing component/application/native tests and fresh scans for isolated review images. Qualified downstream approval and live launch requirements remain open.
 
 The [password-storage follow-up](password-storage-security-2026-10-18.md) addresses full-input hashing, stale credential/reset races, bootstrap revocation and hash-bearing diagnostics. Legacy boundary recovery, coordinated rollout and deployed verification remain required.
 
