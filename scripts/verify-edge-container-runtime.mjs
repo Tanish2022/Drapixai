@@ -68,6 +68,19 @@ try {
     assert.match(runtimeVersions.systemOpenSSLPackage || '', /^Version: \S+$/);
     report.images[role] = { image, imageId: info.Id, user: info.Config.User, revision, runtimeVersions };
   }
+  const writable = spawnSync(process.execPath, [path.join(root, 'scripts/verify-container-writable-paths.mjs'), report.images.api.imageId, report.images.web.imageId], {
+    cwd: root, encoding: 'utf8', windowsHide: true, timeout: 240000, maxBuffer: 2 * 1024 * 1024,
+  });
+  assert.equal(writable.status, 0, writable.error?.message || writable.stderr || writable.stdout || 'Writable-path fixture failed');
+  const writableSummary = JSON.parse(writable.stdout.trim().split('\n').at(-1));
+  assert.equal(writableSummary.passed, true); assert.equal(writableSummary.checks, 8);
+  const writableReportPath = path.resolve(root, writableSummary.evidence);
+  assert.ok(writableReportPath.startsWith(path.join(root, 'runtime/launch-evidence') + path.sep));
+  const writableBytes = fs.readFileSync(writableReportPath), writableReport = JSON.parse(writableBytes);
+  assert.equal(writableReport.passed, true);
+  for (const role of ['api', 'web']) assert.equal(writableReport.images[role].imageId, report.images[role].imageId);
+  report.writablePathsFixture = { sha256: crypto.createHash('sha256').update(writableBytes).digest('hex'), reportJson: writableBytes.toString('utf8') };
+  report.checks.push('resolved-production-and-staging-tmpfs-ownership-writes-and-negative-controls');
   docker(['network', 'create', '--internal', '--label', 'drapixai.purpose=disposable-edge-runtime-test', network]);
   networkCreated = true;
   docker(['run', '-d', '--name', database, '--network', network, '--label', 'drapixai.purpose=disposable-edge-runtime-test',
