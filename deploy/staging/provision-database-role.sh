@@ -18,7 +18,9 @@ psql -X -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 <<SQL
 BEGIN;
 DO \$\$
 BEGIN
-  IF to_regclass('public."SecurityAuditLog"') IS NULL THEN
+  IF to_regclass('public."SecurityAuditLog"') IS NULL
+    OR to_regclass('public."TermsDocument"') IS NULL
+    OR to_regclass('public."AccountTermsAcceptance"') IS NULL THEN
     RAISE EXCEPTION 'Apply all release migrations before provisioning the API role';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'drapixai_staging_api') THEN
@@ -55,6 +57,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE drapixai_staging IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO drapixai_staging_api;
 REVOKE ALL ON TABLE public."SecurityAuditLog" FROM drapixai_staging_api;
 GRANT SELECT, INSERT ON TABLE public."SecurityAuditLog" TO drapixai_staging_api;
+REVOKE ALL ON TABLE public."TermsDocument", public."AccountTermsAcceptance" FROM drapixai_staging_api;
+GRANT SELECT, INSERT ON TABLE public."TermsDocument", public."AccountTermsAcceptance" TO drapixai_staging_api;
 DO \$\$
 BEGIN
   IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
@@ -65,4 +69,4 @@ END
 COMMIT;
 SQL
 unset password
-echo "PASS: staging API role provisioned without administrative or audit-mutation privileges."
+echo "PASS: staging API role provisioned without administrative, audit or terms-ledger mutation privileges."

@@ -74,6 +74,19 @@ try {
     report.source[file] = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex');
   }
   if (runOrm) {
+    // The fixture role mirrors append/read permissions for retained evidence.
+    // Exercise actual Prisma queries without owner or ledger UPDATE privileges.
+    const runtimeRole = 'drapixai_terms_fixture_api';
+    sql(`CREATE ROLE ${runtimeRole} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD ${quote(password)};
+      REVOKE ALL ON DATABASE ${database} FROM PUBLIC;
+      GRANT CONNECT ON DATABASE ${database} TO ${runtimeRole};
+      REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+      GRANT USAGE ON SCHEMA public TO ${runtimeRole};
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${runtimeRole};
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${runtimeRole};
+      REVOKE ALL ON TABLE "TermsDocument", "AccountTermsAcceptance", "SecurityAuditLog" FROM ${runtimeRole};
+      GRANT SELECT, INSERT ON TABLE "TermsDocument", "AccountTermsAcceptance", "SecurityAuditLog" TO ${runtimeRole};`);
+    report.runtimeRole = { privileged: false, evidenceTablePrivileges: ['SELECT', 'INSERT'] };
     const published = checked(['port', name, '5432/tcp']);
     assert.match(published, /^127\.0\.0\.1:\d+$/);
     const port = Number(published.split(':')[1]);
@@ -98,7 +111,7 @@ try {
     const fixture = runHttp ? 'auth-http-database-tests.ts' : 'account-terms-database-tests.ts';
     const result = spawnSync(process.execPath, [path.join(root, 'apps/api/node_modules/ts-node/dist/bin.js'), '--project', path.join(root, 'apps/api/tsconfig.json'), path.join(root, 'apps/api/src/scripts', fixture)], {
       cwd: root, encoding: 'utf8', windowsHide: true, timeout: runBrowser ? 180000 : 60000, maxBuffer: 1024 * 1024,
-      env: { ...process.env, DATABASE_URL: `postgresql://postgres:${password}@127.0.0.1:${port}/${database}?connection_limit=2&pool_timeout=10`,
+      env: { ...process.env, DATABASE_URL: `postgresql://${runtimeRole}:${password}@127.0.0.1:${port}/${database}?connection_limit=2&pool_timeout=10`,
         DRAPIXAI_DISPOSABLE_DB_APPROVAL: 'I_ACKNOWLEDGE_DISPOSABLE_DATABASE', DRAPIXAI_TERMS_FIXTURE_APPROVAL: 'I_ACKNOWLEDGE_DISPOSABLE_TERMS_FIXTURE',
         ...(runHttp ? { NODE_ENV: 'production', REDIS_URL: redisUrl, SMTP_HOST: '', DRAPIXAI_ADMIN_EMAIL: '', DRAPIXAI_ADMIN_TOTP_SECRET: '',
           DRAPIXAI_DISPOSABLE_HTTP_APPROVAL: 'I_ACKNOWLEDGE_DISPOSABLE_HTTP_FIXTURE', DRAPIXAI_DASHBOARD_PROXY_TOKEN: crypto.randomBytes(48).toString('hex'), DRAPIXAI_AUDIT_LOG_SECRET: crypto.randomBytes(48).toString('hex'),

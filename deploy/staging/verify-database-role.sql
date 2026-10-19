@@ -21,7 +21,18 @@ VALUES ('staging-role-verifier', 'synthetic-rollback-only', 'GENESIS', md5(rando
 DO $$
 DECLARE
   statement text;
+  fixture_user integer;
+  fixture_content text := '{"kind":"terms","version":"staging-role-fixture"}';
 BEGIN
+  INSERT INTO public."User" ("email", "passwordHash")
+    VALUES ('staging-role-probe@example.invalid', 'synthetic-not-a-login') RETURNING "id" INTO fixture_user;
+  INSERT INTO public."TermsDocument" ("version", "sha256", "content")
+    VALUES ('staging-role-fixture', encode(sha256(convert_to(fixture_content, 'UTF8')), 'hex'), fixture_content);
+  INSERT INTO public."AccountTermsAcceptance" ("userId", "documentVersion", "documentHash", "flow")
+    SELECT fixture_user, "version", "sha256", 'authenticated_account' FROM public."TermsDocument" WHERE "version" = 'staging-role-fixture';
+  IF NOT EXISTS (SELECT 1 FROM public."AccountTermsAcceptance" WHERE "userId" = fixture_user AND "documentVersion" = 'staging-role-fixture') THEN
+    RAISE EXCEPTION 'API role cannot append/read terms evidence';
+  END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user
     AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) THEN
     RAISE EXCEPTION 'API role retains administrative privileges';
@@ -39,6 +50,16 @@ BEGIN
     RAISE EXCEPTION 'API role can access migration control records';
   END IF;
   FOREACH statement IN ARRAY ARRAY[
+    'UPDATE public."TermsDocument" SET "content" = "content"',
+    'DELETE FROM public."TermsDocument"',
+    'TRUNCATE public."TermsDocument"',
+    'ALTER TABLE public."TermsDocument" DISABLE TRIGGER ALL',
+    'DROP TABLE public."TermsDocument"',
+    'UPDATE public."AccountTermsAcceptance" SET "flow" = "flow"',
+    'DELETE FROM public."AccountTermsAcceptance"',
+    'TRUNCATE public."AccountTermsAcceptance"',
+    'ALTER TABLE public."AccountTermsAcceptance" DISABLE TRIGGER ALL',
+    'DROP TABLE public."AccountTermsAcceptance"',
     'UPDATE public."SecurityAuditLog" SET "outcome" = ''tampered''',
     'DELETE FROM public."SecurityAuditLog"',
     'TRUNCATE public."SecurityAuditLog"',
@@ -58,4 +79,4 @@ BEGIN
 END
 $$;
 ROLLBACK;
-\echo PASS: runtime DML and audit append work; admin, DDL, audit mutation and TRUNCATE are denied.
+\echo PASS: runtime DML and audit append work; terms append/read work; admin, DDL, evidence mutation and TRUNCATE are denied.
