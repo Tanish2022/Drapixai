@@ -81,6 +81,8 @@ jobs:
           npm --prefix apps/api run test:storage-erasure
       - name: Shopify foundation tests
         run: npm --prefix apps/api run test:shopify
+      - name: Account terms archive and input validation
+        run: npm --prefix apps/api run test:account-terms
       - name: Authorization and storefront token tests
         run: |
           npm --prefix apps/api run test:authorization
@@ -131,6 +133,11 @@ jobs:
       - name: Verify backup restore and failure rollback
         # Uses its own PostgreSQL container with no network or host ports.
         run: node scripts/verify-postgres-restore.mjs
+      - name: Verify immutable account terms and real ORM transactions
+        run: |
+          node scripts/verify-account-terms-database.mjs
+          node scripts/verify-account-terms-database.mjs --orm
+          node scripts/verify-account-terms-database.mjs --http
       - name: Verify versioned retention against disposable storage and database
         # Creates its own loopback-only containers and uses no operator data.
         run: node scripts/verify-versioned-retention.mjs

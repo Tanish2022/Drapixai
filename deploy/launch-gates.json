@@ -2,6 +2,30 @@
   "version": 1,
   "repository": [
     {
+      "id": "account-terms-http",
+      "label": "Production-mode HTTP signup, current terms enforcement and authenticated acceptance with disposable PostgreSQL and Redis",
+      "runner": "node",
+      "args": ["scripts/verify-account-terms-database.mjs", "--http"]
+    },
+    {
+      "id": "account-terms-validation",
+      "label": "Versioned terms archive and strict affirmative acceptance validation",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:account-terms"]
+    },
+    {
+      "id": "account-terms-sql",
+      "label": "Disposable PostgreSQL rejects terms ledger rewrites, truncation and forged timestamps",
+      "runner": "node",
+      "args": ["scripts/verify-account-terms-database.mjs"]
+    },
+    {
+      "id": "account-terms-orm",
+      "label": "Actual Prisma terms helpers preserve transactional and idempotent acceptance",
+      "runner": "node",
+      "args": ["scripts/verify-account-terms-database.mjs", "--orm"]
+    },
+    {
       "id": "versioned-retention-drill",
       "label": "Disposable PostgreSQL and S3 compatibility tests prove version erasure, lock denial and retained-reference retry",
       "runner": "node",

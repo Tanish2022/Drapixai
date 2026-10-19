@@ -38,7 +38,7 @@ export default function RefundPolicyPage() {
         {
           heading: 'How to Request Cancellation or a Refund',
           body: [
-            'Use the billing portal linked from your subscription page when available, or email support@drapixai.com with the account email, invoice or transaction reference and a brief explanation. Do not send a full payment-card number, password, API key or shopper photo.',
+            'Use the billing portal linked from your subscription page when available, or email contact@drapixai.com with the account email, invoice or transaction reference and a brief explanation. Do not send a full payment-card number, password, API key or shopper photo.',
             'Ask for confirmation of when cancellation takes effect and whether another charge is due. Refund eligibility and any expected processing period will be explained after the request is reviewed; no fixed processing deadline is promised on this page.',
           ],
         },

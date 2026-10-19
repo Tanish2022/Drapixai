@@ -168,7 +168,7 @@ export default function SubscriptionPage() {
               <Link href="/pricing" className={`inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500 text-white hover:bg-rose-400'} transition-colors`}>
                 Upgrade plan
               </Link>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'border-rose-200 text-rose-800 hover:bg-rose-100' : 'border-rose-300/30 text-rose-100 hover:bg-white/[0.05]'} transition-colors`}>
+              <a href="mailto:contact@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'border-rose-200 text-rose-800 hover:bg-rose-100' : 'border-rose-300/30 text-rose-100 hover:bg-white/[0.05]'} transition-colors`}>
                 Contact sales
               </a>
             </div>
@@ -285,7 +285,7 @@ export default function SubscriptionPage() {
                 <ExternalLink className="w-4 h-4" />
               </Link>
               {isQuotaExhausted ? (
-                <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                <a href="mailto:contact@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                   Contact Sales
                 </a>
               ) : null}

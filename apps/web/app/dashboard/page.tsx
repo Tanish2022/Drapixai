@@ -730,7 +730,7 @@ export default function Dashboard() {
               <Link href="/pricing" className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 transition-colors ${themePreference === 'light' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500 text-white hover:bg-rose-400'}`}>
                 Upgrade now
               </Link>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center gap-2 ${actionClass}`}>
+              <a href="mailto:contact@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 Contact sales
               </a>
             </div>

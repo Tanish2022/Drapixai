@@ -49,6 +49,31 @@ model User {
   shopifyInstallations            ShopifyInstallation[]
   billingCheckoutAttempts         BillingCheckoutAttempt[]
   usageReservations               UsageReservation[]
+  termsAcceptances                AccountTermsAcceptance[]
+}
+
+model TermsDocument {
+  version     String                   @id
+  sha256      String
+  content     String
+  createdAt   DateTime                 @default(now())
+  acceptances AccountTermsAcceptance[]
+
+  @@unique([version, sha256])
+}
+
+model AccountTermsAcceptance {
+  id              Int           @id @default(autoincrement())
+  userId          Int
+  documentVersion String
+  documentHash    String
+  flow            String
+  acceptedAt      DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  document        TermsDocument @relation(fields: [documentVersion, documentHash], references: [version, sha256], onDelete: Restrict, map: "AccountTermsAcceptance_document_fkey")
+
+  @@unique([userId, documentVersion])
+  @@index([userId, acceptedAt])
 }
 
 model ApiKey {

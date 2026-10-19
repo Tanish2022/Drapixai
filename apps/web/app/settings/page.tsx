@@ -951,7 +951,7 @@ export default function SettingsPage() {
               </Link>
               {isQuotaExhausted ? (
                 <a
-                  href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade"
+                  href="mailto:contact@drapixai.com?subject=DrapixAI%20Quota%20Upgrade"
                   className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm text-rose-100 hover:bg-rose-400/10 transition-colors"
                 >
                   <Mail className="w-4 h-4" />

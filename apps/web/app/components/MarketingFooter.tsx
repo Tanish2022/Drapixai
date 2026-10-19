@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import BrandLogo from './BrandLogo';
+import { BUSINESS_DETAILS } from '@/app/lib/business-details';
 
 export default function MarketingFooter() {
   return (
@@ -11,6 +12,12 @@ export default function MarketingFooter() {
               <BrandLogo className="h-10 w-auto" />
             </div>
             <p className="mt-4 max-w-md text-sm leading-6 text-[#9fac9f]">Standard upper-body AI try-on infrastructure for fashion commerce.</p>
+            <address className="mt-4 max-w-md space-y-1 text-sm not-italic leading-6 text-[#bdc7bf]">
+              <p className="font-semibold">{BUSINESS_DETAILS.legalName}</p>
+              <p>{BUSINESS_DETAILS.address}</p>
+              <p><a href={`mailto:${BUSINESS_DETAILS.email}`} className="inline-flex min-h-10 items-center underline underline-offset-4">{BUSINESS_DETAILS.email}</a></p>
+              <p><a href={BUSINESS_DETAILS.phoneHref} className="inline-flex min-h-10 items-center underline underline-offset-4">{BUSINESS_DETAILS.phone}</a></p>
+            </address>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-[#bdc7bf]">
             <Link href="/help" className="inline-flex min-h-10 items-center hover:text-white">Help</Link>

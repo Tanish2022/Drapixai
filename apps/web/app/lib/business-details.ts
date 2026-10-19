@@ -1,18 +1,21 @@
-// Server-rendered public facts only. Configuration is not evidence of registration
-// or mailbox delivery; the business must verify these values before publication.
+// Public business particulars supplied and confirmed by the owner in this chat.
+// Certificate numbers, registry extracts and mailbox delivery were not examined.
+export const BUSINESS_DETAILS = {
+  legalName: 'DRAPIXAI SOFTWARE SOLUTIONS LLP',
+  address: 'A-104, Avadh highland, S.P. Ring road, Bhadaj, Ahmedabad, Gujarat, 380060, India',
+  email: 'contact@drapixai.com',
+  phone: '+91 63510 79022',
+  phoneHref: 'tel:+916351079022',
+} as const;
+
 export function businessIdentitySections() {
-  const legalName = process.env.DRAPIXAI_PUBLIC_LEGAL_NAME?.trim();
-  const address = process.env.DRAPIXAI_PUBLIC_BUSINESS_ADDRESS?.trim();
-  const registration = process.env.DRAPIXAI_PUBLIC_REGISTRATION?.trim();
-  const grievance = process.env.DRAPIXAI_PUBLIC_GRIEVANCE_CONTACT?.trim();
   return [{
     heading: 'Business Identity',
     body: [
       'DrapixAI is the service name for this virtual try-on platform.',
-      legalName ? `Legal operator: ${legalName}.` : 'Legal operator details have not yet been published. Please request them before entering a commercial agreement.',
-      address ? `Business postal address: ${address}.` : 'The business postal address has not yet been published.',
-      ...(registration ? [`Registration details: ${registration}.`] : []),
-      grievance ? `Privacy and grievance contact: ${grievance}.` : 'For privacy or grievance requests, use privacy@drapixai.com. A named grievance contact has not yet been published.',
+      `Legal operator: ${BUSINESS_DETAILS.legalName}, registered in India as a limited liability partnership.`,
+      `Business postal address: ${BUSINESS_DETAILS.address}.`,
+      'The business holds DPIIT startup recognition.',
     ],
   }];
 }

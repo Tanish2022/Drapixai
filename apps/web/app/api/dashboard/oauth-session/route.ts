@@ -9,6 +9,7 @@ import {
 } from '@/app/lib/dashboard-session';
 import { noStoreJson, rejectCrossOriginRequest } from '@/app/lib/request-guard';
 import { sessionCookie, retireLegacySessionCookie } from '@/app/lib/session-cookie';
+import { readAccountTermsState } from '@/app/lib/account-terms-server';
 
 export async function POST(request: NextRequest) {
   const csrfRejection = rejectCrossOriginRequest(request);
@@ -20,9 +21,11 @@ export async function POST(request: NextRequest) {
     return noStoreJson({ error: 'OAUTH_DASHBOARD_SESSION_REQUIRED' }, { status: 401 });
   }
 
+  const terms = await readAccountTermsState(apiKey);
+  if (!terms.state) return noStoreJson({ error: 'OAUTH_DASHBOARD_SESSION_UNAVAILABLE' }, { status: terms.status });
   const cookieStore = await cookies();
   cookieStore.set(sessionCookie(DASHBOARD_SESSION_COOKIE, await createDashboardSessionToken(apiKey), DASHBOARD_SESSION_MAX_AGE_SECONDS));
   retireLegacySessionCookie(cookieStore, LEGACY_DASHBOARD_SESSION_COOKIE);
 
-  return noStoreJson({ ok: true });
+  return noStoreJson({ ok: true, termsRequired: !terms.state.accepted });
 }

@@ -44,6 +44,16 @@ until their required evidence exists.
 
 ## Baseline
 
+On 19 October, local account-terms enforcement was implemented and verified:
+password signup records assent with account creation; existing/Google accounts
+use a restricted acceptance step; direct and signed service credentials check
+current assent. A real production-browser/BFF/Express/PostgreSQL/Redis drill
+verified keyboard acceptance, failed-save retry and tenant account access. See
+[the scoped evidence and remaining rollout](account-terms-ledger-2026-10-19.md).
+Actual Google/operator staging journeys, qualified wording/retention review,
+hosted CI and exact deployed-release evidence remain open. This does not close
+legal, authentication-lifecycle, privacy or any other original P0 gate.
+
 Current execution note (2026-10-16): the owner confirmed staging has not been
 provisioned and the ordered GPU workstation has not arrived. The owner has
 on-site hardware and reports approximately INR 50,000 in total monthly business

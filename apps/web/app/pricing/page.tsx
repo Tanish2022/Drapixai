@@ -139,7 +139,7 @@ export default function PricingPage() {
                   <span key={feature} className="flex items-center gap-2 border-t border-white/15 py-3 text-sm text-[#d4ddd6]"><Check className="h-4 w-4 text-[#8cd3b3]" />{feature}</span>
                 ))}
               </div>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry" className="mt-8 inline-flex h-12 items-center gap-2 border border-white/30 px-5 font-semibold hover:bg-white/10"><Mail className="h-4 w-4" />Contact sales</a>
+              <a href="mailto:contact@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry" className="mt-8 inline-flex h-12 items-center gap-2 border border-white/30 px-5 font-semibold hover:bg-white/10"><Mail className="h-4 w-4" />Contact sales</a>
             </div>
           </div>
         </section>

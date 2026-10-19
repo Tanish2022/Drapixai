@@ -11,9 +11,16 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Privacy Policy"
       title="Privacy Policy"
-      updatedLabel="Privacy notice version: 2026-10-18"
+      updatedLabel="Privacy notice version: 2026-10-18 · Business details updated October 19, 2026"
       summary="This policy explains what information DrapixAI collects, how it is used, and the steps taken to protect customer and end-user data across the current upper-body virtual try-on launch scope."
       sections={[
+        {
+          heading: 'Who Operates DrapixAI',
+          body: [
+            'DrapixAI is operated by DRAPIXAI SOFTWARE SOLUTIONS LLP, registered in India. Our business postal address is A-104, Avadh highland, S.P. Ring road, Bhadaj, Ahmedabad, Gujarat, 380060, India.',
+            'Email contact@drapixai.com or call +91 63510 79022 for enquiries, privacy requests or grievances. See /contact for the business contact details.',
+          ],
+        },
         {
           heading: 'Information We Collect',
           body: [
@@ -63,8 +70,8 @@ export default function PrivacyPage() {
           heading: 'Your Rights and Contact',
           body: [
             'Depending on your location, you may have rights to access, correct, delete, or restrict certain personal information. You may also have the right to object to certain processing or request a copy of your data.',
-            'For access, correction, deletion, withdrawal or a privacy grievance, contact privacy@drapixai.com with a brief description and an account reference only if needed. We may need proportionate identity or merchant-authority checks; do not send a photo ID or shopper image by default. Financial, security or legal obligations may limit erasure and should be explained in the response.',
-            'For a try-on embedded in a merchant store, contact that merchant as well: it controls its storefront and may hold separate records. Legal operator and business-contact information is published on /contact as it is confirmed. Support requests can be sent to support@drapixai.com.',
+            'For access, correction, deletion, withdrawal or a privacy grievance, contact contact@drapixai.com with a brief description and an account reference only if needed. We may need proportionate identity or merchant-authority checks; do not send a photo ID or shopper image by default. Financial, security or legal obligations may limit erasure and should be explained in the response.',
+            'For a try-on embedded in a merchant store, contact that merchant as well: it controls its storefront and may hold separate records. Legal operator and business-contact information is published on /contact. Support requests can be sent to contact@drapixai.com.',
           ],
         },
       ]}

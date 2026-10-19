@@ -12,6 +12,7 @@ const privateNoIndexSources = [
   '/admin',
   '/admin/:path*',
   '/admin-access',
+  '/auth/terms',
   '/dashboard',
   '/dashboard/:path*',
   '/onboarding',

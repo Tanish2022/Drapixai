@@ -19,6 +19,7 @@ type DashboardSessionRequestBody = {
   mobileNumber?: string | null;
   otp?: string;
   apiKey?: string;
+  termsAcceptance?: unknown;
 };
 
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
           selectedPlan: body.selectedPlan,
           mobileNumber: body.mobileNumber,
           otp: body.otp,
+          termsAcceptance: body.termsAcceptance,
         }
       : {
           email: body.email,
@@ -106,7 +108,7 @@ export async function POST(request: Request) {
     cache: 'no-store',
   });
 
-  const authPayload = (await authResponse.json().catch(() => null)) as { apiKey?: string; error?: string } | null;
+  const authPayload = (await authResponse.json().catch(() => null)) as { apiKey?: string; error?: string; termsRequired?: boolean } | null;
   if (!authResponse.ok) {
     if (authResponse.status === 503) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
       status: 503, headers: { 'Retry-After': '1' },
@@ -120,7 +122,7 @@ export async function POST(request: Request) {
   }
 
   await persistDashboardCookie(apiKey);
-  return noStoreJson({ ok: true });
+  return noStoreJson({ ok: true, termsRequired: authPayload?.termsRequired === true });
 }
 
 export async function DELETE(request: Request) {

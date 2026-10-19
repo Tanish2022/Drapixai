@@ -193,7 +193,7 @@ const fallbackResponse: Omit<Extract<ChatMessage, { role: 'assistant' }>, 'id'> 
     'I could not match that cleanly yet. The fastest next step is to open DrapixAI Help for guided setup, and use email support if the issue is account-specific or blocking.',
   links: [
     { href: '/help', label: 'Open Help' },
-    { href: 'mailto:support@drapixai.com', label: 'Email support@drapixai.com' },
+    { href: 'mailto:contact@drapixai.com', label: 'Email contact@drapixai.com' },
   ],
 };
 
@@ -237,7 +237,7 @@ const farewellResponse: Omit<Extract<ChatMessage, { role: 'assistant' }>, 'id'> 
     'Any time you come back, I can help with garments, discovery, suggested matches, store verification, SDK setup, or billing questions.',
   links: [
     { href: '/help', label: 'Open Help' },
-    { href: 'mailto:support@drapixai.com', label: 'Email support' },
+    { href: 'mailto:contact@drapixai.com', label: 'Email support' },
   ],
 };
 
@@ -317,7 +317,7 @@ export default function SupportAssistant() {
           id: `assistant-${Date.now() + 1}`,
           title: topic.title,
           summary: topic.summary,
-          links: [...topic.links, { href: 'mailto:support@drapixai.com', label: 'Email support' }],
+          links: [...topic.links, { href: 'mailto:contact@drapixai.com', label: 'Email support' }],
         }
       : {
           ...fallbackResponse,
@@ -478,8 +478,8 @@ export default function SupportAssistant() {
                 <MessageSquare className="h-3.5 w-3.5" />
                 <span className="truncate">Guided answers from your current Help content</span>
               </span>
-              <a href="mailto:support@drapixai.com" className="shrink-0 font-medium text-[#21634e] hover:text-[#153f31]">
-                support@drapixai.com
+              <a href="mailto:contact@drapixai.com" className="shrink-0 font-medium text-[#21634e] hover:text-[#153f31]">
+                contact@drapixai.com
               </a>
             </div>
           </div>

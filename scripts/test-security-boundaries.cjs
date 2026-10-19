@@ -9,6 +9,8 @@ const { createRequire } = require('node:module');
 const { EventEmitter } = require('node:events');
 const ts = require('../apps/web/node_modules/typescript');
 const root = path.resolve(__dirname, '..');
+const termsMetadata = require('../apps/api/src/legal/terms-metadata.json');
+const acceptedTerms = () => ({ findUnique: async () => ({ documentHash: termsMetadata.documentHash }) });
 
 function loader(mocks = {}, globals = {}) {
   const cache = new Map();
@@ -61,10 +63,12 @@ function routeFixture(user, key = { kind: 'dashboard', scopes: 'dashboard', user
   const routes = new Map();
   const uses = [];
   const issued = [];
+  const resolvedOptions = [];
   let writes = 0;
   const router = { use(...handlers) { uses.push(...handlers); } };
   for (const method of ['post', 'get', 'delete']) router[method] = (name, ...handlers) => routes.set(`${method}:${name}`, handlers);
   const database = {
+    accountTermsAcceptance: acceptedTerms(),
     user: { findUnique: async () => user, create: async () => { writes++; return user; }, update: async () => { writes++; return user; },
       updateMany: async ({ where, data }) => { if (!matchesWhere(user, where)) return { count: 0 }; Object.assign(user, data); writes++; return { count: 1 }; } },
   };
@@ -81,11 +85,11 @@ function routeFixture(user, key = { kind: 'dashboard', scopes: 'dashboard', user
     },
     '../lib/rate-limit': { createRateLimitMiddleware: () => (_q, _s, next) => next() },
     redis: { createClient: () => ({ on() {}, connect: async () => {} }) },
-    '../lib/api-key-auth': { issueApiKeyForUser: async (_db, _id, options) => { issued.push(options); return 'synthetic-key'; }, resolveActiveApiKey: async () => key },
+    '../lib/api-key-auth': { issueApiKeyForUser: async (_db, _id, options) => { issued.push(options); return 'synthetic-key'; }, resolveActiveApiKey: async (_db, _raw, options) => { resolvedOptions.push(options); return key; } },
     '../lib/audit-log': { appendSecurityAudit: async () => {} },
     '../services/emailer': { sendOtpEmail: async () => { throw Error('MAIL_NOT_ALLOWED'); }, sendWelcomeEmail: async () => {} },
   }, { process: { env }, Date: FixedDate });
-  return { load, routes, uses, issued, writes: () => writes, env, database };
+  return { load, routes, uses, issued, resolvedOptions, writes: () => writes, env, database };
 }
 
 test('OAuth cannot issue a privileged key without local MFA', async () => {
@@ -135,6 +139,21 @@ test('Admin API accepts a password/TOTP-assured dashboard key for the configured
   let accepted = false;
   await f.uses.at(-1)({ headers: { authorization: 'Bearer synthetic-key' } }, response(), () => { accepted = true; });
   assert.equal(accepted, true);
+});
+
+test('Pre-acceptance admin exception is limited to GET verify and retains configured identity and MFA checks', async () => {
+  for (const [method, path, allowed] of [['GET', '/verify', true], ['POST', '/verify', false], ['GET', '/overview', false], ['GET', '/verify/extra', false]]) {
+    const f = routeFixture({ id: 1, email: 'operator@example.test', role: 'system_admin' }, { kind: 'dashboard', scopes: 'terms:accept,admin:mfa', userId: 1 });
+    f.load('apps/api/src/routes/admin.ts');
+    await f.uses.at(-1)({ method, path, headers: { authorization: 'Bearer synthetic-key' } }, response(), () => {});
+    assert.equal(f.resolvedOptions.at(-1).allowUnacceptedTerms, allowed);
+  }
+  for (const [email, role, scopes] of [['other@example.test', 'system_admin', 'terms:accept,admin:mfa'], ['operator@example.test', 'brand_admin', 'terms:accept,admin:mfa'], ['operator@example.test', 'system_admin', 'terms:accept']]) {
+    const f = routeFixture({ id: 1, email, role }, { kind: 'dashboard', scopes, userId: 1 });
+    f.load('apps/api/src/routes/admin.ts'); let called = false; const res = response();
+    await f.uses.at(-1)({ method: 'GET', path: '/verify', headers: { authorization: 'Bearer synthetic-key' } }, res, () => { called = true; });
+    assert.equal(called, false); assert.equal(res.statusCode, 403);
+  }
 });
 
 test('Google callback rejects unverified email before syncing or issuing a key', async () => {
@@ -236,7 +255,7 @@ for (const mutation of ['no-expiry', 'overlong', 'future-issued', 'wrong-audienc
     if (mutation === 'future-issued') { claims.iat = now + 3600; claims.exp = now + 4500; }
     if (mutation === 'expired') { claims.iat = now - 1800; claims.exp = now - 900; }
     const encoded = jwt.sign(claims, secret, { algorithm: mutation === 'wrong-algorithm' ? 'HS384' : 'HS256', audience: mutation === 'wrong-audience' ? 'other-app' : 'drapixai-public-api', issuer: mutation === 'wrong-issuer' ? 'other-issuer' : 'drapixai-api' });
-    const database = { apiKey: { findFirst: async () => ({ id: 3, userId: 2, kind: 'manual', scopes: 'api:tryon' }) } };
+    const database = { accountTermsAcceptance: acceptedTerms(), apiKey: { findFirst: async () => ({ id: 3, userId: 2, kind: 'manual', scopes: 'api:tryon' }) } };
     assert.equal(await auth.resolvePublicApiToken(database, 'dpxapi_' + encoded), null);
   });
 }
@@ -245,7 +264,7 @@ test('Normal issued public JWT and signing-key overlap remain valid', async () =
   const env = { DRAPIXAI_STOREFRONT_TOKEN_SECRET: 'synthetic-signing-secret-for-local-test-only', DRAPIXAI_API_ENVIRONMENT: 'sandbox' };
   const auth = loader({}, { process: { env } })('apps/api/src/lib/api-key-auth.ts');
   const token = auth.issuePublicApiToken({ apiKeyId: 3, userId: 2, scopes: ['api:tryon'], productIds: ['PRODUCT-A'], environment: 'sandbox' });
-  const database = { apiKey: { findFirst: async () => ({ id: 3, userId: 2, kind: 'manual', scopes: 'api:tryon' }) } };
+  const database = { accountTermsAcceptance: acceptedTerms(), apiKey: { findFirst: async () => ({ id: 3, userId: 2, kind: 'manual', scopes: 'api:tryon' }) } };
   assert.ok(await auth.resolvePublicApiToken(database, token));
   env.DRAPIXAI_STOREFRONT_TOKEN_PREVIOUS_SECRETS = env.DRAPIXAI_STOREFRONT_TOKEN_SECRET;
   env.DRAPIXAI_STOREFRONT_TOKEN_SECRET = 'rotated-synthetic-signing-secret-for-local-test-only';
@@ -533,7 +552,7 @@ function sessionFixture(overrides = {}, beforeTouch = () => {}) {
   const key = { id: 7, userId: 1, keyHash: require('node:crypto').createHash('sha256').update(credential).digest('hex'), kind: 'dashboard', scopes: 'dashboard,admin:mfa', isActive: true, revokedAt: null,
     createdAt: new Date(now - 3600000), lastUsedAt: new Date(now - 60000), expiresAt: new Date(now + 3600000), ...overrides };
   class FixedDate extends Date { constructor(value = now) { super(value); } static now() { return now; } }
-  const database = { apiKey: {
+  const database = { accountTermsAcceptance: acceptedTerms(), apiKey: {
     findUnique: async ({ where }) => where.keyHash === key.keyHash ? { ...key } : null,
     findFirst: async ({ where }) => matchesWhere(key, where) ? { ...key } : null,
     findMany: async () => [],
@@ -580,6 +599,59 @@ test('Merchant and manual server-key lifetimes retain their existing policy', as
   }
 });
 
+test('Missing and mismatched account assent deny direct keys before recording activity', async () => {
+  for (const record of [null, { documentHash: '0'.repeat(64) }]) {
+    for (const kind of ['manual', 'dashboard']) {
+      const f = sessionFixture({ kind, scopes: kind === 'manual' ? 'api:tryon' : 'dashboard' });
+      f.database.accountTermsAcceptance.findUnique = async ({ where }) => {
+        assert.equal(where.userId_documentVersion.userId, f.key.userId);
+        assert.equal(where.userId_documentVersion.documentVersion, termsMetadata.version);
+        return record;
+      };
+      const before = f.key.lastUsedAt;
+      assert.equal(await f.auth.resolveActiveApiKey(f.database, f.credential), null);
+      assert.equal(f.key.lastUsedAt, before);
+      assert.ok(await f.auth.resolveActiveApiKey(f.database, f.credential, { allowUnacceptedTerms: true }));
+    }
+  }
+});
+
+test('Acceptance-only credential remains blocked even when another session has accepted terms', async () => {
+  const f = sessionFixture({ scopes: 'terms:accept' });
+  assert.equal(await f.auth.resolveActiveApiKey(f.database, f.credential), null);
+  assert.ok(await f.auth.resolveActiveApiKey(f.database, f.credential, { allowUnacceptedTerms: true }));
+  const preview = f.auth.issueDashboardPreviewToken({ apiKeyId: f.key.id, userId: f.key.userId, allowedDomain: 'preview.example.test' });
+  assert.equal(await f.auth.resolveSdkApiKey(f.database, preview), null);
+});
+
+test('Terms enforcement also rejects signed public API, generic storefront and Shopify tokens', async () => {
+  const env = { NODE_ENV: 'production', DRAPIXAI_STOREFRONT_TOKEN_SECRET: require('node:crypto').randomBytes(32).toString('hex'), DRAPIXAI_API_ENVIRONMENT: 'sandbox' };
+  const auth = loader({}, { process: { env } })('apps/api/src/lib/api-key-auth.ts');
+  const key = { id: 3, userId: 2, kind: 'manual', scopes: 'api:tryon', isActive: true, revokedAt: null, expiresAt: null };
+  let assentReads = 0;
+  const database = { accountTermsAcceptance: { findUnique: async () => { assentReads++; return null; } }, apiKey: { findFirst: async () => key,
+    findUnique: async () => null, findMany: async () => [], update: async () => { throw Error('UNEXPECTED_ACTIVITY_WRITE'); } } };
+  const publicToken = auth.issuePublicApiToken({ apiKeyId: 3, userId: 2, scopes: ['api:tryon'], productIds: ['A'], environment: 'sandbox' });
+  const genericToken = auth.issueGenericStorefrontToken({ apiKeyId: 3, userId: 2, channel: 'web', allowedDomain: 'shop.example.test', productIds: ['A'] });
+  const shopifyToken = auth.issueStorefrontToken({ apiKeyId: 3, userId: 2, shopDomain: 'fixture.myshopify.com', allowedDomain: 'shop.example.test', productIds: ['A'] });
+  for (const token of [publicToken, genericToken, shopifyToken]) {
+    assentReads = 0;
+    assert.equal(await auth.resolveSdkApiKey(database, token), null);
+    assert.equal(assentReads, 1, 'An otherwise valid signed token must reach the account acceptance check');
+  }
+});
+
+test('Unaccepted merchant login issues only a short-lived acceptance credential', async () => {
+  const f = routeFixture({ id: 2, email: 'merchant@example.test', role: 'brand_admin', emailVerifiedAt: new Date(0) });
+  f.database.accountTermsAcceptance.findUnique = async () => null;
+  f.load('apps/api/src/routes/auth.ts');
+  const res = response();
+  await f.routes.get('post:/login').at(-1)({ body: { email: 'merchant@example.test', password: 'correct-fixture-password' } }, res);
+  assert.equal(res.statusCode, 200); assert.equal(res.body.termsRequired, true);
+  assert.equal(f.issued[0].scopes.join(','), 'terms:accept');
+  assert.equal(f.issued[0].expiresAt.getTime(), 59000 + 15 * 60000);
+});
+
 for (const expired of [true, false]) test(`Dashboard preview ${expired ? 'cannot revive idle operator session' : 'does not extend operator inactivity window'}`, async () => {
   const f = sessionFixture({ lastUsedAt: new Date(Date.now() - (expired ? 16 : 1) * 60000) });
   const last = f.key.lastUsedAt.getTime();
@@ -600,6 +672,7 @@ function browserSessionFixture(purpose = 'admin', mode = 'production') {
     'next-auth/jwt': { getToken: async () => ({ apiKey: 'synthetic-browser-key' }) },
   }, { process: { env }, fetch: async (url, init = {}) => {
     calls.push({ url: String(url), init });
+    if (String(url).endsWith('/auth/terms')) return Response.json({ accepted: true, ...termsMetadata }, { status: fixture.status });
     if (String(url).endsWith('/auth/login')) {
       const payload = JSON.parse(init.body);
       if (fixture.loginStatus !== 200) return Response.json({ error: 'AUTHENTICATION_BUSY' }, { status: fixture.loginStatus });
@@ -702,6 +775,63 @@ test('Google dashboard bridge uses the same protected cookie and legacy retireme
   assert.equal(result.status, 200);
   assert.ok(f.writes.some((cookie) => cookie.name === '__Host-drapixai_dashboard_session' && cookie.secure && cookie.httpOnly && cookie.path === '/' && cookie.maxAge > 0 && !cookie.domain));
   assert.ok(f.writes.some((cookie) => cookie.name === f.legacy && cookie.maxAge === 0));
+});
+
+test('Terms browser endpoint rejects cross-origin and oversized acceptance before forwarding', async () => {
+  const f = browserSessionFixture('dashboard');
+  const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+  const route = f.load('apps/web/app/api/dashboard/terms/route.ts');
+  const foreign = await route.POST(new NextRequest('https://app.example.test/api/dashboard/terms', {
+    method: 'POST', headers: { origin: 'https://other.example.test' }, body: '{}',
+  }));
+  assert.equal(foreign.status, 403); assert.equal(f.calls.length, 0); assert.equal(f.writes.length, 0);
+  const large = await route.POST(new NextRequest('https://app.example.test/api/dashboard/terms', {
+    method: 'POST', headers: { origin: 'https://app.example.test' }, body: 'x'.repeat(2049),
+  }));
+  assert.equal(large.status, 413); assert.equal(f.calls.length, 0); assert.equal(f.writes.length, 0);
+});
+
+test('Terms browser endpoint saves only after backend success and never returns its credential', async () => {
+  const f = browserSessionFixture('dashboard');
+  const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+  const route = f.load('apps/web/app/api/dashboard/terms/route.ts');
+  const input = { accepted: true, ...termsMetadata };
+  const request = () => new NextRequest('https://app.example.test/api/dashboard/terms', {
+    method: 'POST', headers: { origin: 'https://app.example.test', 'content-type': 'application/json' }, body: JSON.stringify(input),
+  });
+  f.config.status = 503;
+  assert.equal((await route.POST(request())).status, 503); assert.equal(f.writes.length, 0);
+  f.config.status = 200;
+  const result = await route.POST(request());
+  assert.equal(result.status, 200); assert.match(result.headers.get('cache-control'), /no-store/);
+  assert.deepEqual(await result.json(), { ok: true });
+  assert.equal((await f.read(f.values.get(f.name))).apiKey, 'synthetic-browser-key');
+  assert.equal(new TextDecoder().decode(f.calls.at(-1).init.body), JSON.stringify(input));
+});
+
+test('Admin acceptance requires its own cookie and cannot fall back to a merchant or Google session', async () => {
+  const f = browserSessionFixture('dashboard');
+  const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+  f.values.set(f.name, await f.create('synthetic-merchant-key'));
+  const result = await f.load('apps/web/app/api/dashboard/terms/route.ts').GET(new NextRequest('https://app.example.test/api/dashboard/terms?scope=admin', {
+    headers: { origin: 'https://app.example.test' },
+  }));
+  assert.equal(result.status, 401); assert.equal(f.calls.length, 0); assert.equal(f.writes.length, 0);
+});
+
+test('Protected page checks current acceptance even with a valid encrypted dashboard cookie', async () => {
+  const f = browserSessionFixture('dashboard');
+  const { NextRequest } = createRequire(path.join(root, 'apps/web/package.json'))('next/server');
+  const token = await f.create('synthetic-browser-key');
+  const req = () => new NextRequest('https://app.example.test/dashboard?tab=usage', { headers: { cookie: `${f.name}=${token}` } });
+  // Override only the HTTP adapter; execute the real proxy and credential helpers.
+  const proxyLoader = loader({ 'next-auth/jwt': { getToken: async () => null },
+    '@/app/lib/server-env': { SERVER_API_BASE_URL: 'https://internal-api.example.test' },
+  }, { process: { env: f.env }, fetch: async () => Response.json({ accepted: false, ...termsMetadata }) });
+  const result = await proxyLoader('apps/web/proxy.ts').proxy(req());
+  const redirect = new URL(result.headers.get('location'));
+  assert.equal(redirect.pathname, '/auth/terms'); assert.equal(redirect.searchParams.get('next'), '/dashboard?tab=usage');
+  assert.ok(result.headers.get('content-security-policy'));
 });
 
 test('Admin browser login preserves significant password whitespace', async () => {

@@ -48,7 +48,7 @@ export default function CookiesPage() {
           body: [
             'Open Cookie preferences to change or withdraw your analytics choice. Reject optional stops subsequent website analytics events and removes this browser\'s visitor ID when browser storage is writable. Withdrawal does not automatically delete earlier server records or data already received by another provider.',
             'You may also clear or restrict storage in browser settings. If the website cannot save your choice, optional analytics stays off on the current page and the website may ask again on another visit. Blocking necessary cookies can affect authentication and core features.',
-            'For privacy questions or requests concerning earlier records, contact privacy@drapixai.com. See the Privacy Policy for information about service processing.',
+            'For privacy questions or requests concerning earlier records, contact contact@drapixai.com. See the Privacy Policy for information about service processing.',
           ],
         },
       ]}

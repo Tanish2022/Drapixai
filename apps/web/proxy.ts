@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/app/lib/admin-session';
-import { DASHBOARD_SESSION_COOKIE, verifyDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
+import { DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { getToken } from 'next-auth/jwt';
+import { readAccountTermsState } from '@/app/lib/account-terms-server';
+import archivedTerms from '../api/src/legal/terms-2026-10-19.json';
 
 const parseAllowedOrigins = (value: string) => value
   .split(',')
@@ -57,23 +60,45 @@ export async function proxy(req: NextRequest) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', policy);
+  // Reject unknown versions before rendering starts. A streamed notFound()
+  // response can otherwise keep HTTP 200 even though its body is an error page.
+  if (pathname.startsWith('/terms/') && pathname.slice('/terms/'.length).replace(/\/$/, '') !== archivedTerms.version) {
+    return withCsp(new NextResponse('Terms version not found. Visit /terms for the current version.', {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' },
+    }), policy);
+  }
   const isProtectedAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  const isProtectedMerchantRoute = ['/onboarding', '/dashboard', '/settings', '/subscription', '/sdk-install']
+    .some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  let accountKey = '';
   if (isProtectedAdminRoute) {
-    const adminSession = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-    if (!(await verifyAdminSessionToken(adminSession))) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/admin-access';
-      return withCsp(NextResponse.redirect(url), policy);
+    accountKey = (await readAdminSessionToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value))?.apiKey || '';
+  }
+  if (isProtectedMerchantRoute) {
+    accountKey = (await readDashboardSessionToken(req.cookies.get(DASHBOARD_SESSION_COOKIE)?.value))?.apiKey || '';
+    if (!accountKey) {
+      const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+      accountKey = typeof token?.apiKey === 'string' ? token.apiKey.trim() : '';
     }
   }
-
-  if (pathname.startsWith('/onboarding') || pathname.startsWith('/dashboard') || pathname.startsWith('/settings') || pathname.startsWith('/subscription') || pathname.startsWith('/sdk-install')) {
-    const dashboardSession = req.cookies.get(DASHBOARD_SESSION_COOKIE)?.value;
-    const hasDashboardSession = await verifyDashboardSessionToken(dashboardSession);
-    if (!hasDashboardSession) {
+  if (isProtectedAdminRoute || isProtectedMerchantRoute) {
+    const terms = accountKey ? await readAccountTermsState(accountKey) : null;
+    if (!accountKey || terms?.status === 401) {
       const url = req.nextUrl.clone();
-      url.pathname = '/auth/login';
-      url.searchParams.set('next', pathname);
+      url.pathname = isProtectedAdminRoute ? '/admin-access' : '/auth/login';
+      url.search = '';
+      url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
+      return withCsp(NextResponse.redirect(url), policy);
+    }
+    if (!terms?.state) return withCsp(new NextResponse('Account access is temporarily unavailable. Please try again shortly.', {
+      status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '5', 'Content-Type': 'text/plain; charset=utf-8' },
+    }), policy);
+    if (!terms.state.accepted) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/auth/terms'; url.search = '';
+      if (isProtectedAdminRoute) url.searchParams.set('scope', 'admin');
+      url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
       return withCsp(NextResponse.redirect(url), policy);
     }
   }

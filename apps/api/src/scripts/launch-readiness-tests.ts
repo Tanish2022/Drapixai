@@ -1068,7 +1068,7 @@ assertIncludes(dashboardSessionRoute, 'export async function GET(request: Reques
 assertIncludes(dashboardSessionRoute, 'return noStoreJson({ ok: true });', 'Dashboard session responses must be non-cacheable');
 assertNotIncludes(dashboardSessionRoute, 'ok: true, apiKey:', 'Dashboard session responses must never disclose permanent API keys to browser JavaScript');
 assertIncludes(adminSessionRoute, 'return noStoreJson({ ok: true });', 'Admin session responses must be non-cacheable');
-assertIncludes(dashboardOauthSessionRoute, 'return noStoreJson({ ok: true });', 'OAuth dashboard session bridge responses must be non-cacheable');
+assertIncludes(dashboardOauthSessionRoute, 'return noStoreJson({ ok: true, termsRequired:', 'OAuth dashboard session bridge responses must be non-cacheable');
 assertIncludes(requestGuard, 'CSRF_ORIGIN_MISMATCH', 'Web request guard must return a stable CSRF rejection code');
 assertIncludes(requestGuard, 'NEXT_PUBLIC_WEB_BASE_URL', 'Web request guard must validate against the configured public web origin');
 assertIncludes(requestGuard, 'NEXTAUTH_URL', 'Web request guard must support NextAuth URL as the expected origin');
@@ -1315,7 +1315,7 @@ assertIncludes(privacyPage, 'instead of a persistent shopper-image library', 'Pr
 assertIncludes(privacyPage, '15-minute file-age threshold', 'Privacy page must explain the interrupted-job cleanup age threshold');
 assertIncludes(privacyPage, 'not a guaranteed deletion deadline', 'Privacy page must not turn a scheduler threshold into an unsupported deadline');
 assertIncludes(read('docs/public-launch-readiness-checklist.md'), '15-minute interrupted-job failsafe', 'Launch checklist must require evidence for the public transient-media policy.');
-assertIncludes(privacyPage, 'privacy@drapixai.com', 'Privacy page must publish privacy contact');
+assertIncludes(privacyPage, 'contact@drapixai.com', 'Privacy page must publish the owner-confirmed privacy intake contact');
 assertIncludes(privacyPage, 'The launch app requests read_products only', 'Privacy policy must disclose Shopify least-privilege product access');
 assertIncludes(privacyPage, 'does not request Shopify customer, order, payment, or checkout data', 'Privacy policy must disclose excluded Shopify protected data');
 assertIncludes(privacyPage, 'shop-redact request', 'Privacy policy must disclose Shopify uninstall and redaction cleanup');

@@ -47,7 +47,8 @@
     "test:security:live": "ts-node src/scripts/live-security-boundary-tests.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:push": "prisma db push"
+    "prisma:push": "prisma db push",
+    "test:account-terms": "ts-node src/scripts/account-terms-tests.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.0.0",

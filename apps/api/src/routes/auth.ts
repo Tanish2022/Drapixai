@@ -12,6 +12,7 @@ import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail, sendWelcomeEmail } from '../services/emailer';
 import { appendSecurityAudit } from '../lib/audit-log';
+import { hasCurrentAccountTerms, recordAccountTermsAcceptance, validateTermsAcceptance, TERMS_PENDING_SCOPE, TERMS_PENDING_MAX_AGE_MS } from '../lib/account-terms';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -154,10 +155,12 @@ router.post('/password-reset/confirm', async (req, res) => {
 });
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, companyName, selectedPlan, otp, mobileNumber } = req.body;
+    const { email, password, companyName, selectedPlan, otp, mobileNumber, termsAcceptance } = req.body || {};
     if (!email || !password || !otp) {
       return res.status(400).json({ error: 'EMAIL_PASSWORD_AND_OTP_REQUIRED' });
     }
+    const termsError = validateTermsAcceptance(termsAcceptance);
+    if (termsError) return res.status(400).json({ error: termsError });
     const passwordError = validatePasswordStrength(password);
     if (passwordError) return res.status(400).json({ error: passwordError });
     const normalizedEmail = normalizeEmail(String(email));
@@ -177,7 +180,8 @@ router.post('/register', async (req, res) => {
     const trialExpiresAt = new Date();
     trialExpiresAt.setDate(trialExpiresAt.getDate() + TRIAL_DAYS);
     
-    const user = await prisma.user.create({
+    const user = await prisma.$transaction(async tx => {
+      const created = await tx.user.create({
       data: {
         email: normalizedEmail,
         emailVerifiedAt: new Date(),
@@ -191,6 +195,9 @@ router.post('/register', async (req, res) => {
         trialExpiresAt,
         subscriptionCurrentPeriodEndsAt: trialExpiresAt,
       }
+      });
+      await recordAccountTermsAcceptance(tx, created.id, termsAcceptance, 'password_signup');
+      return created;
     });
 
     const apiKey = await issueApiKeyForUser(prisma, user.id);
@@ -254,9 +261,14 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
       return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED' });
     }
 
+    const termsRequired = !await hasCurrentAccountTerms(prisma, user.id);
     const apiKey = issueNewKey ? await issueApiKeyForUser(prisma, user.id, {
       ...(requiresAdminMfa(normalizedEmail, user.role) ? {
         scopes: ['dashboard', ADMIN_MFA_SCOPE], expiresAt: new Date(Date.now() + ADMIN_SESSION_KEY_MAX_AGE_MS),
+      } : {}),
+      ...(termsRequired ? {
+        scopes: [TERMS_PENDING_SCOPE, ...(requiresAdminMfa(normalizedEmail, user.role) ? [ADMIN_MFA_SCOPE] : [])],
+        expiresAt: new Date(Date.now() + TERMS_PENDING_MAX_AGE_MS),
       } : {}),
       passwordProof: { snapshot: user, upgradedHash },
     }) : null;
@@ -271,6 +283,7 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
     });
     res.json({
       apiKey,
+      termsRequired,
       user: {
         email: user.email,
         planType: user.planType,
@@ -336,11 +349,14 @@ router.post('/oauth/google', async (req, res) => {
     }
 
     let apiKeyValue: string | null = null;
+    const termsRequired = !await hasCurrentAccountTerms(prisma, user.id);
     if (issueNewKey) {
-      apiKeyValue = await issueApiKeyForUser(prisma, user.id);
+      apiKeyValue = await issueApiKeyForUser(prisma, user.id, termsRequired ? {
+        scopes: [TERMS_PENDING_SCOPE], expiresAt: new Date(Date.now() + TERMS_PENDING_MAX_AGE_MS),
+      } : {});
     }
 
-    return res.json({ ok: true, userId: user.id, apiKey: apiKeyValue });
+    return res.json({ ok: true, userId: user.id, apiKey: apiKeyValue, termsRequired });
   } catch (error) {
     console.error('OAuth sync error:', formatLogError(error));
     return writeAuthFailure(res, error, 'OAUTH_SYNC_FAILED');
@@ -349,7 +365,7 @@ router.post('/oauth/google', async (req, res) => {
 
 router.post('/logout', async (req, res) => {
   try {
-    const apiKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+    const apiKey = await resolveActiveApiKey(prisma, req.headers.authorization, { allowUnacceptedTerms: true });
     if (!apiKey) return res.status(401).json({ error: 'INVALID_API_KEY' });
     await prisma.apiKey.update({
       where: { id: apiKey.id },
