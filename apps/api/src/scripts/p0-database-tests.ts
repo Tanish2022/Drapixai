@@ -122,7 +122,9 @@ async function main() {
     if (userIds.length) {
       await prisma.tryOnResult.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.apiKey.deleteMany({ where: { userId: { in: userIds } } });
-      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      // Do not disable immutable-assent triggers for fixture cleanup. The
+      // caller owns this disposable database and must destroy it afterwards.
+      await prisma.user.deleteMany({ where: { id: { in: userIds }, termsAcceptances: { none: {} } } });
     }
     if (previousUploadRoot === undefined) delete process.env.DRAPIXAI_UPLOAD_DIR;
     else process.env.DRAPIXAI_UPLOAD_DIR = previousUploadRoot;
