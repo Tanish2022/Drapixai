@@ -59,6 +59,28 @@ in plaintext.
    `/run/secrets/drapixai-internal-ca.pem` in the API container. Configure the GPU
    reverse proxy with a certificate for `drapixai-ai.staging.internal`.
 
+   Compose mounts the host files `deploy/staging/private/drapixai-internal-ca.pem`,
+   `drapixai-ai-client.crt` and `drapixai-ai-client.key`; the CA private key must
+   remain with its issuer. After the actual staging API JSON and all three TLS
+   files have been provisioned, prepare their private Linux ownership before
+   starting the API:
+
+   ```bash
+   sudo python3 deploy/staging/prepare-secret-permissions.py
+   sudo python3 deploy/staging/prepare-secret-permissions.py --check
+   ```
+
+   This validates all four regular, single-link files first, then sets them to
+   UID/GID 65532 with mode `0400` and protects the directory as root-owned `0700`.
+   It changes metadata only. Database-bootstrap, Redis and other files keep their
+   own ownership and contents. Subsequent secret edits require the approved
+   sudo/secret-manager workflow and another permission check; the generator's
+   `--force` remains unsuitable for rotating an installed environment. New MFA
+   seeds use canonical Base32; enroll and verify the operator before launch.
+   This procedure does not validate TLS chains or turn generated SMTP/AWS
+   placeholder values into working provider credentials. Supply and verify the
+   real isolated provider configuration before full-server staging tests.
+
 5. On the GPU host, follow `deploy/workstation/internal-proxy/README.md` to bind Nginx only to its VPN IP and require the API client certificate.
 
 6. Put the generated AI Redis password and service token on the GPU host through

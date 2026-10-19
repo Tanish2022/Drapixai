@@ -81,6 +81,18 @@ try {
   for (const role of ['api', 'web']) assert.equal(writableReport.images[role].imageId, report.images[role].imageId);
   report.writablePathsFixture = { sha256: crypto.createHash('sha256').update(writableBytes).digest('hex'), reportJson: writableBytes.toString('utf8') };
   report.checks.push('resolved-production-and-staging-tmpfs-ownership-writes-and-negative-controls');
+  const secretInstall = spawnSync(process.execPath, [path.join(root, 'scripts/verify-staging-secret-installation.mjs'), report.images.api.imageId], {
+    cwd: root, encoding: 'utf8', windowsHide: true, timeout: 300000, maxBuffer: 2 * 1024 * 1024,
+  });
+  assert.equal(secretInstall.status, 0, secretInstall.error?.message || secretInstall.stderr || secretInstall.stdout || 'Secret installation fixture failed');
+  const secretSummary = JSON.parse(secretInstall.stdout.trim().split('\n').at(-1));
+  assert.equal(secretSummary.passed, true); assert.equal(secretSummary.checks, 13);
+  const secretPath = path.resolve(root, secretSummary.evidence);
+  assert.ok(secretPath.startsWith(path.join(root, 'runtime/launch-evidence') + path.sep));
+  const secretBytes = fs.readFileSync(secretPath), secretReport = JSON.parse(secretBytes);
+  assert.equal(secretReport.passed, true); assert.equal(secretReport.apiImageId, report.images.api.imageId);
+  report.secretInstallationFixture = { sha256: crypto.createHash('sha256').update(secretBytes).digest('hex'), reportJson: secretBytes.toString('utf8') };
+  report.checks.push('private-staging-secret-installation-retry-and-generated-totp-parity');
   docker(['network', 'create', '--internal', '--label', 'drapixai.purpose=disposable-edge-runtime-test', network]);
   networkCreated = true;
   docker(['run', '-d', '--name', database, '--network', network, '--label', 'drapixai.purpose=disposable-edge-runtime-test',
