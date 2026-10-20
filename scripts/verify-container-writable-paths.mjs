@@ -14,6 +14,7 @@ const evidence = path.join(root, 'runtime/launch-evidence');
 fs.mkdirSync(evidence, { recursive: true });
 const emptyEnv = path.join(evidence, `empty-compose-env-${id}`);
 fs.writeFileSync(emptyEnv, '');
+const modelRoot = fs.mkdtempSync(path.join(evidence, 'compose-model-'));
 const output = path.join(evidence, `edge-writable-paths-${id}.json`);
 const report = { passed: false, scope: 'Docker-resolved production/staging template tmpfs settings against actual non-root images in disposable networkless containers; not live deployment or full server startup', source: {}, images: {}, checks: [] };
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -41,14 +42,26 @@ try {
     assert.ok(image.Config.User && !['root', '0'].includes(image.Config.User));
     report.images[role] = { imageId: image.Id, configuredUser: image.Config.User, revision: image.Config.Labels?.['org.opencontainers.image.revision'] || null };
   }
-  const env = { ...process.env, DRAPIXAI_API_RELEASE_IMAGE: report.images.api.imageId, DRAPIXAI_WEB_RELEASE_IMAGE: report.images.web.imageId,
+  // Never inspect a real deployment env file, even on Compose versions which
+  // validate required env_file paths before applying --no-env-resolution.
+  // Resolve byte-identical templates in an owned mirror with empty fixture files.
+  fs.mkdirSync(path.join(modelRoot, 'deploy/env'), { recursive: true });
+  for (const name of ['api.production.env', 'web.production.env', 'api.staging.env', 'web.staging.env']) {
+    fs.writeFileSync(path.join(modelRoot, 'deploy/env', name), '');
+  }
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('COMPOSE_'))), DRAPIXAI_API_RELEASE_IMAGE: report.images.api.imageId, DRAPIXAI_WEB_RELEASE_IMAGE: report.images.web.imageId,
     DRAPIXAI_POSTGRES_IMAGE: 'postgres:16-alpine', DRAPIXAI_REDIS_IMAGE: 'redis:7-alpine', DRAPIXAI_TRYON_INTAKE_ENABLED: '0',
     DRAPIXAI_REDIS_PASSWORD: 'synthetic-compose-model-only', DRAPIXAI_INTERNAL_TLS_SECRETS_DIR: '/synthetic-not-mounted', DRAPIXAI_STAGING_API_PORT: '18000', DRAPIXAI_STAGING_WEB_PORT: '13000' };
   for (const source of ['deploy/docker-compose.edge.yml', 'deploy/staging/docker-compose.edge.yml']) {
-    report.source[source] = hash(fs.readFileSync(path.join(root, source)));
-    // No .env or service env-file is read. Docker resolves the real templates
-    // using only these synthetic interpolation values; no service is started.
-    const model = JSON.parse(docker(['compose', '--env-file', emptyEnv, '-f', path.join(root, source), 'config', '--no-env-resolution', '--format', 'json'], env));
+    const bytes = fs.readFileSync(path.join(root, source));
+    report.source[source] = hash(bytes);
+    const mirror = path.join(modelRoot, source);
+    fs.mkdirSync(path.dirname(mirror), { recursive: true });
+    fs.writeFileSync(mirror, bytes);
+    assert.equal(hash(fs.readFileSync(mirror)), report.source[source]);
+    // Only the isolated empty files and synthetic interpolation values exist
+    // here; no actual deployment secrets are read and no service is started.
+    const model = JSON.parse(docker(['compose', '--env-file', emptyEnv, '-f', mirror, 'config', '--no-env-resolution', '--format', 'json'], env));
     for (const [role, target] of [['api', '/app/apps/api/uploads'], ['web', '/app/apps/web/.next/cache']]) {
       const service = model.services[role];
       assert.equal(service.image, report.images[role].imageId);
@@ -66,6 +79,7 @@ try {
       }
     }
   }
+  report.composeModelScope = 'Byte-identical templates resolved in an isolated mirror with four empty fixture env files; no deployment env files read';
   assert.equal(report.checks.length, 8); report.passed = true;
 } catch (error) { report.failure = String(error.message); process.exitCode = 1; }
 finally {
@@ -75,6 +89,9 @@ finally {
     if (!/^[a-f0-9]{12,64}$/.test(cid) || invoke(['rm', '-fv', cid]).status !== 0) { report.passed = false; report.cleanupFailure = 'Cannot remove owned fixture container'; process.exitCode = 1; }
   }
   fs.rmSync(emptyEnv, { force: true });
+  assert.equal(path.dirname(modelRoot), evidence);
+  assert.ok(path.basename(modelRoot).startsWith('compose-model-'));
+  fs.rmSync(modelRoot, { recursive: true, force: true });
   fs.writeFileSync(output, JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ passed: report.passed, checks: report.checks.length, evidence: path.relative(root, output), failure: report.failure || report.cleanupFailure || null }));
 }
