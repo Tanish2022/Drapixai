@@ -58,9 +58,7 @@ AUDIT_PYTHON="$AUDIT_VENV/bin/python"
   --requirement "$REQUIREMENTS" \
   --progress-spinner off \
   --ignore-vuln PYSEC-2026-2274 \
-  --ignore-vuln GHSA-55v6-g8pm-pw4c \
-  --ignore-vuln PYSEC-2026-3447 \
-  --ignore-vuln GHSA-rrmf-rvhw-rf47
+  --ignore-vuln GHSA-55v6-g8pm-pw4c
 
 CANDIDATE_PYTHON="$CANDIDATE_VENV/bin/python"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -68,13 +66,22 @@ export PIP_DISABLE_PIP_VERSION_CHECK=1
 echo "Installing audited CUDA 12.6 core into isolated venv: $CANDIDATE_VENV"
 "$CANDIDATE_PYTHON" -m pip install \
   --index-url "$PYTORCH_INDEX" \
-  torch==2.12.1 \
-  torchvision==0.27.1 \
+  torch==2.13.0 \
+  torchvision==0.28.0 \
   xformers==0.0.35
 
 echo "Installing the remaining exact DrapixAI candidate pins from PyPI."
 "$CANDIDATE_PYTHON" -m pip install -r "$REQUIREMENTS"
 "$CANDIDATE_PYTHON" -m pip check
+
+# The pre-install requirements audit resolves PyPI's reference graph. Audit the
+# actual CUDA-index installation as well; it can have different dependencies.
+candidate_packages="$("$CANDIDATE_PYTHON" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+"$AUDIT_PYTHON" -m pip_audit \
+  --path "$candidate_packages" \
+  --progress-spinner off \
+  --ignore-vuln PYSEC-2026-2274 \
+  --ignore-vuln GHSA-55v6-g8pm-pw4c
 
 DRAPIXAI_SECURITY_REQUIREMENTS="$REQUIREMENTS" \
 DRAPIXAI_SECURITY_REPORT="$CANDIDATE_ROOT/environment-report.json" \
@@ -107,8 +114,12 @@ errors: list[str] = []
 for name, version in expected.items():
     found = metadata.version(name)
     installed[name] = found
-    if found != version:
+    official_cuda_build = name in {"torch", "torchvision"} and found == f"{version}+cu126"
+    if found != version and not official_cuda_build:
         errors.append(f"{name}: found {found}, expected {version}")
+
+if torch.version.cuda != "12.6":
+    errors.append(f"unexpected CUDA runtime: {torch.version.cuda}")
 
 if not torch.cuda.is_available():
     errors.append("torch.cuda.is_available() is false")

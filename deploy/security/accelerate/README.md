@@ -63,7 +63,7 @@ Local Windows verification on 2026-10-16 used existing Torch 2.10.0+cpu in a
 separate virtual environment: both real entry points reproduced traversal before
 the patch, then rejected it with the patch; valid tensor/output comparisons
 passed. Windows skipped Linux-only cases. This is narrower than the production
-Python 3.12 / Torch 2.11 / CUDA 12.8 RTX runtime. Linux CI uses Torch 2.12.1+cpu
+Python 3.12 / Torch 2.11 / CUDA 12.8 RTX runtime. Linux CI uses Torch 2.13.0+cpu
 and must supply its own results, including FIFO and symlink rejection.
 
 ## Remaining approval and limits

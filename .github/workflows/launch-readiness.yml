@@ -323,8 +323,6 @@ jobs:
           --progress-spinner off
           --ignore-vuln PYSEC-2026-2274
           --ignore-vuln GHSA-55v6-g8pm-pw4c
-          --ignore-vuln PYSEC-2026-3447
-          --ignore-vuln GHSA-rrmf-rvhw-rf47
 
   ai-checkpoint-candidate:
     runs-on: ubuntu-22.04
@@ -348,7 +346,7 @@ jobs:
             --output-dir runtime/security-candidate/accelerate/review
       - name: Install CPU-only loader test runtime
         run: |
-          python -m pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install \
             runtime/security-candidate/accelerate/accelerate-1.11.0-py3-none-any.whl \
             huggingface_hub==1.23.0 safetensors==0.8.0 psutil==7.1.3
