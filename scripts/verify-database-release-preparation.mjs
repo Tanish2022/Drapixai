@@ -18,7 +18,7 @@ const redact = s => String(s || '').replaceAll(password, '[redacted]').replaceAl
 const run = (exe, args, options = {}) => spawnSync(exe, args, { cwd: root, env, encoding: 'utf8', windowsHide: true, timeout: 60_000, maxBuffer: 2*1024*1024, ...options });
 const docker = (args, options) => run('docker', args, options);
 const must = r => { assert.equal(r.status, 0, redact(r.error?.message || r.stderr || r.stdout)); return r.stdout.trim(); };
-const sql = (text, role = 'neondb_owner', database = 'drapixai_staging') => must(docker(['exec', '-i', name, 'psql', '-X', '-q', '-t', '-A', '-U', role, '-d', database, '-v', 'ON_ERROR_STOP=1'], { input: text }));
+const sql = (text, role = 'neondb_owner', database = 'drapixai_staging') => must(docker(['exec', '-i', name, 'psql', '-h', '127.0.0.1', '-X', '-q', '-t', '-A', '-U', role, '-d', database, '-v', 'ON_ERROR_STOP=1'], { input: text }));
 const policy = (file, role = 'neondb_owner') => sql(fs.readFileSync(path.join(root, file), 'utf8'), role);
 const local = readMigrationFiles(); assert.equal(local.length, 15); // Intentional reviewed release boundary, update after review.
 const report = { passed: false, scope: 'Owned disposable PostgreSQL only; actual Prisma 12-to-15 migration, seeded data, backup/restore and both runtime policies; no live credentials/providers/GPU', checks: [], sourceSha256: {} };
@@ -28,7 +28,7 @@ try {
   const image = 'postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4';
   const metadata = JSON.parse(must(docker(['image', 'inspect', image])))[0]; report.image = { reference: image, id: metadata.Id };
   must(docker(['run', '--pull=never', '-d', '--name', name, '--label', label, '--memory', '768m', '--cpus', '2', '--pids-limit', '128', '--tmpfs', '/var/lib/postgresql/data:rw,size=384m', '-p', '127.0.0.1::5432', '-e', 'POSTGRES_PASSWORD', '-e', 'POSTGRES_DB=drapixai_staging', metadata.Id], { env: { ...env, POSTGRES_PASSWORD: password } }));
-  let ready = false; for (let n=0;n<60;n++) { if(docker(['exec', name, 'pg_isready', '-U', 'postgres', '-d', 'drapixai_staging']).status===0){ready=true;break;} await delay(250); } assert.ok(ready);
+  let ready = false; for (let n=0;n<60;n++) { const probe=docker(['exec', name, 'psql', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'drapixai_staging', '-t', '-A', '-c', 'SELECT 1']); if(probe.status===0&&probe.stdout.trim()==='1'){ready=true;break;} await delay(250); } assert.ok(ready);
   sql(`CREATE ROLE neondb_owner LOGIN CREATEROLE NOINHERIT PASSWORD '${password}'; CREATE ROLE drapixai_staging LOGIN SUPERUSER; CREATE ROLE drapixai_staging_api LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD '${runtimePassword}'; ALTER DATABASE drapixai_staging OWNER TO neondb_owner; CREATE DATABASE neondb OWNER neondb_owner;`, 'postgres');
   const address = must(docker(['port', name, '5432/tcp'])); assert.match(address, /^127\.0\.0\.1:\d+$/);
   const url = `postgresql://neondb_owner:${password}@${address}/drapixai_staging`;

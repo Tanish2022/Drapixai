@@ -383,6 +383,17 @@ jobs:
         env:
           DRAPIXAI_ZAP_OFFLINE_FIXTURE_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:0075662e5c287cf0a68caebabbfea872e5dc461912ad6d7345fa02a290d0ccb6
         run: python deploy/security/test_zap_offline_runtime.py
+      - name: Retain synthetic offline fixture diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: offline-fixture-evidence-${{ github.sha }}
+          path: |
+            runtime/launch-evidence/security-tooling-task2-20261030/offline-runtime.json
+            runtime/launch-evidence/security-tooling-task2-20261030/zap-offline-*/out/*
+            runtime/launch-evidence/security-tooling-task2-20261030/zap-timeout-*/out/scanner.log
+          if-no-files-found: error
+          retention-days: 30
 
   container-scan:
     runs-on: ubuntu-22.04

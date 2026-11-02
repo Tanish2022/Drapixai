@@ -26,6 +26,12 @@ def run():
     out=root/"runtime/launch-evidence/security-tooling-task2-20261030"
     out.mkdir(parents=True,exist_ok=True)
     evidence={"passed":False,"scope":"Actual offline ZAP with generated HAR; no staging capture, authorization or independent acceptance", "image":image,"checks":[],"containersRemoved":False}
+    # Linux CI may own its 0700 temporary directory as UID 1001. Using the
+    # image's usual UID 1000 cannot read/write that bind mount. Windows lacks
+    # getuid/getgid and keeps the existing Docker Desktop fixture adaptation.
+    fixture_uid=os.getuid() if hasattr(os,"getuid") else 1000
+    fixture_gid=os.getgid() if hasattr(os,"getgid") else 1000
+    if fixture_uid==0:raise ValueError("Run the offline fixture as a non-root host user")
     checked=zap.checked;owned=[];inspected=set()
     def observe(command,**kwargs):
         result=checked(command,**kwargs)
@@ -54,7 +60,7 @@ def run():
         return {"log":{"version":"1.2","creator":{"name":"synthetic offline fixture","version":"1"},"entries":[{"startedDateTime":now,"time":1,"request":{"method":"GET","url":"https://staging.fixture.invalid/v1/health","httpVersion":"HTTP/1.1","headers":[{"name":"Host","value":"staging.fixture.invalid"}],"cookies":[],"queryString":[],"headersSize":-1,"bodySize":0},"response":{"status":200,"statusText":"OK","httpVersion":"HTTP/1.1","headers":[{"name":k,"value":v}for k,v in headers.items()],"cookies":[],"content":{"size":11,"mimeType":"application/json","text":base64.b64encode(b'{"ok":true}').decode(),"encoding":"base64"},"redirectURL":"","headersSize":-1,"bodySize":11},"cache":{},"timings":{"send":0,"wait":1,"receive":0}}]}}
     good={"Content-Type":"application/json","Content-Length":"11","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; frame-ancestors 'none'; base-uri 'none'","Strict-Transport-Security":"max-age=63072000; includeSubDomains","X-Frame-Options":"DENY","Cache-Control":"no-cache, no-store, must-revalidate","Pragma":"no-cache","Expires":"0","Referrer-Policy":"no-referrer","Permissions-Policy":"camera=(), microphone=(), geolocation=()"}
     try:
-        with patch.object(zap,"DOCKER",["docker"]),patch.object(zap,"checked",side_effect=observe),patch.object(zap.os,"getuid",return_value=1000,create=True),patch.object(zap.os,"getgid",return_value=1000,create=True):
+        with patch.object(zap,"DOCKER",["docker"]),patch.object(zap,"checked",side_effect=observe),patch.object(zap.os,"getuid",return_value=fixture_uid,create=True),patch.object(zap.os,"getgid",return_value=fixture_gid,create=True):
             for name,headers,should_pass in (("clean-json",good,True),("missing-nosniff",{k:v for k,v in good.items()if k!="X-Content-Type-Options"},False)):
                 work=Path(tempfile.mkdtemp(prefix="zap-offline-",dir=out));(work/"out").mkdir()
                 (work/"traffic.har").write_text(json.dumps(har(headers)),encoding="utf-8")

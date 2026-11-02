@@ -34,7 +34,7 @@ try {
  const redis=image('redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2');
  must(docker(['run','--pull=never','-d','--name',pgName,'--label',label,'--memory','512m','--cpus','2','--pids-limit','128','--tmpfs','/var/lib/postgresql/data:rw,size=256m','-p','127.0.0.1::5432','-e','POSTGRES_PASSWORD','-e',`POSTGRES_DB=${database}`,pg],{env:{...env,POSTGRES_PASSWORD:password}}));
  let ready=false;
- for(let i=0;i<60;i++){if(docker(['exec',pgName,'pg_isready','-U','postgres','-d',database]).status===0){ready=true;break;}await delay(300);}assert.ok(ready);
+ for(let i=0;i<60;i++){const probe=docker(['exec',pgName,'psql','-h','127.0.0.1','-U','postgres','-d',database,'-t','-A','-c','SELECT 1']);if(probe.status===0&&probe.stdout.trim()==='1'){ready=true;break;}await delay(300);}assert.ok(ready);
  const pgAddress=must(docker(['port',pgName,'5432/tcp']));assert.match(pgAddress,/^127\.0\.0\.1:\d+$/);
  const dbUrl=`postgresql://postgres:${password}@${pgAddress}/${database}?connection_limit=4&pool_timeout=10`;
  const migrations=path.join(root,'apps/api/prisma/migrations');
