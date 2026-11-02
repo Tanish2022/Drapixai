@@ -27,14 +27,12 @@ services:
   redis:
     image: ${DRAPIXAI_REDIS_IMAGE:?set DRAPIXAI_REDIS_IMAGE}
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - exec redis-server --save '' --appendonly no --requirepass "$$(cat /run/secrets/redis_password)"
+    command: ["sh", "/opt/drapixai/private-redis.sh", "server", "/run/secrets/redis_password"]
     volumes:
       - ./private/redis_password:/run/secrets/redis_password:ro
+      - ../scripts/private-redis.sh:/opt/drapixai/private-redis.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      test: ["CMD", "sh", "/opt/drapixai/private-redis.sh", "health", "/run/secrets/redis_password"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -71,7 +69,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
-      - /app/apps/api/uploads:size=256m,mode=0700,uid=1000,gid=1000
+      - /app/apps/api/uploads:size=256m,mode=0700,uid=65532,gid=65532
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -85,6 +83,8 @@ services:
     restart: unless-stopped
     env_file:
       - ../env/web.staging.env
+    environment:
+      DRAPIXAI_PUBLIC_INDEXING: "0"
     depends_on:
       - api
     ports:
@@ -92,7 +92,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /app/apps/web/.next/cache:size=128m,mode=0700,uid=1000,gid=1000
+      - /app/apps/web/.next/cache:size=128m,mode=0700,uid=65532,gid=65532
     security_opt:
       - no-new-privileges:true
     cap_drop:

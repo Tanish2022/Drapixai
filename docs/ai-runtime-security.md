@@ -1,5 +1,15 @@
 # DrapixAI AI Runtime Security Gate
 
+## 2 November 2026 dependency refresh
+
+The Task 8 assessment (operational evidence retained privately) records fresh
+direct-pin advisory matches, including urllib3 2.7.0, MessagePack 1.2.1 and Pillow
+12.3.0. The versions described below are historical remediation choices, not
+current clearance. Serving/candidate requirements and existing exceptions remain
+unchanged. Resolve applicability and fixes in an isolated candidate, then obtain
+resolved dependency/image audits and Standard GPU quality/parity evidence before
+promotion. Do not treat the API/web Node update as AI runtime approval.
+
 ## Current production rule
 
 DrapixAI must load CatVTON, Stable Diffusion inpainting, and the VAE from local directories prepared from immutable Hugging Face revisions. Public requests may provide only person and garment images; they must never provide model IDs, checkpoint paths, custom pipelines, or serialized model files.

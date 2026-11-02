@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
+const { publicIndexingEnabled } = require('./app/lib/discovery-policy.cjs');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -12,6 +13,7 @@ const privateNoIndexSources = [
   '/admin',
   '/admin/:path*',
   '/admin-access',
+  '/auth/terms',
   '/dashboard',
   '/dashboard/:path*',
   '/onboarding',
@@ -20,6 +22,7 @@ const privateNoIndexSources = [
   '/settings/:path*',
   '/sdk-install',
   '/subscription',
+  '/shopify/connect',
 ];
 
 const securityHeaders = [
@@ -40,11 +43,19 @@ const nextConfig = {
     return [
       {
         source: '/:path*',
-        headers: securityHeaders,
+        headers: [...securityHeaders, ...(!publicIndexingEnabled() ? privateNoIndexHeaders : [])],
       },
       ...privateNoIndexSources.map((source) => ({
         source,
         headers: privateNoIndexHeaders,
+      })),
+      ...['/shopify/connect', '/auth/:path*'].map((source) => ({
+        source,
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store' },
+          ...privateNoIndexHeaders,
+        ],
       })),
     ];
   },

@@ -54,7 +54,7 @@ export default function PricingPage() {
               <div className="mt-12">
                 <p className="font-serif text-7xl leading-none text-[#102018]">{TRIAL_TRYONS}</p>
                 <p className="mt-3 text-xl font-bold">trial try-ons</p>
-                <p className="mt-4 max-w-md leading-7 text-[#385345]">No credit card required. Use the trial for product preparation, internal previews, and quality review before storefront rollout.</p>
+                <p className="mt-4 max-w-md leading-7 text-[#385345]">No credit card required. This allowance is subject to approved access and service availability. Creating a workspace does not activate generation or paid billing.</p>
               </div>
               <Link href="/auth/register" className="mt-10 inline-flex h-14 w-fit items-center gap-2 bg-[#172019] px-6 py-4 font-semibold text-white hover:bg-[#26352a]">Start the trial <ArrowRight className="h-4 w-4" /></Link>
             </div>
@@ -139,7 +139,7 @@ export default function PricingPage() {
                   <span key={feature} className="flex items-center gap-2 border-t border-white/15 py-3 text-sm text-[#d4ddd6]"><Check className="h-4 w-4 text-[#8cd3b3]" />{feature}</span>
                 ))}
               </div>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry" className="mt-8 inline-flex h-12 items-center gap-2 border border-white/30 px-5 font-semibold hover:bg-white/10"><Mail className="h-4 w-4" />Contact sales</a>
+              <a href="mailto:support@drapixai.com?subject=DrapixAI%20Enterprise%20Sales%20Inquiry" className="mt-8 inline-flex h-12 items-center gap-2 border border-white/30 px-5 font-semibold hover:bg-white/10"><Mail className="h-4 w-4" />Contact sales</a>
             </div>
           </div>
         </section>

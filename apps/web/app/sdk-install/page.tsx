@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Code2, Copy, ExternalLink, KeyRound, RefreshCw, ShieldCheck, Store } from 'lucide-react';
 import { PUBLIC_API_BASE_URL, SHOPIFY_APP_INSTALL_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
+import FeedbackMessage, { LoadFailure, useFeedback } from '@/app/components/FeedbackMessage';
+import { requestJson, userError, WebsiteError, copyText as copyToClipboard, getApiErrorMessage, type FeedbackTone } from '@/app/lib/user-feedback';
 
 type UsageData = {
   email?: string | null;
@@ -59,13 +61,16 @@ export default function SdkInstallPage() {
   const [shopify, setShopify] = useState<ShopifyInstallation | null>(null);
   const [shopifyPreparation, setShopifyPreparation] = useState<ShopifyPreparation>({ counts: {}, failures: [] });
   const [shopifyMessage, setShopifyMessage] = useState('');
-  const [toast, setToast] = useState('');
+  const [shopifyTone, setShopifyTone] = useState<FeedbackTone>('info');
+  const [shopifyBusy, setShopifyBusy] = useState(false);
+  const { feedback, notify: setToast, dismiss, run: runKeyAction, busy: keyBusy } = useFeedback();
+  const [loadError, setLoadError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   const pageClass = 'min-h-screen bg-[#fbfcf9] text-[#172019]';
   const cardClass = 'border-t border-black/10 bg-white p-6 sm:p-8';
   const panelClass = 'border border-black/10 bg-[#f2f5f1] p-4';
-  const mutedTextClass = 'text-[#68736b]';
+  const mutedTextClass = 'text-[#59665e]';
   const strongTextClass = 'text-[#172019]';
   const actionClass = 'border border-black/15 bg-white px-4 py-2 text-sm font-bold text-[#172019] hover:bg-[#f1f4f0]';
 
@@ -73,35 +78,20 @@ export default function SdkInstallPage() {
     let active = true;
     const bootstrap = async () => {
       try {
-        const sessionResponse = await fetch('/api/dashboard/session', { cache: 'no-store' });
-        if (!sessionResponse.ok) {
-          router.replace('/auth/login?next=/sdk-install');
-          return;
-        }
-        const session = (await sessionResponse.json().catch(() => null)) as { apiKey?: string } | null;
-        const nextApiKey = session?.apiKey?.trim() || '';
-        if (!nextApiKey) {
-          router.replace('/auth/login?next=/sdk-install');
-          return;
-        }
-
-        const [summaryResponse, garmentsResponse, shopifyResponse, preparationResponse, keyStatusResponse] = await Promise.all([
-          fetch('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' }),
-          fetch('/api/dashboard/proxy/sdk/garments', { cache: 'no-store' }),
-          fetch('/api/dashboard/proxy/shopify/status', { cache: 'no-store' }),
-          fetch('/api/dashboard/proxy/shopify/preparation', { cache: 'no-store' }),
-          fetch('/api/dashboard/proxy/analytics/api-key/status', { cache: 'no-store' }),
+        const session = await requestJson('/api/dashboard/session', { cache: 'no-store' });
+        if (session.ok !== true) throw new Error('INVALID_SESSION_RESPONSE');
+        const optionalShopify = async (path: string, missing: unknown) => requestJson(`/api/dashboard/proxy/shopify/${path}`, { cache: 'no-store' }).catch(error => {
+          if (error instanceof WebsiteError && error.status === 404) return missing;
+          throw error;
+        });
+        const [summary, garmentPayload, shopifyPayload, preparationPayload, keyStatusPayload] = await Promise.all([
+          requestJson<UsageData>('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' }),
+          requestJson('/api/dashboard/proxy/sdk/garments', { cache: 'no-store' }),
+          optionalShopify('status', { installation: null }),
+          optionalShopify('preparation', { counts: {}, failures: [] }),
+          requestJson('/api/dashboard/proxy/analytics/api-key/status', { cache: 'no-store' }),
         ]);
-
-        if (!summaryResponse.ok) {
-          throw new Error('SUMMARY_FAILED');
-        }
-
-        const summary = (await summaryResponse.json().catch(() => null)) as UsageData | null;
-        const garmentPayload = (await garmentsResponse.json().catch(() => ({ items: [] }))) as { items?: GarmentItem[] };
-        const shopifyPayload = (await shopifyResponse.json().catch(() => null)) as { installation?: ShopifyInstallation | null } | null;
-        const preparationPayload = (await preparationResponse.json().catch(() => null)) as ShopifyPreparation | null;
-        const keyStatusPayload = (await keyStatusResponse.json().catch(() => null)) as { exists?: boolean } | null;
+        if (typeof summary.planName !== 'string' || typeof summary.quotaRemaining !== 'number' || !Array.isArray(garmentPayload.items)) throw new Error('INVALID_SETUP_RESPONSE');
         if (!active) return;
 
         setUsage(summary);
@@ -109,9 +99,10 @@ export default function SdkInstallPage() {
         setShopify(shopifyPayload?.installation || null);
         setShopifyPreparation(preparationPayload || { counts: {}, failures: [] });
         setStorefrontKeyExists(Boolean(keyStatusPayload?.exists));
-      } catch {
+      } catch (error) {
         if (active) {
-          router.replace('/auth/login?next=/sdk-install');
+          if (error instanceof WebsiteError && error.status === 401) router.replace('/auth/login?next=/sdk-install');
+          else setLoadError(userError(error, 'We could not load store installation details. Please try again.'));
         }
       } finally {
         if (active) setIsLoading(false);
@@ -123,12 +114,6 @@ export default function SdkInstallPage() {
       active = false;
     };
   }, [router]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(''), 2600);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
 
   const confirmedGarments = garments.filter((garment) => garment.confirmedProductId);
   const sampleProductId = confirmedGarments[0]?.confirmedProductId || 'your-product-id';
@@ -227,57 +212,58 @@ export default function ProductTryOn() {
   };
 
   const copyText = async (value: string, message: string) => {
-    await navigator.clipboard.writeText(value);
-    setToast(message);
+    try { await copyToClipboard(value); setToast(message, 'success'); }
+    catch (error) { setToast(userError(error), 'error'); }
   };
 
-  const rotateStorefrontKey = async () => {
-    const response = await fetch('/api/dashboard/proxy/analytics/api-key/rotate', { method: 'POST' });
-    const payload = (await response.json().catch(() => null)) as { apiKey?: string } | null;
-    const nextKey = payload?.apiKey?.trim() || '';
-    if (!response.ok || !nextKey) {
-      setToast('Unable to create the storefront key right now.');
-      return;
-    }
-    setStorefrontApiKey(nextKey);
-    setStorefrontKeyExists(true);
-    setToast(storefrontKeyExists ? 'Storefront key rotated. Update your installed widget.' : 'Storefront key created. Copy it now.');
-  };
+  const rotateStorefrontKey = async () => runKeyAction(async () => {
+    try {
+      const payload = await requestJson('/api/dashboard/proxy/analytics/api-key/rotate', { method: 'POST' });
+      if (typeof payload.apiKey !== 'string' || !payload.apiKey.trim()) throw new Error('INVALID_KEY_RESPONSE');
+      setStorefrontApiKey(payload.apiKey.trim()); setStorefrontKeyExists(true);
+      setToast(storefrontKeyExists ? 'Storefront key rotated. Update your installed widget.' : 'Storefront key created. Copy it now.', 'success');
+    } catch (error) { setToast(userError(error), 'error'); }
+  });
 
   const syncShopify = async () => {
+    if (shopifyBusy) return;
+    setShopifyBusy(true); setShopifyTone('info');
     setShopifyMessage('Syncing Shopify products and variants...');
-    const response = await fetch('/api/dashboard/proxy/shopify/sync', { method: 'POST' });
-    const payload = await response.json().catch(() => null) as { error?: string; eligible?: number; queued?: number; skipped?: number } | null;
-    if (!response.ok) {
-      setShopifyMessage(payload?.error || 'Shopify sync failed.');
-      return;
-    }
-    setShopifyMessage(`Sync complete: ${payload?.eligible || 0} eligible, ${payload?.queued || 0} queued, ${payload?.skipped || 0} skipped.`);
-    const statusResponse = await fetch('/api/dashboard/proxy/shopify/status', { cache: 'no-store' });
-    const statusPayload = await statusResponse.json().catch(() => null) as { installation?: ShopifyInstallation | null } | null;
-    setShopify(statusPayload?.installation || null);
+    try {
+      const payload = await requestJson('/api/dashboard/proxy/shopify/sync', { method: 'POST' }, { timeoutMs: 120000 });
+      if (payload.status === 'pending') { setShopifyMessage('Your sync request is pending. Check its status shortly; no need to submit it again.'); return; }
+      if (typeof payload.eligible !== 'number' || typeof payload.queued !== 'number') throw new Error('INVALID_SYNC_RESPONSE');
+      setShopifyTone('success');
+      setShopifyMessage(`Sync complete: ${payload.eligible} eligible, ${payload.queued} queued, ${payload.skipped || 0} skipped.`);
+    } catch (error) { setShopifyTone('error'); setShopifyMessage(userError(error)); }
+    finally { setShopifyBusy(false); }
   };
 
   const prepareShopify = async () => {
+    if (shopifyBusy) return;
+    setShopifyBusy(true); setShopifyTone('info');
     setShopifyMessage('Preparing the next Shopify garment batch...');
-    const response = await fetch('/api/dashboard/proxy/shopify/prepare', {
+    try {
+    const payload = await requestJson('/api/dashboard/proxy/shopify/prepare', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ limit: 3 }),
-    });
-    const payload = await response.json().catch(() => null) as { error?: string; message?: string; busy?: boolean; processed?: number } | null;
-    if (!response.ok) {
-      setShopifyMessage(payload?.message || payload?.error || 'Garment preparation is temporarily unavailable.');
-      return;
-    }
-    setShopifyMessage(payload?.busy
-      ? 'Another preparation batch is already running. Queued products remain safe and will be handled in order.'
-      : `Preparation batch complete: ${payload?.processed || 0} product(s) processed. Review prepared garments before publishing.`);
-    const preparationResponse = await fetch('/api/dashboard/proxy/shopify/preparation', { cache: 'no-store' });
-    const preparationPayload = await preparationResponse.json().catch(() => null) as ShopifyPreparation | null;
-    setShopifyPreparation(preparationPayload || { counts: {}, failures: [] });
+    }, { timeoutMs: 120000 });
+    if (payload.paused) setShopifyMessage('Preparation is paused. Please check service status and try again later.');
+    else if (payload.busy) setShopifyMessage('Preparation is busy or waiting for review. Check product status; contact support if it does not progress.');
+    else if (Array.isArray(payload.items)) {
+      const ready = payload.items.filter((item: {status: string}) => item.status === 'review_required').length;
+      const pending = payload.items.length - ready;
+      setShopifyTone(pending ? 'info' : 'success');
+      setShopifyMessage(`${ready} product(s) prepared for review. ${pending} need retry or support review. Check their statuses before publishing.`);
+    } else throw new Error('INVALID_PREPARATION_RESPONSE');
+    const preparation = await requestJson('/api/dashboard/proxy/shopify/preparation', { cache: 'no-store' });
+    setShopifyPreparation(preparation);
+    } catch (error) { setShopifyTone('error'); setShopifyMessage(userError(error)); }
+    finally { setShopifyBusy(false); }
   };
 
+  if (loadError) return <LoadFailure title="Store installation details are unavailable" message={loadError} />;
   if (isLoading || !usage) {
     return (
       <main className={`${pageClass} flex items-center justify-center px-6`}>
@@ -301,11 +287,7 @@ export default function ProductTryOn() {
   return (
     <main className={pageClass}>
       <WorkspaceHeader active="sdk" />
-      {toast ? (
-        <div className="fixed right-6 top-6 z-50 border border-[#9bb6a8] bg-[#eaf0e9] px-4 py-3 text-sm font-semibold text-[#183f32] shadow-lg">
-          {toast}
-        </div>
-      ) : null}
+      <div className="mx-auto max-w-[1440px] px-5"><FeedbackMessage feedback={feedback} onDismiss={dismiss} /></div>
       <div className="mx-auto max-w-[1440px] px-5 py-12 sm:px-8 lg:px-12 lg:py-16">
         <div className="mb-12 flex flex-wrap items-end justify-between gap-6 border-b border-black/10 pb-10">
           <div>
@@ -357,17 +339,19 @@ export default function ProductTryOn() {
                   <p className={strongTextClass}>{shopify.shopName || shopify.shopDomain} is connected.</p>
                   <p className={`mt-1 text-sm ${mutedTextClass}`}>Products and variants synchronize automatically. Eligible base-product images are queued for preprocessing and review. Last sync: {shopify.lastSyncedAt ? new Date(shopify.lastSyncedAt).toLocaleString() : 'pending'}.</p>
                   <p className={`mt-2 text-sm ${mutedTextClass}`}>Queued: {shopifyPreparation.counts.queued || 0} | Processing: {shopifyPreparation.counts.processing || 0} | Review: {shopifyPreparation.counts.review_required || 0} | Ready: {shopifyPreparation.counts.ready || 0} | Failed: {shopifyPreparation.counts.failed || 0}</p>
+                  <p className={`mt-2 text-sm ${mutedTextClass}`}>Waiting for capacity: {shopifyPreparation.counts.capacity_wait || 0} | Retry pending: {shopifyPreparation.counts.retry || 0} | Support review needed: {shopifyPreparation.counts.reconciliation_required || 0}</p>
+                  {(shopifyPreparation.counts.reconciliation_required || 0) > 0 && <FeedbackMessage feedback={{ message: 'Some preparation work needs reconciliation before it can resume. Contact support with the affected product reference.', tone: 'error' }} />}
                 </div>
               ) : (
                 <p className={`mt-3 max-w-3xl text-sm ${mutedTextClass}`}>Install DrapixAI through Shopify, approve read-only product access, and return with the catalog connected. DrapixAI can prepare eligible Shopify product images without CSV files, Liquid edits, or uploading the same garment twice; every prepared garment remains review-gated before shoppers can use it.</p>
               )}
-              {shopifyMessage ? <p className="mt-3 text-sm text-[#31725b]">{shopifyMessage}</p> : null}
+              <FeedbackMessage feedback={shopifyMessage ? { message: shopifyMessage, tone: shopifyTone } : null} />
             </div>
             {shopify?.status === 'active' ? (
               <div className="flex flex-wrap gap-3">
                 {shopify.themeEditorUrl ? <a href={shopify.themeEditorUrl} className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]">Add try-on block <ExternalLink className="h-4 w-4" /></a> : null}
-                {(shopifyPreparation.counts.queued || 0) > 0 ? <button type="button" onClick={() => void prepareShopify()} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}><RefreshCw className="h-4 w-4" />Prepare next batch</button> : null}
-                <button type="button" onClick={() => void syncShopify()} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}><RefreshCw className="h-4 w-4" />Sync now</button>
+                {(shopifyPreparation.counts.queued || 0) > 0 ? <button type="button" onClick={() => void prepareShopify()} disabled={shopifyBusy} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}><RefreshCw className="h-4 w-4" />Prepare next batch</button> : null}
+                <button type="button" onClick={() => void syncShopify()} disabled={shopifyBusy} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}><RefreshCw className="h-4 w-4" />Sync now</button>
               </div>
             ) : SHOPIFY_APP_INSTALL_URL ? (
               <a href={SHOPIFY_APP_INSTALL_URL} className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]">Install on Shopify <ExternalLink className="h-4 w-4" /></a>
@@ -488,14 +472,14 @@ export default function ProductTryOn() {
           <div className="flex flex-col md:flex-row gap-3">
             <input
               readOnly
-              value={storefrontApiKey || (storefrontKeyExists ? 'Active storefront key hidden' : 'No storefront key created')}
+              aria-label="Storefront key" value={storefrontApiKey || (storefrontKeyExists ? 'Active storefront key hidden' : 'No storefront key created')}
               className="flex-1 border border-black/15 bg-white px-4 py-3 font-mono text-sm text-[#172019]"
             />
             <button type="button" disabled={!storefrontApiKey} onClick={() => copyText(storefrontApiKey, 'Storefront key copied.')} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}>
               <Copy className="w-4 h-4" />
               Copy key
             </button>
-            <button type="button" onClick={rotateStorefrontKey} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}>
+            <button type="button" onClick={rotateStorefrontKey} disabled={keyBusy} className={`inline-flex items-center justify-center gap-2 ${actionClass}`}>
               <KeyRound className="w-4 h-4" />
               {storefrontKeyExists ? 'Rotate key' : 'Create key'}
             </button>

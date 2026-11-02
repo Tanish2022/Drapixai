@@ -122,6 +122,35 @@ check('invoice subscription lookup supports the current nested Stripe shape', ()
   }), 'sub_nested');
 });
 
+check('unconfigured prices and unsupported subscription items cannot grant a metadata-selected plan', () => {
+  const subscription = {
+    id: 'sub_price_boundary', customer: 'cus_price_boundary', status: 'active',
+    metadata: { drapixai_user_id: '42', plan: 'pro' },
+    items: { data: [{ price: { id: 'price_unknown' }, quantity: 1, current_period_end: 2_000_000_000 }] },
+  };
+  assert.equal(getStripeSubscriptionSnapshot(subscription).plan, null);
+  subscription.items.data[0].price.id = 'price_starterSecure';
+  assert.equal(getStripeSubscriptionSnapshot(subscription).plan, 'starter');
+  assert.equal(getStripeSubscriptionSnapshot({ ...subscription, items: { data: [] } }).plan, null);
+  assert.equal(getStripeSubscriptionSnapshot({ ...subscription, items: { data: [
+    subscription.items.data[0], subscription.items.data[0],
+  ] } }).plan, null);
+  assert.equal(getStripeSubscriptionSnapshot({ ...subscription, items: { data: [
+    { ...subscription.items.data[0], quantity: 2 },
+  ] } }).plan, null);
+});
+
+check('Stripe access requires a recognized active status and a valid period boundary', () => {
+  for (const status of [null, '', 'unknown_state', 'past_due', 'canceled']) {
+    assert.equal(getPlanAccessContext({ planType: 'pro', subscriptionProvider: 'stripe',
+      subscriptionStatus: status, subscriptionCurrentPeriodEndsAt: new Date(Date.now() + 3600000) }).active, false);
+  }
+  for (const end of [null, '', 'invalid']) {
+    assert.equal(getPlanAccessContext({ planType: 'pro', subscriptionProvider: 'stripe',
+      subscriptionStatus: 'active', subscriptionCurrentPeriodEndsAt: end }).active, false);
+  }
+});
+
 check('paid quota period follows the exact monthly provider boundary', () => {
   const period = getUsagePeriodBounds({
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -189,7 +218,8 @@ check('checkout cannot activate access and webhooks own entitlement changes', ()
   assert(!checkoutBlock.includes('planType:'));
   assert(subscriptionStart >= 0);
   assert(route.includes('planType: active ? snapshot.plan'));
-  assert(route.includes("planType: paid ? plan"));
+  assert(route.includes('subscriptions.retrieve(subscriptionId)'));
+  assert(route.includes("status: 'ignored_historical_invoice'"));
   assert(route.includes("status: 'ignored_non_subscription_invoice'"));
   assert(route.includes("throw new Error('BILLING_CUSTOMER_MISMATCH')"));
 });

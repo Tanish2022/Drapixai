@@ -1,5 +1,6 @@
 import assert from 'assert';
 import jwt from 'jsonwebtoken';
+import { CURRENT_TERMS } from '../lib/account-terms';
 import {
   isStorefrontProductAllowed,
   issueGenericStorefrontToken,
@@ -20,6 +21,7 @@ const apiKey = {
 };
 let lastUsedUpdates = 0;
 const prisma = {
+  accountTermsAcceptance: { findUnique: async () => ({ documentHash: CURRENT_TERMS.documentHash }) },
   apiKey: {
     findFirst: async ({ where }: any) => where.id === apiKey.id && where.userId === apiKey.userId ? apiKey : null,
     findUnique: async () => null,

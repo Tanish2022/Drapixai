@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { DISCOVERY_PAGES } from '@/app/lib/discovery-pages';
 import Link from 'next/link';
 import {
   AlertTriangle,
@@ -19,10 +20,7 @@ import MarketingFooter from '@/app/components/MarketingFooter';
 import MarketingNav from '@/app/components/MarketingNav';
 import { getSdkScriptUrl, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
-export const metadata: Metadata = {
-  title: 'Help',
-  description: 'Unified onboarding, integration, troubleshooting, and support help for DrapixAI.',
-};
+export const metadata: Metadata = DISCOVERY_PAGES['/help'];
 
 const sidebarSections = [
   { id: 'overview', label: 'Overview' },
@@ -473,7 +471,7 @@ export default function HelpPage() {
                 <h2 className="text-3xl font-semibold">When To Contact Support</h2>
               </div>
               <div className="space-y-4 text-[#536057]">
-                <p>Contact support only after you have already checked garment validation, catalog discovery, suggested matches, confirmation status, domain validation, AI readiness, and plan/quota status.</p>
+                <p>You can contact support at any stage. If available, include the action you tried, the message shown, and the account or product reference needed to investigate. Do not send passwords, keys or shopper photos.</p>
                 <p>When opening a support request, include:</p>
                 <div className="space-y-2">
                   {[

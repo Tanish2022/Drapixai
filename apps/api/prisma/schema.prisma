@@ -49,6 +49,31 @@ model User {
   shopifyInstallations            ShopifyInstallation[]
   billingCheckoutAttempts         BillingCheckoutAttempt[]
   usageReservations               UsageReservation[]
+  termsAcceptances                AccountTermsAcceptance[]
+}
+
+model TermsDocument {
+  version     String                   @id
+  sha256      String
+  content     String
+  createdAt   DateTime                 @default(now())
+  acceptances AccountTermsAcceptance[]
+
+  @@unique([version, sha256])
+}
+
+model AccountTermsAcceptance {
+  id              Int           @id @default(autoincrement())
+  userId          Int
+  documentVersion String
+  documentHash    String
+  flow            String
+  acceptedAt      DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  document        TermsDocument @relation(fields: [documentVersion, documentHash], references: [version, sha256], onDelete: Restrict, map: "AccountTermsAcceptance_document_fkey")
+
+  @@unique([userId, documentVersion])
+  @@index([userId, acceptedAt])
 }
 
 model ApiKey {
@@ -166,6 +191,30 @@ model EmailLog {
   user      User     @relation(fields: [userId], references: [id])
 }
 
+// Provider callback metadata only: no recipient address, subject, body or OTP.
+model EmailDeliveryEvent {
+  webhookId       String   @id
+  providerEmailId String
+  recipientHash   String
+  eventType       String
+  eventDigest     String
+  occurredAt      DateTime
+  receivedAt      DateTime @default(now())
+
+  @@index([receivedAt])
+  @@index([providerEmailId])
+}
+
+// Sticky until an authorized operator resolves it; delivery cannot clear it.
+model EmailRecipientSuppression {
+  recipientHash   String   @id
+  reason          String
+  priority        Int
+  providerEmailId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 model Render {
   id        Int      @id @default(autoincrement())
   apiKeyId  Int
@@ -275,6 +324,7 @@ model CatalogProduct {
   preparationNextAttemptAt DateTime?
   preparationCompletedAt   DateTime?
   preparedImageUrl         String?
+  preparedSourceHash       String?
   preparedGarmentId        String?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
@@ -293,6 +343,9 @@ model ShopifyInstallation {
   shopName               String?
   primaryDomain          String?
   encryptedAccessToken   String
+  encryptedRefreshToken  String?
+  accessTokenExpiresAt   DateTime?
+  refreshTokenExpiresAt  DateTime?
   encryptedStorefrontKey String?
   storefrontApiKeyId     Int?             @unique
   scopes                 String
@@ -304,6 +357,13 @@ model ShopifyInstallation {
   uninstalledAt          DateTime?
   lastSyncedAt           DateTime?
   lastSyncStatus         String?
+  catalogEpoch           Int              @default(0)
+  catalogRequestedVersion Int             @default(0)
+  catalogSyncedVersion    Int              @default(0)
+  catalogNextAttemptAt    DateTime?
+  catalogSyncAttempts     Int             @default(0)
+  catalogLeaseOwner        String?
+  catalogLeaseExpiresAt    DateTime?
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   user                   User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -312,6 +372,13 @@ model ShopifyInstallation {
 
   @@index([userId, status])
   @@index([status, lastSyncedAt])
+  @@index([status, catalogNextAttemptAt])
+}
+
+model ShopifyTokenLease {
+  shopDomain String   @id
+  owner      String
+  expiresAt  DateTime
 }
 
 model ShopifySyncRun {
@@ -419,6 +486,33 @@ model CatalogPreparationLease {
   ownerToken String
   expiresAt  DateTime
   updatedAt  DateTime @updatedAt
+}
+
+// Durable side-effect ledger. No foreign-key cascade: redaction must drain or
+// reconcile unfinished external writes before deleting their metadata.
+model ShopifyPreparationJob {
+  id                   String   @id
+  installationId       Int
+  catalogProductId     Int
+  userId               Int
+  epoch                Int
+  sourceImageUrl       String
+  sourceHash           String
+  garmentId            String
+  status               String   @default("processing")
+  externalWorkStarted  Boolean  @default(false)
+  aiRequestStarted     Boolean  @default(false)
+  cacheKey             String?
+  originalUrl          String
+  thumbnailUrl         String
+  expiresAt            DateTime
+  errorCode            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([installationId, status])
+  @@index([userId, status])
+  @@index([status, expiresAt])
 }
 
 model GarmentMatch {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import time
+from dataclasses import asdict
 from typing import Iterable, List, Sequence
 
 from PIL import Image
@@ -12,6 +13,7 @@ from drapixai_ai.postprocess.quality_boosters import apply_quality_boosters
 from drapixai_ai.preprocess.garment_analyzer import analyze_garment
 from drapixai_ai.preprocess.person_analyzer import analyze_person
 from drapixai_ai.quality.tryon_scorer import TryOnScorer
+from drapixai_ai.services.lower_body_validator import LowerBodyValidation, validate_lower_body_person
 
 
 class DrapixAITryOnPipeline:
@@ -112,6 +114,18 @@ class DrapixAITryOnPipeline:
         conditioned.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
         return conditioned
 
+    @staticmethod
+    def _validate_lower_person(person: Image.Image, garment_type: str | None) -> LowerBodyValidation | None:
+        family, _ = DrapixAITryOnPipeline._parse_garment_type(garment_type)
+        if family != "lower":
+            return None
+        if not settings.enable_lower_body:
+            raise RuntimeError("LOWER_BODY_NOT_ENABLED")
+        validation = validate_lower_body_person(person)
+        if not validation.ok:
+            raise ValueError(f"LOWER_BODY_INVALID:{validation.reason}")
+        return validation
+
     def run_tryon_with_metadata(
         self,
         person: Image.Image,
@@ -129,6 +143,7 @@ class DrapixAITryOnPipeline:
         condition_cloth = self._condition_garment(cloth)
         active_engine = self._engine_for(garment_type)
         analysis_start = time.perf_counter()
+        lower_validation = self._validate_lower_person(person, garment_type)
         person_analysis = analyze_person(person)
         garment_analysis = analyze_garment(condition_cloth)
         timings["analysis_ms"] = int((time.perf_counter() - analysis_start) * 1000)
@@ -203,6 +218,7 @@ class DrapixAITryOnPipeline:
             candidate_scores=candidate_scores,
             warnings=warnings,
             metadata={
+                **({"lower_body_person_validation": asdict(lower_validation)} if lower_validation else {}),
                 "selected_seed": best.seed,
                 "quality_mode": quality_mode,
                 "quality_profile": quality_profile,
@@ -265,8 +281,10 @@ class DrapixAITryOnPipeline:
         garment_analyses = []
         input_warnings: list[list[str]] = []
         analysis_ms: list[int] = []
-        for person, cloth in zip(persons, conditioned_cloths):
+        lower_validations = []
+        for person, cloth, garment_type in zip(persons, conditioned_cloths, batch_types):
             analysis_start = time.perf_counter()
+            lower_validations.append(self._validate_lower_person(person, garment_type))
             person_analysis = analyze_person(person)
             garment_analysis = analyze_garment(cloth)
             person_analyses.append(person_analysis)
@@ -436,6 +454,7 @@ class DrapixAITryOnPipeline:
                     candidate_scores=candidate_scores,
                     warnings=warnings,
                     metadata={
+                        **({"lower_body_person_validation": asdict(lower_validations[index])} if lower_validations[index] else {}),
                         "selected_seed": best.seed,
                         "quality_mode": self._normalize_quality(quality),
                         "quality_profile": quality_profile,

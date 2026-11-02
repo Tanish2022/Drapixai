@@ -19,7 +19,7 @@ export const applyThemePreference = (theme: DrapixThemePreference) => {
     document.documentElement.dataset.theme = theme;
   }
   if (typeof window !== 'undefined') {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    try { window.localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* In-memory theme still works when optional storage is blocked. */ }
   }
 };
 
@@ -28,7 +28,8 @@ export const useThemePreference = () => {
 
   useEffect(() => {
     const syncTheme = () => {
-      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      let stored: string | null = null;
+      try { stored = window.localStorage.getItem(THEME_STORAGE_KEY); } catch { /* Use the current page theme. */ }
       const nextTheme = stored === 'dark' || stored === 'light' ? stored : readThemePreference();
       setThemePreference(nextTheme);
       document.documentElement.dataset.theme = nextTheme;

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
+import FeedbackMessage from '@/app/components/FeedbackMessage';
+import { requestJson, userError, errorField, type FeedbackTone } from '@/app/lib/user-feedback';
 
 export default function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
@@ -13,36 +15,27 @@ export default function ForgotPasswordForm() {
   const [otpRequested, setOtpRequested] = useState(false);
   const [complete, setComplete] = useState(false);
   const [status, setStatus] = useState('');
+  const [statusTone, setStatusTone] = useState<FeedbackTone>('info');
+  const [invalid, setInvalid] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const requestOtp = async () => {
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/auth/password-reset/request-otp`, {
+    await requestJson(`${PUBLIC_API_BASE_URL}/auth/password-reset/request-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.error || 'Unable to send reset code.');
-    }
+    }, { context: 'reset', fallback: 'We could not request a reset code. Please wait and try again.' });
     setOtpRequested(true);
-    setStatus(
-      data?.debugOtp
-        ? `Local dev reset code: ${data.debugOtp}`
-        : 'If an account exists for that email, a 6-digit reset code has been sent.'
-    );
+    setStatusTone('info');
+    setStatus('If an account exists for that email, a 6-digit reset code has been sent. Use the latest code.');
   };
 
   const confirmReset = async () => {
-    const response = await fetch(`${PUBLIC_API_BASE_URL}/auth/password-reset/confirm`, {
+    await requestJson(`${PUBLIC_API_BASE_URL}/auth/password-reset/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp, password }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.error || 'Unable to reset password.');
-    }
+    }, { context: 'reset', fallback: 'Check the verification code and new password, then try again.' });
     setComplete(true);
     setStatus('Password reset complete. You can sign in with the new password.');
   };
@@ -50,6 +43,7 @@ export default function ForgotPasswordForm() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setStatus('');
+    setInvalid(undefined);
     setIsSubmitting(true);
 
     try {
@@ -59,7 +53,9 @@ export default function ForgotPasswordForm() {
         await confirmReset();
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Unable to reset password.');
+      setInvalid(errorField(error));
+      setStatusTone('error');
+      setStatus(userError(error, 'Password reset did not finish. Check the latest code and try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -90,13 +86,17 @@ export default function ForgotPasswordForm() {
         Enter your account email. If it matches a DrapixAI account, we will send a short-lived verification code without revealing whether the email is registered.
       </p>
 
-      <form className="space-y-5" onSubmit={handleSubmit}>
+      <form className="space-y-5" onSubmit={handleSubmit} aria-busy={isSubmitting} aria-describedby="reset-feedback">
         <div>
-          <label className="mb-2 block text-sm font-bold">Work email</label>
+          <label htmlFor="reset-email" className="mb-2 block text-sm font-bold">Work email</label>
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
             <input
               type="email"
+              id="reset-email"
+              aria-invalid={invalid === 'email'}
+              aria-describedby="reset-feedback"
+              autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               disabled={otpRequested}
@@ -110,11 +110,16 @@ export default function ForgotPasswordForm() {
         {otpRequested ? (
           <>
             <div className="border border-[#a8bbae] bg-[#edf3ee] p-4">
-              <label className="mb-2 block text-sm font-bold text-[#183f32]">Reset code</label>
+              <label htmlFor="reset-code" className="mb-2 block text-sm font-bold text-[#183f32]">Reset code</label>
               <div className="relative">
                 <ShieldCheck className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#31725b]" />
                 <input
                   type="text"
+                  id="reset-code"
+                  aria-invalid={invalid === 'otp'}
+                  aria-describedby="reset-feedback"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
                   inputMode="numeric"
                   maxLength={6}
                   value={otp}
@@ -132,7 +137,8 @@ export default function ForgotPasswordForm() {
                   try {
                     await requestOtp();
                   } catch (error) {
-                    setStatus(error instanceof Error ? error.message : 'Unable to resend reset code.');
+                    setStatusTone('error');
+                    setStatus(userError(error, 'We could not resend the reset code. Please wait and try again.'));
                   } finally {
                     setIsSubmitting(false);
                   }
@@ -145,11 +151,16 @@ export default function ForgotPasswordForm() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold">New password</label>
+              <label htmlFor="reset-password" className="mb-2 block text-sm font-bold">New password</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#849087]" />
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  id="reset-password"
+                  aria-invalid={invalid === 'password'}
+                  aria-describedby="reset-feedback"
+                  autoComplete="new-password"
+                  maxLength={128}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   minLength={8}
@@ -159,7 +170,7 @@ export default function ForgotPasswordForm() {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}
                   className="absolute right-2 top-1/2 inline-flex h-10 min-w-10 -translate-y-1/2 items-center justify-center px-2 text-xs font-bold text-[#667169] hover:text-[#183f32]"
                 >
                   {showPassword ? 'Hide' : 'Show'}
@@ -184,7 +195,7 @@ export default function ForgotPasswordForm() {
         </button>
       </form>
 
-      {status ? <p role="status" className="mt-4 border border-[#b7c4ba] bg-[#f0f3ef] p-3 text-sm text-[#415047]">{status}</p> : null}
+      <FeedbackMessage id="reset-feedback" feedback={status ? { message: status, tone: statusTone } : null} />
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Link href="/auth/login" className="border border-black/15 px-4 py-2 text-sm font-bold hover:bg-[#f1f4f0]">

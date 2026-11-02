@@ -4,12 +4,10 @@ services:
   redis:
     image: ${DRAPIXAI_REDIS_IMAGE:?set DRAPIXAI_REDIS_IMAGE}
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - exec redis-server --save '' --appendonly no --requirepass "$$(cat /run/secrets/ai_redis_password)"
+    command: ["sh", "/opt/drapixai/private-redis.sh", "server", "/run/secrets/ai_redis_password"]
     volumes:
       - ./private/ai_redis_password:/run/secrets/ai_redis_password:ro
+      - ../scripts/private-redis.sh:/opt/drapixai/private-redis.sh:ro
     read_only: true
     tmpfs:
       - /data:size=256m,mode=0700

@@ -220,7 +220,7 @@ export const redactSensitiveText = (value: unknown) =>
     .replace(/\b(dpx(?:st|sf|pv|api)?_[A-Za-z0-9_-]{12,})\b/g, '[redacted-api-key]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
     .replace(/(cookie|set-cookie)(\s*:\s*)[^\r\n]+/gi, '$1$2[redacted]')
-    .replace(/("?(?:person|cloth|image)_image_base64"?\s*[:=]\s*"?)[A-Za-z0-9+/=]{32,}/gi, '$1[redacted]')
+    .replace(/("?(?:(?:person|cloth|garment|result|image)[_-]?)?image[_-]?base64"?\s*[:=]\s*"?)[A-Za-z0-9+/_=-]{32,}/gi, '$1[redacted]')
     .replace(/data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+/gi, 'data:image/[redacted]')
     .replace(/\b(?:postgresql|postgres|redis|smtp|https?):\/\/[^\s]+/gi, (match) => {
       const scheme = match.split('://')[0];

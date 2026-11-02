@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { aiFetch } from '../lib/ai-client';
+import { aiFetch, aiTransportFailure } from '../lib/ai-client';
 import { Prisma, PrismaClient } from '@prisma/client';
 import multer from 'multer';
 import fs from 'fs';
@@ -14,7 +14,8 @@ import {
 } from '../lib/privacy';
 import { shouldAutoRejectTryOn } from '../lib/tryon-quality';
 import { validateMultipartFields } from '../lib/input-validation';
-import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
+import { acquireTryOnSlot, dispatchTryOnSlot, observeTryOnTerminalResponse, releaseTryOnSlot } from '../lib/tryon-concurrency';
+import { aiRequestSignal } from '../lib/ai-request-signal';
 import { requireTryOnIntake } from '../lib/tryon-intake';
 import { parseWebsiteAnalytics } from '../lib/website-analytics';
 
@@ -169,7 +170,7 @@ router.post(
       });
     }
 
-    const slot = await acquireTryOnSlot(0);
+    const slot = await acquireTryOnSlot(0, aiRequestSignal(req, res));
     if (!slot.ok) {
       removeUploadedFile(personFile);
       removeUploadedFile(clothFile);
@@ -210,6 +211,7 @@ router.post(
 
       const preprocessResponse = await aiFetch(`${AI_URL}/ai/garment/preprocess/base64`, {
         method: 'POST',
+        signal: AbortSignal.any([slot.lease.signal, aiRequestSignal(req, res)]),
         headers: getAiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           cloth_image_base64: clothBytes.toString('base64'),
@@ -234,9 +236,12 @@ router.post(
       }
       transientCacheKey = preprocessResult.cache_key;
 
+      try { await dispatchTryOnSlot(slot.lease); }
+      catch (error) { slot.lease.phase = 'terminal'; throw error; }
       const tryOnResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
         method: 'POST',
-        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+        signal: AbortSignal.any([slot.lease.signal, aiRequestSignal(req, res)]),
+        headers: getAiHeaders({ 'Content-Type': 'application/json', 'X-Request-ID': slot.lease.token }),
         body: JSON.stringify({
           user_id: 'public-demo',
           person_image_base64: personBytes.toString('base64'),
@@ -247,6 +252,8 @@ router.post(
         }),
       });
 
+      observeTryOnTerminalResponse(slot.lease, tryOnResponse);
+      if (slot.lease.phase !== 'terminal') throw new Error(tryOnResponse.status === 504 ? 'AI_REQUEST_TIMEOUT' : 'AI_WORK_OUTCOME_UNCONFIRMED');
       if (!tryOnResponse.ok) {
         const errorText = await tryOnResponse.text();
         return res.status(tryOnResponse.status).json({
@@ -304,6 +311,8 @@ router.post(
       await trackWebsiteEvent('demo_tryon_failed', '/demo', null, req.headers.referer || null, {
         source: 'public_demo',
       }).catch(() => undefined);
+      const failure = aiTransportFailure(error);
+      if (failure) return res.status(failure.status).json(failure.body);
       return res.status(500).json({ error: 'DEMO_TRY_ON_FAILED' });
     } finally {
       if (publicDemoLease) await releaseTryOnSlot(publicDemoLease);
@@ -311,6 +320,7 @@ router.post(
         try {
           const cleanupResponse = await aiFetch(`${AI_URL}/ai/garment/cache/delete`, {
             method: 'POST',
+            signal: AbortSignal.timeout(10_000),
             headers: getAiHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ cache_key: transientCacheKey }),
           });

@@ -4,9 +4,11 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { consumeAdminTotp } from '../lib/admin-mfa';
 import { generateApiKey, hashApiKey, resolveActiveApiKey, issueDashboardPreviewToken, resolveSdkApiKey } from '../lib/api-key-auth';
 import { requireDisposableDatabase } from '../lib/disposable-database';
+import { CURRENT_TERMS, recordAccountTermsAcceptance } from '../lib/account-terms';
 
 // Runs only inside the existing guarded P0 database fixture. The caller owns
-// cleanup of these exact IDs; no ordinary application .env grants test approval.
+// cleanup of these exact IDs and its disposable database. Immutable assent is
+// retained until the owned database is destroyed; .env never grants approval.
 export const verifyAdminSessions = async (prisma: PrismaClient, ownedUsers: number[]) => {
   const url = requireDisposableDatabase(process.env);
   const replica = new PrismaClient({ datasources: { db: { url } } });
@@ -53,6 +55,10 @@ export const verifyAdminSessions = async (prisma: PrismaClient, ownedUsers: numb
       return { key, credential };
     };
     const recent = await makeKey();
+    assert.equal(await resolveActiveApiKey(prisma, recent.credential), null, 'A valid MFA credential without assent must not authorize service use');
+    assert.equal(await resolveActiveApiKey(replica, recent.credential), null);
+    await prisma.$transaction(tx => recordAccountTermsAcceptance(tx, admin.id,
+      { accepted: true, version: CURRENT_TERMS.version, documentHash: CURRENT_TERMS.documentHash }, 'authenticated_account'));
     const before = new Date();
     assert.ok(await resolveActiveApiKey(prisma, recent.credential));
     assert.ok((await prisma.apiKey.findUniqueOrThrow({ where: { id: recent.key.id } })).lastUsedAt! >= before);
@@ -82,7 +88,7 @@ export const verifyAdminSessions = async (prisma: PrismaClient, ownedUsers: numb
     console.log('PASS real PostgreSQL privileged idle/absolute expiry, no revival, first use, preview non-extension and unchanged ordinary key lifetimes');
 
     const revoked = await makeKey();
-    const interleaved = { apiKey: {
+    const interleaved = { accountTermsAcceptance: prisma.accountTermsAcceptance, apiKey: {
       findUnique: async (args: any) => {
         const snapshot = await prisma.apiKey.findUnique(args);
         await replica.apiKey.update({ where: { id: revoked.key.id }, data: { isActive: false, revokedAt: new Date() } });

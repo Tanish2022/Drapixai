@@ -1,17 +1,36 @@
 # DrapixAI Billing Security Runbook
 
-## Boundary
+## Current provider status (27 October 2026)
 
-DrapixAI uses Stripe-hosted Checkout and the Stripe customer portal. Card data,
+Razorpay onboarding is deferred at the owner's request until the owner has
+power-of-attorney documents. Preserve the existing account flow and local test
+evidence. Resume only when the owner is ready; payment-provider acceptance
+remains open during this deferral.
+
+The owner has no Stripe account and needs a new company payment account.
+Razorpay Subscriptions is the recommended next candidate for Indian merchant
+pilots, subject to onboarding, recurring/international capability and pricing
+verification. See Task 12 (operational evidence retained privately).
+
+The implementation below is **Stripe-only preparation**, not an operational
+payment service or a Razorpay integration. Do not put Razorpay keys in Stripe
+configuration or enable paid intake using synthetic credentials.
+
+## Existing Stripe implementation boundary
+
+The prepared code uses Stripe-hosted Checkout and the Stripe customer portal. Card data,
 tax identifiers, billing addresses, raw webhook payloads, checkout URLs, and
 customer portal URLs are never persisted by DrapixAI. The API stores only the
 provider identifiers and subscription state needed to enforce plan access.
 
 Checkout completion does not activate a paid plan. Only a verified Stripe
-subscription or paid-invoice event can grant paid access. Failed, paused,
+subscription state can grant paid access. Invoice events retrieve the current
+subscription, require matching customer/mode and latest invoice, and use its
+configured price/status/period; a paid historical invoice does not reactivate
+a canceled subscription. Unknown prices cannot fall back to metadata. Failed, paused,
 incomplete, unpaid, and canceled subscriptions fail closed in plan enforcement.
 
-## Live Setup
+## Stripe setup only if separately selected
 
 1. Create separate Stripe test and live products and recurring Prices for
    Starter, Growth, and Pro.
@@ -28,6 +47,9 @@ incomplete, unpaid, and canceled subscriptions fail closed in plan enforcement.
 8. Run `npm --prefix apps/api run billing:verify-catalog` and retain its PASS
    output. Every Price must be active, monthly, licensed, per-unit, in the
    configured currency, and attached to an active Product.
+9. Verify the actual portal configuration allows cancellation at period end
+   without proration. The existing portal call uses the provider's default
+   configuration; this policy is not yet enforced or verified by the code.
 
 ## Verification
 
@@ -40,6 +62,13 @@ never use an application's normal environment or point this cleanup fixture at
 staging/production data. Launch CI provides its own disposable service and runs
 the target-refusal checks before the positive fixture. See
 `docs/billing-verification-2026-10-17.md` for the verification scope.
+
+`node scripts/verify-billing-runtime.mjs` creates its own fresh loopback-only
+PostgreSQL and Redis, applies the existing SQL migrations, runs accounting and
+actual billing routes with real SDK signatures, and removes its own fixtures.
+Outbound Stripe operations are synthetic adapters with SDK network disabled.
+This proves neither provider delivery nor actual charges, refunds, recurring
+mandates, invoice delivery, Google Sheets sync or Razorpay support.
 
 Against the approved staging billing integration, separately prove one
 successful purchase, one canceled checkout, one failed-payment event,
@@ -73,3 +102,15 @@ provider event delivery, and verify that no entitlement changed without a signed
 event. Do not delete webhook-event records during the investigation. Follow the
 main security operations runbook for notification, evidence preservation, and
 post-incident review.
+
+## Remaining event and invoice work
+
+Subscription snapshot ordering still uses provider event timestamps with a
+conservative tie priority. The 1 November local follow-up now commits entitlement/audit/receipt together,
+fences reclaimed attempts and re-reads tenant linkage under a lock; its 27-group
+HTTP/SQL fixture passes. See Task 6 (operational evidence retained privately).
+Full provider reconciliation, payload binding, parallel checkout/cross-event
+ordering and actual host/process-death recovery remain unqualified. Invoice state refresh addresses
+the tested historical-invoice issue; it does not close these broader gaps.
+Refund webhook audit is not a refund executor. Invoice snapshots, tax/issuer
+review, a durable delivery outbox and Sheets synchronization are not implemented.

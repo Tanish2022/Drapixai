@@ -2,9 +2,11 @@ services:
   redis:
     image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     restart: unless-stopped
-    env_file:
-      - ./env/ai.production.env
-    command: ["sh", "-c", "exec redis-server --save '' --appendonly no --requirepass \"$$DRAPIXAI_REDIS_PASSWORD\""]
+    environment:
+      DRAPIXAI_REDIS_PASSWORD: ${DRAPIXAI_REDIS_PASSWORD:?set DRAPIXAI_REDIS_PASSWORD}
+    command: ["sh", "/opt/drapixai/private-redis.sh", "server"]
+    volumes:
+      - ./scripts/private-redis.sh:/opt/drapixai/private-redis.sh:ro
     tmpfs:
       - /data:size=256m,mode=0700
       - /tmp:size=32m,mode=1777

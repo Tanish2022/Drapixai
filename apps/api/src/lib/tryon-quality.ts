@@ -17,7 +17,7 @@ export type TryOnQualityInput = {
 };
 
 const EXCELLENT_SCORE = Number(process.env.DRAPIXAI_EXCELLENT_QUALITY_SCORE || 0.95);
-const MIN_PUBLISHABLE_SCORE = Number(process.env.DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE || 0.95);
+const MIN_PUBLISHABLE_SCORE = Math.max(0.95, Number(process.env.DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE || 0.95));
 const EXCELLENT_LATENCY_MS = Number(process.env.DRAPIXAI_EXCELLENT_LATENCY_MS || 10000);
 const MAX_PUBLISHABLE_LATENCY_MS = Number(process.env.DRAPIXAI_MAX_PUBLISHABLE_LATENCY_MS || 12000);
 
@@ -35,6 +35,23 @@ const BLOCKING_WARNINGS = new Set([
   'GARMENT_TUCKED_HEM_RISK',
   'GARMENT_COVERAGE_INCOMPLETE',
   'QUALITY_SCORE_BELOW_THRESHOLD',
+  'SAFETY_CHECK_BLOCKED',
+  'LOWER_GARMENT_COLOR_DRIFT',
+  'LOWER_GARMENT_TEXTURE_DRIFT',
+  'UPPER_BODY_CHANGED_RISK',
+  'LOWER_BODY_POSE_CHANGED_RISK',
+  'SHOE_CHANGED_RISK',
+  'WAISTBAND_MISALIGNED',
+  'LEFT_LEG_ARTIFACT_RISK',
+  'RIGHT_LEG_ARTIFACT_RISK',
+  'KNEE_ARTIFACT_RISK',
+  'ANKLE_ARTIFACT_RISK',
+  'LOWER_GARMENT_COVERAGE_INCOMPLETE',
+  'CROTCH_ARTIFACT_RISK',
+  'LAYERED_OR_RETAINED_GARMENT_RISK',
+  'REVEALED_LEG_ARTIFACT_RISK',
+  ...['JEANS', 'PANTS', 'TROUSERS', 'JOGGERS', 'SHORTS', 'SKIRT', 'LEGGINGS']
+    .map((category) => `${category}_HEM_ALIGNMENT_RISK`),
 ]);
 
 const REVIEW_WARNINGS = new Set([
@@ -91,7 +108,10 @@ const hasBlockingVisualFailure = (input: TryOnQualityInput) => {
   const warnings = normalizeWarnings(input.warnings);
   const score = typeof input.qualityScore === 'number' ? input.qualityScore : 0;
   const accuracyValues = Object.values(buildProductAccuracyReport(input));
-  return score < MIN_PUBLISHABLE_SCORE
+  return !Number.isFinite(score)
+    || score > 1
+    || !Number.isFinite(MIN_PUBLISHABLE_SCORE)
+    || score < MIN_PUBLISHABLE_SCORE
     || warnings.some((warning) => BLOCKING_WARNINGS.has(warning))
     || accuracyValues.includes('Not publishable');
 };

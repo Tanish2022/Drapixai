@@ -10,18 +10,21 @@ import { setTimeout as delay } from 'node:timers/promises';
 const root = process.cwd();
 const runId = `restore-${crypto.randomBytes(6).toString('hex')}`;
 const name = `drapixai-p0-${runId}`;
+const imageRef = 'postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4';
 const evidenceDir = path.join(root, 'runtime', 'launch-evidence', runId);
 fs.mkdirSync(evidenceDir, { recursive: true });
-const password = crypto.randomBytes(48).toString('base64url');
+const password = crypto.randomBytes(32).toString('hex') + ':\\%@';
 const database = 'drapixai_restore_test';
 const inputs = [
   'deploy/scripts/restore-postgres-backup.sh',
+  'deploy/scripts/private-libpq.sh',
   ...fs.readdirSync(path.join(root, 'apps/api/prisma/migrations'))
     .filter((entry) => fs.statSync(path.join(root, 'apps/api/prisma/migrations', entry)).isDirectory())
     .sort().map((entry) => `apps/api/prisma/migrations/${entry}/migration.sql`),
 ];
 const checks = [];
-const redact = (value) => String(value || '').replaceAll(password, '[REDACTED]');
+let backupSha256;
+const redact = (value) => String(value || '').replaceAll(password, '[REDACTED]').replaceAll(encodeURIComponent(password), '[REDACTED]');
 const invoke = (args, options = {}) => {
   const result = spawnSync('docker', args, {
     encoding: 'utf8', windowsHide: true, timeout: 120000, maxBuffer: 8 * 1024 * 1024,
@@ -45,15 +48,16 @@ const snapshot = () => sql(`
 `);
 const restore = (overrides = {}, backup = '/tmp/recovery.dump') => {
   const config = {
-    DATABASE_URL: `postgresql://postgres@127.0.0.1:5432/${database}`,
+    DATABASE_URL: `postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:5432/${database}`,
     PGPASSWORD: password,
     DRAPIXAI_DEPLOY_ENV: 'sandbox',
     DRAPIXAI_EXPECTED_DATABASE_NAME: database,
     DRAPIXAI_RESTORE_APPROVAL_ID: `disposable-${runId}`,
     DRAPIXAI_RESTORE_CONFIRMATION: 'RESTORE_SANDBOX',
+    DRAPIXAI_EXPECTED_BACKUP_SHA256: backupSha256,
     ...overrides,
   };
-  return invoke(['exec', ...Object.keys(config).flatMap((key) => ['-e', key]), name, 'bash', '/opt/restore.sh', backup], {
+  return invoke(['exec', '-e', 'PATH=/opt/audit-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', ...Object.keys(config).flatMap((key) => ['-e', key]), name, 'bash', '/opt/restore.sh', backup], {
     env: { ...process.env, ...config },
   });
 };
@@ -64,13 +68,17 @@ const rejected = (result, expected) => {
 let created = false;
 let failure = null;
 let restoreDurationMs = null;
+let databaseImageId = null;
 try {
-  docker(['run', '-d', '--name', name, '--network', 'none',
+  if (invoke(['image', 'inspect', imageRef]).status !== 0) docker(['pull', imageRef], { timeout: 180000 });
+  docker(['run', '--pull=never', '-d', '--name', name, '--network', 'none',
     '--label', 'drapixai.purpose=disposable-recovery-drill',
     '-e', 'POSTGRES_PASSWORD', '-e', `POSTGRES_DB=${database}`,
     '--mount', `type=bind,src=${path.join(root, inputs[0])},dst=/opt/restore.sh,readonly`,
-    'postgres:16-bookworm'], { env: { ...process.env, POSTGRES_PASSWORD: password } });
+    '--mount', `type=bind,src=${path.join(root, inputs[1])},dst=/opt/private-libpq.sh,readonly`,
+    imageRef], { env: { ...process.env, POSTGRES_PASSWORD: password } });
   created = true;
+  databaseImageId = docker(['inspect', '--format', '{{.Image}}', name]);
   let ready = false;
   for (let attempt = 0; attempt < 30; attempt++) {
     // Wait for the final TCP server, not the entrypoint's temporary socket server.
@@ -81,7 +89,11 @@ try {
     await delay(1000);
   }
   assert.ok(ready, 'Disposable PostgreSQL must become ready');
-  for (const input of inputs.slice(1)) sql(fs.readFileSync(path.join(root, input), 'utf8'));
+  for (const input of inputs.filter(file => file.endsWith('/migration.sql'))) sql(fs.readFileSync(path.join(root, input), 'utf8'));
+  for (const command of ['psql', 'pg_dump', 'pg_restore']) {
+    const wrapper = `#!/usr/bin/env bash\nset -euo pipefail\nfor arg in "$@"; do case "$arg" in *postgresql://*|*postgres://*) exit 97;; esac; done\n[[ -z "\${DATABASE_URL:-}" && -z "\${PGPASSWORD:-}" && -f "$PGPASSFILE" ]] || exit 98\n[[ "$(stat -c '%a' "$PGPASSFILE")" == 600 ]] || exit 99\nprintf '%s\\n' '${command}:private-passfile-no-uri-or-password-env' >> /tmp/private-client-audit\nexec /usr/lib/postgresql/16/bin/${command} "$@"\n`;
+    docker(['exec', '-i', name, 'sh', '-c', `mkdir -p /opt/audit-bin; cat > /opt/audit-bin/${command}; chmod 700 /opt/audit-bin/${command}`], {input: wrapper});
+  }
   sql(`
     INSERT INTO "User" (email, "passwordHash", "companyName") VALUES
       ('restore-a@example.invalid', 'synthetic-not-a-login', 'backup tenant A'),
@@ -95,7 +107,11 @@ try {
     INSERT INTO restore_probe VALUES (1, 'backup data');
   `);
   const backupSnapshot = snapshot();
-  docker(['exec', name, 'pg_dump', '-U', 'postgres', '-d', database, '--format=custom', '--no-owner', '--no-acl', '--file=/tmp/recovery.dump']);
+  docker(['exec','-i','-e','DATABASE_URL','-e','DRAPIXAI_DEPLOY_ENV=sandbox','-e','PATH=/opt/audit-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',name,'bash'], {
+    env:{...process.env,DATABASE_URL:`postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:5432/${database}`},
+    input:'set -euo pipefail\nsource /opt/private-libpq.sh\ndrapixai_prepare_libpq\ndrapixai_private_pg pg_dump --format=custom --no-owner --no-acl --file=/tmp/recovery.dump\n',
+  });
+  backupSha256 = docker(['exec', name, 'sha256sum', '/tmp/recovery.dump']).split(/\s+/)[0];
   docker(['exec', name, 'pg_restore', '--list', '/tmp/recovery.dump']);
   checks.push('custom-format backup created from all release SQL migrations and synthetic two-tenant data');
   sql(`UPDATE "User" SET "companyName" = 'current data must survive failure' WHERE id = 1;
@@ -108,13 +124,44 @@ try {
     [{ DRAPIXAI_RESTORE_CONFIRMATION: '' }, /Restore is destructive/],
     [{ DRAPIXAI_RESTORE_APPROVAL_ID: '' }, /approval reference/],
     [{ DRAPIXAI_DEPLOY_ENV: 'development' }, /sandbox, staging, or production/],
+    [{ DRAPIXAI_EXPECTED_BACKUP_SHA256: '' }, /expected backup SHA-256/],
+    [{ DRAPIXAI_EXPECTED_BACKUP_SHA256: '0'.repeat(64) }, /checksum does not match/],
   ]) {
     rejected(restore(config), message);
     assert.equal(snapshot(), before, 'Rejected restore must not change current data');
   }
-  checks.push('wrong database, missing approval, missing confirmation and invalid environment rejected without mutation');
+  checks.push('wrong database, missing approval/confirmation, invalid environment and missing/mismatched backup digest rejected without mutation');
+  const rejectedUris = [
+    `postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:5432/${database}?host=other.invalid`,
+    `postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:5432/${database}?sslmode=disable&sslmode=require`,
+    `postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:5432/${database}?sslaccept=accept_invalid_certs`,
+    `postgresql://postgres:${encodeURIComponent(password)}@other.invalid:5432/${database}?sslmode=require`,
+    `postgresql://postgres:${encodeURIComponent(password)}@other.invalid:5432/${database}?sslmode=prefer`,
+    `postgresql://postgres:invalid%00value@127.0.0.1:5432/${database}`,
+    `postgresql://postgres:invalid%0Avalue@127.0.0.1:5432/${database}`,
+    `postgresql://postgres:${encodeURIComponent(password)}@127.0.0.1:5432/${database}?schema=private`,
+  ];
+  const auditBefore = docker(['exec', name, 'cat', '/tmp/private-client-audit']);
+  for (const uri of rejectedUris) {
+    assert.notEqual(restore({DATABASE_URL: uri}).status, 0);
+    assert.equal(docker(['exec', name, 'cat', '/tmp/private-client-audit']), auditBefore);
+    assert.equal(snapshot(), before);
+  }
+  checks.push('URI overrides, duplicate/weak TLS, alternate schema and encoded NUL/newline refuse before native client execution');
+  const translation = docker(['exec', '-i', '-e', 'DATABASE_URL', '-e', 'DRAPIXAI_DEPLOY_ENV=staging', name, 'bash'], {
+    env: {...process.env, DATABASE_URL:`postgresql://postgres:${encodeURIComponent(password)}@fixture.invalid:5432/${database}?sslmode=require&sslaccept=strict`},
+    input: 'set -euo pipefail\nsource /opt/private-libpq.sh\ndrapixai_prepare_libpq\nfor option in "${drapixai_libpq_options[@]}"; do case "$option" in PGSSLMODE=*) printf "%s\\n" "$option";; esac; done\n',
+  });
+  assert.equal(translation, 'PGSSLMODE=verify-full');
+  checks.push('Native-Prisma strict TLS is translated to libpq verify-full without contacting the synthetic remote host');
+  docker(['exec', name, 'bash', '-c', "cp /tmp/recovery.dump /tmp/altered.dump; printf 'synthetic-unapproved-trailing-bytes' >> /tmp/altered.dump"]);
+  docker(['exec', name, 'pg_restore', '--list', '/tmp/altered.dump']);
+  rejected(restore({}, '/tmp/altered.dump'), /checksum does not match/);
+  assert.equal(snapshot(), before, 'A catalog-valid altered backup must not change current data');
+  checks.push('catalog-valid altered backup is refused by its independently expected digest');
   docker(['exec', name, 'bash', '-c', "printf 'invalid backup' > /tmp/invalid.dump"]);
-  rejected(restore({}, '/tmp/invalid.dump'), /pg_restore:/);
+  const invalidSha = docker(['exec', name, 'sha256sum', '/tmp/invalid.dump']).split(/\s+/)[0];
+  rejected(restore({ DRAPIXAI_EXPECTED_BACKUP_SHA256: invalidSha }, '/tmp/invalid.dump'), /pg_restore:/);
   assert.equal(snapshot(), before, 'Invalid backup must not change current data');
   checks.push('invalid backup rejected without mutation');
 
@@ -146,6 +193,10 @@ try {
   ]) rejected(invoke(sqlArgs, { input: statement }), /SecurityAuditLog is append-only/);
   assert.equal(snapshot(), backupSnapshot);
   checks.push('successful restore reproduces backup; immutable audit UPDATE, DELETE and TRUNCATE protection survives');
+  const clientAudit = docker(['exec', name, 'cat', '/tmp/private-client-audit']);
+  assert.ok(clientAudit.includes('psql:private-passfile') && clientAudit.includes('pg_restore:private-passfile') && clientAudit.includes('pg_dump:private-passfile'));
+  assert.equal(docker(['exec', name, 'sh', '-c', 'find /tmp -maxdepth 1 -name "drapixai-libpq.*" -type d | wc -l']), '0');
+  checks.push('actual restore clients receive no credential URI/password environment; private passfiles are 0600 and removed after success/failure');
 } catch (error) {
   failure = redact(error instanceof Error ? error.message : error);
 } finally {
@@ -160,7 +211,7 @@ const report = {
   scope: 'local-disposable-recovery-not-staging-or-production-certification',
   releaseCommit: head.status === 0 ? head.stdout.trim() : null,
   dirtyEntries: status.status === 0 ? status.stdout.split(/\r?\n/).filter(Boolean).length : null,
-  generatedAt: new Date().toISOString(), passed: !failure, checks, restoreDurationMs, failure,
+  generatedAt: new Date().toISOString(), passed: !failure, checks, restoreDurationMs, failure, databaseImageRef: imageRef, databaseImageId,
   sourceSha256: Object.fromEntries(['scripts/verify-postgres-restore.mjs', ...inputs].map((input) => [input, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, input))).digest('hex')])),
 };
 fs.writeFileSync(path.join(evidenceDir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);

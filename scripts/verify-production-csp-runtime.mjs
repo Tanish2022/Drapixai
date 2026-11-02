@@ -87,6 +87,16 @@ try {
     }
     console.log(`PASS ${route}: rendered script/style nonces match CSP, resist caller override, rotate and disable HTML caching`);
   }
+  for (const route of ['/shopify/connect?installation=1&token=synthetic-handoff', '/auth/login?next=%2Fshopify%2Fconnect%3Ftoken%3Dsynthetic-handoff']) {
+    const response = await fetch(`${origin}${route}`, {redirect:'manual',signal:AbortSignal.timeout(10000)});
+    assert.ok(response.status===200 || response.status>=300 && response.status<400);
+    assert.equal(response.headers.get('referrer-policy'),'no-referrer');
+    assert.match(response.headers.get('cache-control') || '',/no-store/);
+    assert.match(response.headers.get('x-robots-tag') || '',/noindex/);
+    if (route.startsWith('/shopify/')) assert.match(response.headers.get('location') || '',/\/auth\/login\?/);
+    await response.body?.cancel();
+  }
+  console.log('PASS Shopify handoff/auth HTML: no referrer/cache/indexing and unsigned workspace access redirects to sign-in');
 } finally {
   if (server && !serverExited) server.kill();
   if (stopped) await stopped;

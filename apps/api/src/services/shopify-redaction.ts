@@ -1,47 +1,23 @@
-import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { PrismaClient, ShopifyInstallation } from '@prisma/client';
-import { removeLocalStoredFile } from '../lib/security';
-import { createStorageClient, STORAGE_BUCKET } from '../lib/storage';
-import { aiFetch } from '../lib/ai-client';
-
-const AI_URL = (process.env.DRAPIXAI_AI_URL || 'http://localhost:8080').replace(/\/+$/, '');
-const AI_SERVICE_TOKEN = (process.env.DRAPIXAI_AI_SERVICE_TOKEN || '').trim();
-const storage = createStorageClient();
-
-const deleteAiCache = async (cacheKey: string | null) => {
-  if (!cacheKey) return;
-  const response = await aiFetch(`${AI_URL}/ai/garment/cache/delete`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(AI_SERVICE_TOKEN ? { 'x-drapixai-service-token': AI_SERVICE_TOKEN } : {}),
-    },
-    body: JSON.stringify({ cache_key: cacheKey }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) throw new Error('SHOPIFY_AI_CACHE_DELETE_FAILED');
-};
-
-const deleteStoredGarmentAsset = async (storedUrl: string | null) => {
-  if (!storedUrl) return;
-  if (storedUrl.startsWith('local:')) {
-    removeLocalStoredFile(storedUrl, 'garments');
-    return;
-  }
-  if (!storedUrl.startsWith('s3://')) return;
-
-  const location = new URL(storedUrl);
-  const key = location.pathname.replace(/^\/+/, '');
-  if (location.hostname !== STORAGE_BUCKET || !key.startsWith('garments/') || key.includes('..')) {
-    throw new Error('SHOPIFY_STORED_ASSET_OUTSIDE_GARMENT_PREFIX');
-  }
-  await storage.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: key }));
-};
+import { runDatabaseTransaction } from '../lib/database-transaction';
+import { deactivateShopifyInstallation, lockShopifyLifecycle } from './shopify-catalog-state';
+import { cleanupShopifyPreparationJob, recoverShopifyPreparationJobs, deleteShopifyAiCache as deleteAiCache, deleteShopifyStoredAsset as deleteStoredGarmentAsset } from './shopify-preparation-cleanup';
 
 export const redactShopifyInstallationData = async (
   prisma: PrismaClient,
-  installation: ShopifyInstallation,
+  target: ShopifyInstallation | string,
 ) => {
+  const stopped = await deactivateShopifyInstallation(prisma, typeof target === 'string' ? target : target.shopDomain, 'redacting');
+  if (!stopped || typeof target !== 'string' && stopped.id !== target.id) return;
+  const installation = stopped;
+  await recoverShopifyPreparationJobs(prisma, installation.id);
+  const unfinished = await prisma.shopifyPreparationJob.count({where: {installationId: installation.id, status: {in: ['processing', 'ambiguous']}}});
+  const recordedProducts = await prisma.shopifyPreparationJob.findMany({where: {installationId: installation.id}, select: {catalogProductId: true}});
+  const legacy = installation.userId ? await prisma.catalogProduct.count({where: {userId: installation.userId, source: `shopify:${installation.shopDomain}`,
+    preparationStatus: 'reconciliation_required', ...(recordedProducts.length ? {id: {notIn: recordedProducts.map(job => job.catalogProductId)}} : {})}}) : 0;
+  if (unfinished || legacy) throw new Error('SHOPIFY_PREPARATION_DRAIN_PENDING');
+  const jobs = await prisma.shopifyPreparationJob.findMany({where: {installationId: installation.id, status: {in: ['completed', 'cleanup_pending']}}});
+  for (const job of jobs) await cleanupShopifyPreparationJob(prisma, job.id, true);
   const shopSource = `shopify:${installation.shopDomain}`;
   const catalogProducts = installation.userId
     ? await prisma.catalogProduct.findMany({
@@ -50,7 +26,7 @@ export const redactShopifyInstallationData = async (
       })
     : [];
   const garmentIds = [...new Set(
-    catalogProducts
+    [...catalogProducts, ...await prisma.shopifyPreparationJob.findMany({where: {installationId: installation.id}, select: {garmentId: true}}).then(rows => rows.map(row => ({preparedGarmentId: row.garmentId})))]
       .map((product) => product.preparedGarmentId)
       .filter((garmentId): garmentId is string => Boolean(garmentId)),
   )];
@@ -67,7 +43,13 @@ export const redactShopifyInstallationData = async (
     await deleteStoredGarmentAsset(garment.thumbnailUrl);
   }
 
-  await prisma.$transaction(async (transaction) => {
+  await runDatabaseTransaction(prisma, async (transaction) => {
+    await lockShopifyLifecycle(transaction, installation.shopDomain);
+    const current = await transaction.shopifyInstallation.findUnique({where: {id: installation.id}});
+    if (!current) return;
+    if (current.status !== 'redacting' || current.userId !== installation.userId) throw new Error('SHOPIFY_CATALOG_STATE_CHANGED');
+    if (await transaction.shopifyPreparationJob.count({where: {installationId: installation.id, status: {not: 'cleaned'}}})) throw new Error('SHOPIFY_PREPARATION_DRAIN_PENDING');
+    await transaction.shopifyTokenLease.deleteMany({where: {shopDomain: installation.shopDomain}});
     if (installation.userId) {
       if (garmentIds.length > 0) {
         await transaction.garmentMatch.deleteMany({
@@ -82,6 +64,7 @@ export const redactShopifyInstallationData = async (
       });
     }
     await transaction.shopifyInstallation.delete({ where: { id: installation.id } });
+    await transaction.shopifyPreparationJob.deleteMany({where: {installationId: installation.id, status: 'cleaned'}});
     if (installation.storefrontApiKeyId) {
       // Preserve quota/financial references while removing the storefront
       // identity and access. Deleting a key must never erase in-flight holds.

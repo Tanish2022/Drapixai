@@ -41,6 +41,10 @@ set +a
   echo "Refusing certification outside DRAPIXAI_STAGING_CERTIFICATION_ENVIRONMENT=staging." >&2
   exit 2
 }
+[[ "${DRAPIXAI_SECURITY_TEST_MODE:-full}" == "full" ]] || {
+  echo "CPU-only security checks are partial and cannot certify a release." >&2
+  exit 2
+}
 api_url="${DRAPIXAI_STAGING_CERTIFICATION_API_URL:-}"
 [[ "$api_url" =~ ^https://[A-Za-z0-9.-]+/?$ ]] || {
   echo "DRAPIXAI_STAGING_CERTIFICATION_API_URL must be an HTTPS origin without a path." >&2
@@ -114,13 +118,17 @@ python3 "$repo_root/deploy/scripts/run-strix-staging.py" \
   --expected-commit "$current_commit" >/dev/null
 required_live_vars=(
   DRAPIXAI_SECURITY_TEST_API_URL
+  DRAPIXAI_SECURITY_TEST_APPROVED_API_ORIGIN
+  DRAPIXAI_SECURITY_TEST_AUTHORIZATION_REF
   DRAPIXAI_SECURITY_TEST_SERVER_KEY_A
   DRAPIXAI_SECURITY_TEST_SHOPPER_TOKEN_A
+  DRAPIXAI_SECURITY_TEST_SHOPPER_TOKEN_B
   DRAPIXAI_SECURITY_TEST_EXPIRED_SHOPPER_TOKEN_A
   DRAPIXAI_SECURITY_TEST_PRODUCT_A
   DRAPIXAI_SECURITY_TEST_PRODUCT_B
   DRAPIXAI_SECURITY_TEST_RESULT_B
   DRAPIXAI_SECURITY_TEST_ORIGIN_A
+  DRAPIXAI_SECURITY_TEST_ORIGIN_B
   DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A
   DRAPIXAI_SECURITY_TEST_RATE_LIMIT_PATH
   DRAPIXAI_SECURITY_TEST_RATE_LIMIT_ATTEMPTS
@@ -131,6 +139,10 @@ for name in "${required_live_vars[@]}"; do
 done
 [[ "$DRAPIXAI_SECURITY_TEST_ENVIRONMENT" == "staging" ]] || {
   echo "Live security harness must be set to staging." >&2
+  exit 2
+}
+[[ "$DRAPIXAI_SECURITY_TEST_APPROVED_API_ORIGIN" == "$api_url" ]] || {
+  echo "Approved security-test origin must exactly match the certification API URL." >&2
   exit 2
 }
 [[ "$DRAPIXAI_SECURITY_TEST_API_URL" == "$api_url" ]] || {

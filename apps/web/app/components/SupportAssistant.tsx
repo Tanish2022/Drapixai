@@ -80,7 +80,7 @@ const supportTopics: SupportTopic[] = [
     id: 'weak-results',
     title: 'Weak or unrealistic try-on results',
     summary:
-      'Most weak results come from poor garment assets or weak person images. Use clean front-facing person photos and garment-only upper-body assets with accurate color and lighting.',
+      'Results can be affected by the images and by model limitations. Use clear person and garment-only photos, inspect product details, and contact support if problems persist. Do not publish an unsuitable result.',
     keywords: ['result', 'weak', 'realistic', 'quality', 'output', 'bad', 'wrong', 'color', 'fit', 'preview'],
     links: [
       { href: '/help#tryon-results', label: 'Open try-on quality guidance' },

@@ -2,10 +2,22 @@ from __future__ import annotations
 
 from collections import defaultdict
 from copy import deepcopy
+import math
 from statistics import mean
 from typing import Iterable
 
 from drapixai_ai.preprocess.lower_body_regions import LOWER_BODY_CATEGORIES
+from drapixai_ai.quality.lower_body_benchmark import lower_body_metric_failures
+from drapixai_ai.quality.lower_body_policy import (
+    MINIMUM_ADMIN_PASS_RATE,
+    MINIMUM_AUTOMATED_PASS_RATE,
+    MINIMUM_CASES_PER_CATEGORY,
+    MINIMUM_RELEASE_RUNS,
+    MINIMUM_RESULT_SCORE,
+    is_unit_score,
+    lower_body_blocking_warnings,
+)
+from drapixai_ai.services.lower_body_run_context import validate_run_context
 
 
 RATING_FIELDS = (
@@ -24,17 +36,77 @@ REQUIRED_APPROVALS = (
 )
 
 
+def _case_passes_automated(case: dict[str, object]) -> bool:
+    category = case.get("category")
+    if category not in LOWER_BODY_CATEGORIES or case.get("status") != "succeeded":
+        return False
+    result = dict(case.get("result_metadata") or {})
+    gate = dict(case.get("benchmark_gate") or {})
+    metrics = dict(gate.get("metrics") or {})
+    person_validation = dict(case.get("person_validation") or {})
+    score = result.get("quality_score")
+    return (
+        is_unit_score(score)
+        and score >= MINIMUM_RESULT_SCORE
+        and metrics.get("overall") == score
+        and not lower_body_metric_failures(category, metrics)
+        and not lower_body_blocking_warnings(result.get("warnings"), category)
+        and gate.get("passed_automated") is True
+        and not gate.get("invalid_metrics")
+        and not gate.get("blocking_warnings")
+        and dict(case.get("preprocess") or {}).get("mode") == "strict"
+        and dict(case.get("settings") or {}).get("allow_bypass_validation") is False
+        and person_validation.get("ok") is True
+        and person_validation.get("pose_checked") is True
+        and type(person_validation.get("person_count")) is int
+        and person_validation["person_count"] == 1
+        and person_validation.get("pose_backend") == "dwpose_onnx_cpu"
+    )
+
+
+def _review_is_approved(review: dict[str, object]) -> bool:
+    return (
+        review.get("status") == "approved"
+        and bool(str(review.get("reviewer") or "").strip())
+        and isinstance(review.get("severe_failures"), list)
+        and not review["severe_failures"]
+        and all(
+            isinstance(review.get(field), int)
+            and not isinstance(review[field], bool)
+            and 4 <= review[field] <= 5
+            for field in RATING_FIELDS
+        )
+    )
+
+
+def _category_rates(cases: list[dict[str, object]]) -> tuple[float, float, float]:
+    if not cases:
+        return 0.0, 0.0, 0.0
+    automated = [_case_passes_automated(case) for case in cases]
+    approved = [_review_is_approved(dict(case.get("admin_review") or {})) for case in cases]
+    count = len(cases)
+    return (
+        sum(automated) / count,
+        sum(approved) / count,
+        sum(auto and admin for auto, admin in zip(automated, approved)) / count,
+    )
+
+
 def apply_admin_reviews(
     source_summary: dict[str, object],
     review_document: dict[str, object],
     *,
     minimum_admin_rate: float = 0.95,
 ) -> tuple[dict[str, object], list[str]]:
+    if not is_unit_score(minimum_admin_rate) or minimum_admin_rate < MINIMUM_ADMIN_PASS_RATE:
+        raise ValueError("MINIMUM_ADMIN_RATE_BELOW_POLICY")
     summary = deepcopy(source_summary)
     reviews = dict(review_document.get("reviews") or {})
     errors: list[str] = []
     eligible_cases = [case for case in summary.get("cases") or [] if case.get("benchmark_eligible")]
     expected_slugs = {str(case.get("slug")) for case in eligible_cases}
+    if len(expected_slugs) != len(eligible_cases):
+        errors.append("DUPLICATE_CASE_SLUG")
     review_slugs = set(reviews)
 
     run_id = str(summary.get("run_id") or "").strip()
@@ -74,12 +146,9 @@ def apply_admin_reviews(
         if status == "approved" and valid_ratings and any(int(review[field]) < 4 for field in RATING_FIELDS):
             errors.append(f"{slug}:APPROVAL_RATING_BELOW_GATE")
 
-        approved = (
-            status == "approved"
-            and valid_ratings
-            and all(int(review[field]) >= 4 for field in RATING_FIELDS)
-            and not severe_failures
-        )
+        if not isinstance(review.get("severe_failures"), list):
+            errors.append(f"{slug}:SEVERE_FAILURE_REVIEW_REQUIRED")
+        approved = _review_is_approved(review)
         case["admin_status"] = status or "missing"
         case["admin_review"] = {**review, "approved": approved}
         gate = dict(case.get("benchmark_gate") or {})
@@ -87,7 +156,7 @@ def apply_admin_reviews(
             {
                 "admin_status": status or "missing",
                 "passed_admin": approved,
-                "passed_release_gate": bool(gate.get("passed_automated")) and approved,
+                "passed_release_gate": _case_passes_automated(case) and approved,
             }
         )
         case["benchmark_gate"] = gate
@@ -99,23 +168,24 @@ def apply_admin_reviews(
         released = sum(1 for case in cases if (case.get("benchmark_gate") or {}).get("passed_release_gate"))
         count = len(cases)
         admin_rate = approved / count if count else 0.0
-        release_rate = released / count if count else 0.0
-        automated_rate = float(report.get("automated_pass_rate") or 0.0)
-        automated_minimum = float(
+        automated_rate, _, release_rate = _category_rates(cases)
+        automated_minimum = max(MINIMUM_AUTOMATED_PASS_RATE, float(
             report.get("minimum_category_pass_rate")
             or summary.get("minimum_category_pass_rate")
-            or 0.90
-        )
+            or MINIMUM_AUTOMATED_PASS_RATE
+        ))
         report.update(
             {
                 "admin_reviewed": count,
+                "eligible_cases": count,
+                "automated_pass_rate": automated_rate,
                 "admin_approved": approved,
                 "admin_pass_rate": admin_rate,
                 "admin_and_automated_passed": released,
                 "release_pass_rate": release_rate,
                 "minimum_admin_pass_rate": minimum_admin_rate,
                 "consistent_quality_gate_passed": (
-                    count >= int(report.get("minimum_cases") or summary.get("minimum_cases_per_category") or 12)
+                    count >= max(MINIMUM_CASES_PER_CATEGORY, int(report.get("minimum_cases") or summary.get("minimum_cases_per_category") or MINIMUM_CASES_PER_CATEGORY))
                     and automated_rate >= automated_minimum
                     and admin_rate >= minimum_admin_rate
                     and release_rate >= minimum_admin_rate
@@ -151,14 +221,35 @@ def evaluate_release_evidence(
     required_runs: int = 2,
     maximum_latency_p95_ms: int = 35_000,
 ) -> dict[str, object]:
+    if isinstance(required_runs, bool) or not isinstance(required_runs, int) or required_runs < MINIMUM_RELEASE_RUNS:
+        raise ValueError("AT_LEAST_TWO_RELEASE_RUNS_REQUIRED")
+    if (
+        isinstance(maximum_latency_p95_ms, bool)
+        or not isinstance(maximum_latency_p95_ms, (int, float))
+        or not math.isfinite(maximum_latency_p95_ms)
+        or not 0 < maximum_latency_p95_ms <= 35_000
+    ):
+        raise ValueError("INVALID_RELEASE_LATENCY_LIMIT")
     summaries = list(source_summaries)
     evaluated = summaries[-required_runs:] if required_runs > 0 else []
     blockers: list[str] = []
     expected_categories = set(LOWER_BODY_CATEGORIES)
     approvals = dict((release_approvals or {}).get("approvals") or {})
 
-    if not bool(intake_report.get("valid")):
+    if intake_report.get("valid") is not True:
         blockers.append("BENCHMARK_INTAKE_INVALID")
+    intake_cases = intake_report.get("eligible_case_ids") or []
+    expected_cases = {
+        (str(case.get("slug") or ""), str(case.get("category") or ""))
+        for case in intake_cases
+    }
+    if not expected_cases or len(expected_cases) != len(intake_cases) or any(
+        not slug or category not in expected_categories for slug, category in expected_cases
+    ):
+        blockers.append("BENCHMARK_CASE_IDENTITIES_INVALID")
+    for category in sorted(expected_categories):
+        if sum(item_category == category for _, item_category in expected_cases) < MINIMUM_CASES_PER_CATEGORY:
+            blockers.append(f"{category}:INTAKE_INSUFFICIENT_CASES")
     if len(summaries) < required_runs:
         blockers.append(f"INSUFFICIENT_RUNS:{len(summaries)}/{required_runs}")
     for area in REQUIRED_APPROVALS:
@@ -174,6 +265,9 @@ def evaluate_release_evidence(
     matrix_hashes = {str(item.get("matrix_sha256") or "") for item in evaluated}
     versions = {str(item.get("benchmark_version") or "") for item in evaluated}
     seeds = {item.get("seed") for item in evaluated}
+    run_ids = [str(item.get("run_id") or "").strip() for item in evaluated]
+    if any(not value for value in run_ids) or len(set(run_ids)) != len(run_ids):
+        blockers.append("RUN_IDS_NOT_DISTINCT")
     expected_hash = str(intake_report.get("manifest_sha256") or "")
     expected_version = str(intake_report.get("benchmark_version") or "")
     if len(engines) != 1 or "" in engines:
@@ -184,44 +278,81 @@ def evaluate_release_evidence(
         blockers.append("BENCHMARK_VERSION_MISMATCH")
     if len(evaluated) == required_runs and (None in seeds or len(seeds) != required_runs):
         blockers.append("BENCHMARK_SEEDS_NOT_DISTINCT")
+    if any(isinstance(seed, bool) or not isinstance(seed, int) or seed < 0 for seed in seeds):
+        blockers.append("BENCHMARK_SEED_INVALID")
+    contexts = [item.get("run_context_sha256") for item in evaluated]
+    if len(set(contexts)) != 1 or not contexts or not contexts[0]:
+        blockers.append("RUN_CONTEXT_MISMATCH")
 
     run_reports: list[dict[str, object]] = []
     for index, summary in enumerate(evaluated, start=max(1, len(summaries) - len(evaluated) + 1)):
         run_id = str(summary.get("run_id") or f"run-{index}")
         run_blockers: list[str] = []
+        if not validate_run_context(summary.get("run_context"), summary.get("run_context_sha256")):
+            run_blockers.append("RUN_CONTEXT_INVALID")
         review = dict(summary.get("admin_review") or {})
         if not bool(review.get("complete")) or not bool(summary.get("eligible_for_release_evaluation")):
             run_blockers.append("ADMIN_REVIEW_INCOMPLETE")
         if int(review.get("severe_failure_count") or 0) > 0:
             run_blockers.append("SEVERE_FAILURES_PRESENT")
-        if int(summary.get("failed") or 0) > 0:
+        all_cases = list(summary.get("cases") or [])
+        cases = [case for case in all_cases if case.get("benchmark_eligible") is True]
+        case_ids = [(str(case.get("slug") or ""), str(case.get("category") or "")) for case in cases]
+        if len(set(case_ids)) != len(case_ids) or len({slug for slug, _ in case_ids}) != len(case_ids):
+            run_blockers.append("DUPLICATE_CASE_SLUG")
+        if set(case_ids) != expected_cases:
+            run_blockers.append("BENCHMARK_CASE_SET_MISMATCH")
+        if any(case.get("run_context_sha256") != summary.get("run_context_sha256") for case in all_cases):
+            run_blockers.append("CASE_RUN_CONTEXT_MISMATCH")
+        if any(case.get("status") != "succeeded" for case in all_cases) or summary.get("failed") != 0:
             run_blockers.append("INFERENCE_FAILURES_PRESENT")
+        if any(
+            bool(dict(case.get("admin_review") or {}).get("severe_failures"))
+            for case in cases
+        ):
+            run_blockers.append("SEVERE_FAILURES_PRESENT")
         latency = summary.get("latency_p95_ms")
-        if not isinstance(latency, (int, float)) or isinstance(latency, bool):
+        if not isinstance(latency, (int, float)) or isinstance(latency, bool) or not math.isfinite(latency) or latency <= 0:
             run_blockers.append("LATENCY_P95_MISSING")
         elif float(latency) > maximum_latency_p95_ms:
             run_blockers.append(f"LATENCY_P95_EXCEEDED:{int(latency)}/{maximum_latency_p95_ms}")
 
         categories = dict(summary.get("category_summary") or {})
+        measured_categories: dict[str, object] = {}
         if set(categories) != expected_categories:
             run_blockers.append("CATEGORY_SET_INCOMPLETE")
         for category in sorted(expected_categories):
             report = dict(categories.get(category) or {})
-            minimum_cases = int(report.get("minimum_cases") or summary.get("minimum_cases_per_category") or 12)
-            automated_minimum = float(summary.get("minimum_category_pass_rate") or 0.90)
-            admin_minimum = float(summary.get("minimum_admin_pass_rate") or 0.95)
-            if int(report.get("eligible_cases") or 0) < minimum_cases:
+            minimum_cases = max(MINIMUM_CASES_PER_CATEGORY, int(report.get("minimum_cases") or summary.get("minimum_cases_per_category") or MINIMUM_CASES_PER_CATEGORY))
+            automated_minimum = max(MINIMUM_AUTOMATED_PASS_RATE, float(summary.get("minimum_category_pass_rate") or MINIMUM_AUTOMATED_PASS_RATE))
+            admin_minimum = max(MINIMUM_ADMIN_PASS_RATE, float(summary.get("minimum_admin_pass_rate") or MINIMUM_ADMIN_PASS_RATE))
+            category_cases = [case for case in cases if case.get("category") == category]
+            automated_rate, admin_rate, release_rate = _category_rates(category_cases)
+            measured_categories[category] = {
+                "eligible_cases": len(category_cases),
+                "minimum_cases": minimum_cases,
+                "automated_pass_rate": automated_rate,
+                "admin_pass_rate": admin_rate,
+                "release_pass_rate": release_rate,
+                "minimum_result_quality_score": MINIMUM_RESULT_SCORE,
+            }
+            if len(category_cases) < minimum_cases:
                 run_blockers.append(f"{category}:INSUFFICIENT_CASES")
-            if float(report.get("automated_pass_rate") or 0.0) < automated_minimum:
+            if automated_rate < automated_minimum:
                 run_blockers.append(f"{category}:AUTOMATED_RATE_FAILED")
-            if float(report.get("admin_pass_rate") or 0.0) < admin_minimum:
+            if admin_rate < admin_minimum:
                 run_blockers.append(f"{category}:ADMIN_RATE_FAILED")
-            if float(report.get("release_pass_rate") or 0.0) < admin_minimum:
+            if release_rate < admin_minimum:
                 run_blockers.append(f"{category}:COMBINED_RATE_FAILED")
             if not bool(report.get("consistent_quality_gate_passed")):
                 run_blockers.append(f"{category}:CONSISTENCY_FAILED")
         blockers.extend(f"{run_id}:{blocker}" for blocker in run_blockers)
-        run_reports.append({"run_id": run_id, "passed": not run_blockers, "blockers": run_blockers})
+        run_reports.append({
+            "run_id": run_id,
+            "passed": not run_blockers,
+            "blockers": run_blockers,
+            "measured_categories": measured_categories,
+        })
 
     eligible = len(evaluated) == required_runs and not blockers
     return {
@@ -231,6 +362,8 @@ def evaluate_release_evidence(
         "required_consecutive_runs": required_runs,
         "evaluated_runs": len(evaluated),
         "maximum_latency_p95_ms": maximum_latency_p95_ms,
+        "minimum_result_quality_score": MINIMUM_RESULT_SCORE,
+        "minimum_cases_per_category": MINIMUM_CASES_PER_CATEGORY,
         "benchmark_version": expected_version or None,
         "benchmark_sha256": expected_hash or None,
         "release_approvals_complete": not any(

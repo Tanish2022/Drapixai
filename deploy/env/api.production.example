@@ -8,7 +8,8 @@ DRAPIXAI_AWS_SECRET_ID=drapixai/production/api
 DRAPIXAI_INTERNAL_TLS_SECRETS_DIR=/run/secrets/drapixai-api-internal-tls
 # Alternative: DRAPIXAI_SECRETS_PROVIDER=mounted-file
 # DRAPIXAI_MOUNTED_SECRET_FILE=/run/secrets/drapixai-api
-DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:5432/drapixai?sslmode=verify-full
+# Native Prisma connector: require encryption AND certificate verification.
+DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:5432/drapixai?sslmode=require&sslaccept=strict
 REDIS_URL=rediss://USERNAME:PASSWORD@HOST:6379
 DRAPIXAI_REDIS_PASSWORD=replace-with-a-long-random-secret
 DRAPIXAI_SERVER_KEY_RATE_LIMIT=120
@@ -17,6 +18,12 @@ DRAPIXAI_TENANT_RATE_LIMIT=1200
 DRAPIXAI_MAX_CONCURRENT_TRYONS=3
 DRAPIXAI_TENANT_MAX_CONCURRENT_TRYONS=1
 DRAPIXAI_TRYON_SLOT_LEASE_MS=120000
+DRAPIXAI_TRYON_RESERVATION_MAX_MS=420000
+# Choose a deployment UUID, then acknowledge idle AI workers on the current
+# Redis run ID with manage-tryon-admission. Never auto-acknowledge after restart.
+DRAPIXAI_TRYON_ADMISSION_EPOCH=replace-with-deployment-uuid
+DRAPIXAI_AI_REQUEST_TIMEOUT_MS=360000
+DRAPIXAI_AI_MAX_RESPONSE_BYTES=67108864
 DRAPIXAI_TRYON_INTAKE_ENABLED=1
 DRAPIXAI_METRICS_TOKEN=replace-with-a-long-random-secret
 DRAPIXAI_RQ_QUEUE_KEY=rq:queue:default
@@ -69,11 +76,13 @@ DRAPIXAI_SHOPIFY_ENABLED=0
 SHOPIFY_API_KEY=
 SHOPIFY_API_SECRET=
 SHOPIFY_API_VERSION=2026-07
-SHOPIFY_SCOPES=read_products
+SHOPIFY_SCOPES=read_products,write_app_proxy
 SHOPIFY_USE_LEGACY_INSTALL_FLOW=0
 DRAPIXAI_SHOPIFY_AUTO_PREPARE=1
 DRAPIXAI_SHOPIFY_PREPARE_BATCH_SIZE=3
 DRAPIXAI_SHOPIFY_PREPARE_MAX_ATTEMPTS=3
+# Admission backlog per tenant, independent of GPU concurrency/batch size.
+DRAPIXAI_SHOPIFY_PREPARE_MAX_PENDING_PER_TENANT=100
 DRAPIXAI_SHOPIFY_IMAGE_MAX_BYTES=10485760
 DRAPIXAI_SHOPIFY_IMAGE_MAX_PIXELS=40000000
 DRAPIXAI_SHOPIFY_IMAGE_HOSTS=cdn.shopify.com,*.shopifycdn.com
@@ -104,13 +113,23 @@ S3_FORCE_PATH_STYLE=0
 # to Secrets Manager, S3 and KMS through its runtime identity.
 DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION=aws:kms
 DRAPIXAI_S3_KMS_KEY_ID=replace-with-kms-key-id
-SMTP_HOST=
+SMTP_HOST=smtp.resend.com
 SMTP_PORT=587
 SMTP_SECURE=0
 SMTP_USER=
 SMTP_PASS=
+# Port 587 uses mandatory STARTTLS. For implicit TLS use 465 and SMTP_SECURE=1.
+# Keep the real sending-only key in the managed secret provider, not this file.
 SMTP_FROM="DrapixAI <no-reply@mail.drapixai.com>"
 SMTP_REPLY_TO=support@drapixai.com
 EMAIL_PUBLIC_BASE_URL=https://drapixai.com
 EMAIL_BRAND_LOGO_URL=https://drapixai.com/drapixai_wordmark.webp
 EMAIL_SUPPORT_ADDRESS=support@drapixai.com
+# Activate only after the email-event migration, isolated secrets and HTTPS
+# callback have passed staging acceptance. No open/click tracking is needed.
+DRAPIXAI_EMAIL_EVENTS_ENABLED=0
+DRAPIXAI_EMAIL_EVENT_SENDERS=no-reply@mail.drapixai.com,noreplybilling@mail.drapixai.com
+DRAPIXAI_RESEND_WEBHOOK_SECRET=
+DRAPIXAI_RESEND_WEBHOOK_PREVIOUS_SECRETS=
+DRAPIXAI_EMAIL_RECIPIENT_HASH_SECRET=
+DRAPIXAI_EMAIL_RECIPIENT_HASH_PREVIOUS_SECRETS=

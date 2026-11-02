@@ -16,6 +16,7 @@ from drapixai_ai.services.transient_spool import (
     write_transient_bytes,
 )
 from drapixai_ai.worker.gpu_worker import run_tryon_job
+from drapixai_ai.services.admission_protocol import TryOnLimitExceeded, TryOnTerminalFailure
 
 
 class TryOnService:
@@ -45,7 +46,7 @@ class TryOnService:
     ) -> Job:
         allowed = self.limiter.check_and_increment(user_id)
         if not allowed:
-            raise PermissionError("TRY_ON_LIMIT_EXCEEDED")
+            raise TryOnLimitExceeded("TRY_ON_LIMIT_EXCEEDED")
 
         steps = inference_steps
         guidance = guidance_scale
@@ -87,13 +88,13 @@ class TryOnService:
             if job.is_failed:
                 self._cleanup_job_inputs(job)
                 job.delete()
-                raise RuntimeError("TRY_ON_FAILED")
+                raise TryOnTerminalFailure("TRY_ON_FAILED")
             if job.result is not None:
                 result = dict(job.result)
                 output_ref = result.pop("output_image_ref", None)
                 try:
                     if not output_ref:
-                        raise RuntimeError("TRY_ON_OUTPUT_MISSING")
+                        raise TryOnTerminalFailure("TRY_ON_OUTPUT_MISSING")
                     result["image_base64"] = base64.b64encode(
                         read_transient_bytes(output_ref)
                     ).decode("ascii")

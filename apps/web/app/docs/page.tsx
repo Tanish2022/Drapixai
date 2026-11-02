@@ -1,14 +1,12 @@
 import type { Metadata } from 'next';
+import { DISCOVERY_PAGES } from '@/app/lib/discovery-pages';
 import Link from 'next/link';
 import { ArrowRight, Check, Code2, ExternalLink, Store, Upload } from 'lucide-react';
 import MarketingFooter from '@/app/components/MarketingFooter';
 import MarketingNav from '@/app/components/MarketingNav';
 import { PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 
-export const metadata: Metadata = {
-  title: 'Developer Quickstart',
-  description: 'Prepare one product and complete your first DrapixAI storefront try-on.',
-};
+export const metadata: Metadata = DISCOVERY_PAGES['/docs'];
 
 const curlSnippet = `# Run this exchange on your backend. Never expose SERVER_API_KEY to a browser or app.
 TOKEN=$(curl -s -X POST '${PUBLIC_API_BASE_URL}/v1/tokens' \\

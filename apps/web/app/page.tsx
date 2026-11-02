@@ -6,6 +6,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import BrandLogo from '@/app/components/BrandLogo';
 import MarketingFooter from '@/app/components/MarketingFooter';
+import { getSdkScriptUrl } from '@/app/lib/public-env';
 import {
   ArrowRight,
   BadgeCheck,
@@ -228,7 +229,7 @@ export default function Home() {
             <div className="mx-auto grid max-w-[1440px] grid-cols-3 divide-x divide-black/10 px-5 sm:px-8 lg:px-12">
               {[
                 ['Upper-body', 'Current garment scope'],
-                ['Standard', 'One production mode'],
+                ['Standard', 'Configured quality mode'],
                 ['Review', 'Before publishing'],
               ].map(([value, label]) => (
                 <div key={label} className="py-4 text-center sm:py-5">
@@ -353,7 +354,7 @@ export default function Home() {
                     <span className="flex items-center gap-2 font-semibold text-white"><Code2 className="h-4 w-4 text-[#8cd3b3]" />Storefront SDK</span>
                     <span className="text-xs text-[#8ea095]">Standard mode</span>
                   </div>
-                  <pre tabIndex={0} role="region" aria-label="SDK installation example">{`<script src="https://cdn.drapixai.com/sdk.js"></script>
+                  <pre tabIndex={0} role="region" aria-label="SDK installation example">{`<script src="${getSdkScriptUrl()}"></script>
 
 <div id="drapixai-container"></div>
 
@@ -381,7 +382,7 @@ export default function Home() {
             <div className="max-w-3xl">
               <p className="text-xs font-bold uppercase text-[#1f5e46]">Controlled rollout</p>
               <h2 className="mt-5 font-serif text-4xl font-normal leading-tight text-[#102018] sm:text-6xl">Prove one product before you scale the catalog.</h2>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#385345]">Use the 300 try-on trial to evaluate Standard upper-body quality on your own products. Publish only when the workflow meets your brand bar.</p>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#385345]">Evaluate upper-body previews on your own products once service and access are available. Trial allowances do not guarantee immediate generation. Review every result before publishing.</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
               <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="inline-flex h-14 min-w-56 items-center justify-center gap-2 bg-[#172019] px-7 font-semibold text-white hover:bg-[#26352a]">

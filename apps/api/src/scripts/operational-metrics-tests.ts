@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import http from 'node:http';
+import express from 'express';
+import { observeHttpResponse, observeEmailProviderEvent, renderOperationalMetrics } from '../lib/operational-metrics';
+import { requireTryOnIntake } from '../lib/tryon-intake';
+const prisma = { webhookDelivery: { count: async () => 0 } } as any;
+const redis = { lLen: async () => 0, zCard: async () => 0 };
+async function main() {
+  const sensitive = crypto.randomBytes(32).toString('hex');
+  observeHttpResponse('GET', `/unknown/${sensitive}`, 404);
+  let text = await renderOperationalMetrics(prisma, redis);
+  assert.ok(!text.includes(sensitive), 'Unmatched request identifiers must not enter metrics');
+  for (let i = 0; i < 3000; i++) observeHttpResponse('GET', `/unknown/visitor-${i}`, 404);
+  text = await renderOperationalMetrics(prisma, redis);
+  assert.ok(text.split('\n').filter(line => line.startsWith('drapixai_http_requests_total{')).length <= 2, 'Arbitrary paths must not grow the metric label set');
+  const savedEnv = { NODE_ENV: process.env.NODE_ENV, DRAPIXAI_TRYON_INTAKE_ENABLED: process.env.DRAPIXAI_TRYON_INTAKE_ENABLED };
+  process.env.NODE_ENV = 'production'; process.env.DRAPIXAI_TRYON_INTAKE_ENABLED = '0';
+  const app = express(), router = express.Router(); let generated = 0;
+  app.use((req, res, next) => { res.once('finish', () => observeHttpResponse(req.method, req.originalUrl.split('?')[0], res.statusCode, req.route?.path)); next(); });
+  app.get('/health', (_req, res) => res.json({ ok: true }));
+  app.get('/v1/usage', (_req, res) => res.json({ synthetic: true }));
+  const auth = express.Router(); auth.post('/login', (_req, res) => res.status(401).json({ synthetic: true })); app.use('/auth', auth);
+  router.get('/results/:id', (_req, res) => res.json({ synthetic: true }));
+  router.post('/tryon', requireTryOnIntake, (_req, res) => { generated++; res.json({ synthetic: true }); });
+  app.use('/sdk', router);
+  const server = http.createServer(app);
+  await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const origin = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
+  const request = async (route: string, method = 'GET') => {
+    const result = await fetch(origin + route, { method, signal: AbortSignal.timeout(3000) });
+    await result.arrayBuffer(); return result;
+  };
+  try {
+    let paused = await request('/sdk/tryon', 'POST');
+    assert.equal(paused.status, 503); assert.equal(paused.headers.get('retry-after'), '60');
+    assert.equal(paused.headers.get('x-drapixai-intake-status'), 'paused'); assert.equal(generated, 0);
+    for (const route of ['/health', '/v1/usage', `/sdk/results/${sensitive}`]) assert.equal((await request(route)).status, 200);
+    assert.equal((await request('/auth/login', 'POST')).status, 401);
+    assert.equal((await request('/AUTH/login', 'POST')).status, 401);
+    text = await renderOperationalMetrics(prisma, redis);
+    assert.match(text, /drapixai_tryon_intake_enabled 0/);
+    assert.match(text, /path="\/sdk\/results\/:id"/); assert.ok(!text.includes(sensitive));
+    assert.match(text, /drapixai_auth_failures_total 2/);
+    process.env.DRAPIXAI_TRYON_INTAKE_ENABLED = '1';
+    assert.equal((await request('/sdk/tryon', 'POST')).status, 200); assert.equal(generated, 1);
+    assert.match(await renderOperationalMetrics(prisma, redis), /drapixai_tryon_intake_enabled 1/);
+    process.env.DRAPIXAI_TRYON_INTAKE_ENABLED = '0';
+    paused = await request('/sdk/tryon', 'POST'); assert.equal(paused.status, 503); assert.equal(generated, 1);
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+    for (const [key, value] of Object.entries(savedEnv)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+  observeHttpResponse('POST', '/email/webhooks/resend', 200, '/');
+  observeEmailProviderEvent(sensitive); observeEmailProviderEvent('email.complained');
+  observeHttpResponse('POST', '/auth/login', 401, '/login'); observeHttpResponse('POST', '/v1/usage', 429, '/usage');
+  text = await renderOperationalMetrics(prisma, redis);
+  assert.ok(!text.includes(sensitive));
+  assert.match(text, /path="\/email\/webhooks\/resend"/);
+  assert.match(text, /drapixai_email_provider_events_total\{event="complained"\} 1/);
+  for (let i = 0; i < 2000; i++) observeHttpResponse('GET', '/known', 200, `/registered-route-${i}`);
+  observeHttpResponse(sensitive, '/unknown', Number.NaN);
+  text = await renderOperationalMetrics(prisma, redis);
+  assert.ok(!text.includes(sensitive));
+  assert.ok(text.split('\n').filter(line => line.startsWith('drapixai_http_requests_total{')).length <= 1024);
+  assert.match(text, /drapixai_http_series_overflow_total [1-9]\d*/);
+  assert.match(text, /drapixai_auth_failures_total [1-9]\d*/); assert.match(text, /drapixai_rate_limited_total [1-9]\d*/);
+  console.log(JSON.stringify({ passed: true, scope: 'Owned loopback Express fixture; actual metrics/intake helpers, synthetic generation/usage/result routes and database/Redis adapters; not deployed operations', checks: ['private unmatched paths aggregate', 'registered parameter templates exclude identifiers', '1024-series cap preserves global security counters', 'paused intake rejects before synthetic handler', 'health/usage/metadata remain available', 'synthetic resume/pause matches metrics'] }));
+}
+main().catch(error => { console.error(error.message); process.exitCode = 1; });

@@ -3,7 +3,7 @@
 Run from:
 
 ```powershell
-cd C:\Users\tanis\OneDrive\Desktop\Drapixai\apps\api
+cd PRIVATE_WORKSPACE\apps\api
 node scripts/send-brand-outreach.js
 ```
 
@@ -32,7 +32,7 @@ node scripts/send-brand-outreach.js
 ## Example Dry Run
 ```powershell
 $env:OUTREACH_DRY_RUN='true'
-$env:OUTREACH_LEADS_CSV='C:\Users\tanis\OneDrive\Desktop\Drapixai\marketing\brand-leads-template.csv'
+$env:OUTREACH_LEADS_CSV='PRIVATE_WORKSPACE\marketing\brand-leads-template.csv'
 node scripts/send-brand-outreach.js
 ```
 

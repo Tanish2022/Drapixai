@@ -108,11 +108,14 @@ function authFixture(user, authorized=true, mfa=true) {
   let current=user?{...user}:null;
   const router={use(){},post(name,...handlers){routes.set(name,handlers.at(-1));}};
   const db={
+    termsDocument:{upsert:async({create})=>create},
+    accountTermsAcceptance:{findUnique:async()=>user?require('../apps/api/src/legal/terms-metadata.json'):null,
+      upsert:async({create})=>create},
     user:{findUnique:async()=>current?{...current}:null,create:async({data})=>{current={id:10,authVersion:1,role:'brand_admin',...data};writes.push('create');return {...current};},
       update:async({data})=>{writes.push(data);current={...current,...data};return {...current};}},
     apiKey:{updateMany:async(args)=>{writes.push({keys:args});return{count:1};}},
     verificationCode:{updateMany:async(args)=>{writes.push({codes:args});return{count:1};}},
-    $transaction:async(ops)=>Promise.all(ops),
+    $transaction:async(ops)=>typeof ops==='function'?ops(db):Promise.all(ops),
   };
   const load=loader({express:{Router:()=>router},'@prisma/client':{PrismaClient:class{constructor(){return db;}}},
     '../lib/rate-limit':{createRateLimitMiddleware:()=>()=>{}},
@@ -156,9 +159,10 @@ test('Reset creates a full-input hash and revokes keys and outstanding recovery 
 });
 test('Signup uses the full input, while invalid OTPs and overload cannot consume extra codes',async()=>{
   const f=authFixture(null),password='A1!a'+'é'.repeat(50),res=response();
-  await f.routes.get('/register')({body:{email:'new@example.test',password,otp:'123456'}},res);
+  const termsAcceptance={accepted:true,...require('../apps/api/src/legal/terms-metadata.json')};
+  await f.routes.get('/register')({body:{email:'new@example.test',password,otp:'123456',termsAcceptance}},res);
   assert.equal(res.statusCode,200);assert.equal((await f.password.verifyPassword(password,f.current().passwordHash)).matches,true);
-  const denied=authFixture(null,false),bad=response();await denied.routes.get('/register')({body:{email:'new@example.test',password,otp:'123456'}},bad);
+  const denied=authFixture(null,false),bad=response();await denied.routes.get('/register')({body:{email:'new@example.test',password,otp:'123456',termsAcceptance}},bad);
   assert.equal(bad.statusCode,400);assert.equal(denied.writes.length,0);
   const busy=authFixture(userWith('fixture')),releases=[];
   const holds=[0,1].map(()=>busy.password.hashPasswordAfterAuthorization(strong,()=>new Promise(resolve=>releases.push(resolve))));

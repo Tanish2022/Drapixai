@@ -29,6 +29,15 @@ from drapixai_ai.services.garment_preprocessor import (
     preprocess_garment,
 )
 from drapixai_ai.services.lower_body_validator import validate_lower_body_person
+from drapixai_ai.services.lower_body_run_context import build_run_context
+from drapixai_ai.quality.lower_body_policy import (
+    MINIMUM_ADMIN_PASS_RATE,
+    MINIMUM_AUTOMATED_PASS_RATE,
+    MINIMUM_CASES_PER_CATEGORY,
+    MINIMUM_RESULT_SCORE,
+    is_unit_score,
+    lower_body_blocking_warnings,
+)
 
 
 APP_ROOT = Path(os.getenv("DRAPIXAI_APP_ROOT", REPO_ROOT))
@@ -36,11 +45,13 @@ MATRIX_FILE = Path(os.getenv("DRAPIXAI_LOWER_BODY_MATRIX_FILE", APP_ROOT / "runt
 OUTPUT_ROOT = Path(os.getenv("DRAPIXAI_LOWER_BODY_MATRIX_DIR", APP_ROOT / "runtime" / "lower_body_matrix"))
 ALLOW_BYPASS_VALIDATION = os.getenv("DRAPIXAI_LOWER_BODY_MATRIX_ALLOW_BYPASS", "0") == "1"
 FAIL_ON_QUALITY = os.getenv("DRAPIXAI_LOWER_BODY_MATRIX_FAIL_ON_QUALITY", "1") == "1"
-MIN_CASES_PER_CATEGORY = int(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_MIN_CASES", "12"))
-MIN_CATEGORY_PASS_RATE = float(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_PASS_RATE", "0.90"))
-MIN_ADMIN_PASS_RATE = float(os.getenv("DRAPIXAI_LOWER_BODY_ADMIN_PASS_RATE", "0.95"))
+MIN_CASES_PER_CATEGORY = max(MINIMUM_CASES_PER_CATEGORY, int(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_MIN_CASES", "12")))
+MIN_CATEGORY_PASS_RATE = max(MINIMUM_AUTOMATED_PASS_RATE, float(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_PASS_RATE", "0.90")))
+MIN_ADMIN_PASS_RATE = max(MINIMUM_ADMIN_PASS_RATE, float(os.getenv("DRAPIXAI_LOWER_BODY_ADMIN_PASS_RATE", "0.95")))
+MIN_RESULT_SCORE = max(MINIMUM_RESULT_SCORE, settings.min_quality_score)
 RUN_ID = os.getenv("DRAPIXAI_LOWER_BODY_RUN_ID", OUTPUT_ROOT.name)
 BENCHMARK_SEED = int(os.getenv("DRAPIXAI_LOWER_BODY_BENCHMARK_SEED", "42"))
+RUNTIME_REPORT = os.getenv("DRAPIXAI_LOWER_BODY_RUNTIME_REPORT", "").strip()
 
 
 @dataclass(frozen=True)
@@ -80,7 +91,7 @@ def _load_cases() -> list[LowerBodyCase]:
                 garment_path=_resolve_path(str(item["garment_path"])),
                 category=category,
                 notes=str(item.get("notes") or ""),
-                benchmark_eligible=bool(item.get("benchmark_eligible", False)),
+                benchmark_eligible=item.get("benchmark_eligible") is True,
                 admin_status=str((item.get("admin_review") or {}).get("status") or "pending"),
                 provenance=dict(item.get("provenance") or {}),
             )
@@ -120,6 +131,10 @@ def main() -> None:
     if limit > 0:
         selected_cases = selected_cases[:limit]
 
+    run_context = {}
+    if RUNTIME_REPORT:
+        run_context = build_run_context(settings, APP_ROOT, json.loads(Path(RUNTIME_REPORT).read_text(encoding="utf-8")))
+
     pipeline = DrapixAITryOnPipeline()
     summary: list[dict[str, object]] = []
 
@@ -128,6 +143,7 @@ def main() -> None:
         case_dir.mkdir(parents=True, exist_ok=True)
         entry: dict[str, object] = {
             "index": index,
+            "run_context_sha256": run_context.get("run_context_sha256"),
             "slug": case.slug,
             "category": case.category,
             "person_path": str(case.person_path),
@@ -171,6 +187,10 @@ def main() -> None:
                 "warnings": person_validation.warnings,
                 "width": person_validation.width,
                 "height": person_validation.height,
+                "pose_checked": person_validation.pose_checked,
+                "person_count": person_validation.person_count,
+                "pose_backend": person_validation.pose_backend,
+                "pose_measurements": person_validation.pose_measurements,
             }
             if not person_validation.ok:
                 raise ValueError(f"LOWER_BODY_INVALID:{person_validation.reason}")
@@ -232,10 +252,15 @@ def main() -> None:
             entry["status"] = "succeeded"
             entry["latency_ms"] = latency_ms
             safety_blocked = bool(result.metadata.get("safety_blocked")) or "SAFETY_CHECK_BLOCKED" in result.warnings
-            quality_passed = result.quality_score >= settings.min_quality_score and not safety_blocked
+            quality_passed = (
+                is_unit_score(result.quality_score)
+                and result.quality_score >= MIN_RESULT_SCORE
+                and not safety_blocked
+                and not lower_body_blocking_warnings(result.warnings, case.category)
+            )
             entry["quality_gate"] = {
                 "passed": quality_passed,
-                "threshold": settings.min_quality_score,
+                "threshold": MIN_RESULT_SCORE,
                 "safety_blocked": safety_blocked,
             }
             entry["result_metadata"] = {
@@ -257,6 +282,7 @@ def main() -> None:
                     if isinstance(value, (int, float))
                 },
                 admin_status=case.admin_status,
+                warnings=result.warnings,
             )
         except Exception as exc:  # noqa: BLE001
             entry["status"] = "failed"
@@ -322,6 +348,7 @@ def main() -> None:
     )
 
     report = {
+        **run_context,
         "run_id": RUN_ID,
         "matrix_file": str(MATRIX_FILE),
         "matrix_sha256": _sha256(MATRIX_FILE),
@@ -341,6 +368,7 @@ def main() -> None:
         "minimum_cases_per_category": MIN_CASES_PER_CATEGORY,
         "minimum_category_pass_rate": MIN_CATEGORY_PASS_RATE,
         "minimum_admin_pass_rate": MIN_ADMIN_PASS_RATE,
+        "minimum_result_quality_score": MIN_RESULT_SCORE,
         "category_summary": category_summary,
         "fail_on_quality": FAIL_ON_QUALITY,
         "average_quality_score": sum(quality_scores) / len(quality_scores) if quality_scores else None,

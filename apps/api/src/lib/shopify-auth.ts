@@ -36,7 +36,9 @@ export const normalizeOriginHost = (value: unknown) => {
 };
 
 export const verifyShopifyQueryHmac = (rawQuery: string) => {
+  if (rawQuery.length > 8192) return false;
   const params = new URLSearchParams(rawQuery);
+  if (Array.from(params.keys()).some((key) => params.getAll(key).length !== 1)) return false;
   const provided = params.get('hmac') || '';
   params.delete('hmac');
   params.delete('signature');
@@ -49,7 +51,11 @@ export const verifyShopifyQueryHmac = (rawQuery: string) => {
 };
 
 export const verifyShopifyAppProxyQuery = (rawQuery: string, maxAgeSeconds = 300) => {
+  if (rawQuery.length > 8192) return false;
   const params = new URLSearchParams(rawQuery);
+  for (const key of ['signature', 'shop', 'timestamp', 'product_id', 'productId', 'path_prefix', 'logged_in_customer_id']) {
+    if (params.getAll(key).length > 1) return false;
+  }
   const provided = params.get('signature') || '';
   params.delete('signature');
 
@@ -84,13 +90,18 @@ export const createShopifyState = (shop: string) => {
 };
 
 export const verifyShopifyState = (state: string): ShopifyStatePayload | null => {
-  const [encoded, signature] = state.split('.');
+  if (typeof state !== 'string' || state.length > 2048) return null;
+  const parts = state.split('.');
+  if (parts.length !== 2) return null;
+  const [encoded, signature] = parts;
   if (!encoded || !signature) return null;
   const expected = crypto.createHmac('sha256', getStateSecret()).update(encoded).digest('base64url');
   if (!safeEqual(expected, signature)) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as ShopifyStatePayload;
-    if (!payload.shop || !payload.nonce || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (!payload || typeof payload.shop !== 'string' || normalizeShopDomain(payload.shop) !== payload.shop
+      || typeof payload.nonce !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(payload.nonce)
+      || !Number.isSafeInteger(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {
     return null;
@@ -98,11 +109,13 @@ export const verifyShopifyState = (state: string): ShopifyStatePayload | null =>
 };
 
 export const readCookie = (cookieHeader: string | undefined, name: string) => {
-  const entry = String(cookieHeader || '')
+  if (String(cookieHeader || '').length > 8192) return null;
+  const entries = String(cookieHeader || '')
     .split(';')
     .map((part) => part.trim())
-    .find((part) => part.startsWith(`${name}=`));
-  return entry ? decodeURIComponent(entry.slice(name.length + 1)) : null;
+    .filter((part) => part.startsWith(`${name}=`));
+  if (entries.length !== 1) return null;
+  try { return decodeURIComponent(entries[0].slice(name.length + 1)); } catch { return null; }
 };
 
 export const generateLinkToken = () => crypto.randomBytes(32).toString('base64url');

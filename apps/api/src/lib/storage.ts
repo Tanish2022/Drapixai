@@ -6,6 +6,7 @@ const region = process.env.AWS_REGION || 'us-east-1';
 const endpoint = (process.env.S3_ENDPOINT || '').trim();
 const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
 const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+const sessionToken = (process.env.AWS_SESSION_TOKEN || '').trim();
 const hasStaticCredentials = accessKeyId.length > 0 && secretAccessKey.length > 0;
 const isCustomEndpoint = endpoint.length > 0;
 const serverSideEncryption = (
@@ -42,6 +43,7 @@ export function createStorageClient() {
           credentials: {
             accessKeyId,
             secretAccessKey,
+            ...(sessionToken ? { sessionToken } : {}),
           },
         }
       : {}),

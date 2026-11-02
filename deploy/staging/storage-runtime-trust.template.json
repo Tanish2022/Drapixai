@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"Service": "rolesanywhere.amazonaws.com"},
+      "Action": ["sts:AssumeRole", "sts:TagSession", "sts:SetSourceIdentity"],
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "arn:aws:rolesanywhere:ap-south-1:111122223333:trust-anchor/REPLACE_WITH_CREATED_ANCHOR_UUID"
+        },
+        "StringEquals": {
+          "aws:SourceAccount": "111122223333",
+          "aws:PrincipalTag/x509Subject/CN": "DrapixAI-CpuStaging-Windows-20261024",
+          "aws:PrincipalTag/x509Issuer/CN": "DrapixAI-CpuStaging-CA-20261024"
+        }
+      }
+    }
+  ]
+}

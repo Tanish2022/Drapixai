@@ -1,0 +1,45 @@
+# Preparation only: no receiver or credential is activated by this example.
+# Validate with the selected Alertmanager runtime before installing it privately.
+global:
+  smtp_smarthost: smtp.resend.com:587
+  smtp_from: DrapixAI Operations <no-reply@mail.drapixai.com>
+  smtp_auth_username: resend
+  smtp_auth_password_file: /run/secrets/drapixai-alert-smtp-password
+  smtp_require_tls: true
+  smtp_tls_config:
+    server_name: smtp.resend.com
+    min_version: TLS12
+    insecure_skip_verify: false
+
+route:
+  receiver: operations-oncall
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 2h
+  routes:
+    - matchers: ['severity="critical"']
+      receiver: company-critical-email
+      repeat_interval: 15m
+
+receivers:
+  - name: operations-oncall
+    webhook_configs:
+      - url_file: /run/secrets/drapixai-operations-alert-webhook
+        send_resolved: true
+  - name: company-critical-email
+    email_configs:
+      - to: admin@drapixai.com
+        send_resolved: true
+        headers:
+          Subject: '[DrapixAI] {{ .GroupLabels.alertname }} ({{ .Status }})'
+          Reply-To: support@drapixai.com
+        text: 'DrapixAI alert {{ .GroupLabels.alertname }} is {{ .Status }}. Review the private monitoring dashboard.'
+        html: '<p>DrapixAI alert {{ .GroupLabels.alertname }} is {{ .Status }}. Review the private monitoring dashboard.</p>'
+      - to: support@drapixai.com
+        send_resolved: true
+        headers:
+          Subject: '[DrapixAI] {{ .GroupLabels.alertname }} ({{ .Status }})'
+          Reply-To: support@drapixai.com
+        text: 'DrapixAI alert {{ .GroupLabels.alertname }} is {{ .Status }}. Review the private monitoring dashboard.'
+        html: '<p>DrapixAI alert {{ .GroupLabels.alertname }} is {{ .Status }}. Review the private monitoring dashboard.</p>'

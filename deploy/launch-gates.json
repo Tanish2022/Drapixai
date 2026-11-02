@@ -2,6 +2,30 @@
   "version": 1,
   "repository": [
     {
+      "id": "account-terms-http",
+      "label": "Production-mode HTTP signup, current terms enforcement and authenticated acceptance with disposable PostgreSQL and Redis",
+      "runner": "node",
+      "args": ["scripts/verify-account-terms-database.mjs", "--http"]
+    },
+    {
+      "id": "account-terms-validation",
+      "label": "Versioned terms archive and strict affirmative acceptance validation",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:account-terms"]
+    },
+    {
+      "id": "account-terms-sql",
+      "label": "Disposable PostgreSQL rejects terms ledger rewrites, truncation and forged timestamps",
+      "runner": "node",
+      "args": ["scripts/verify-account-terms-database.mjs"]
+    },
+    {
+      "id": "account-terms-orm",
+      "label": "Actual Prisma terms helpers preserve transactional and idempotent acceptance",
+      "runner": "node",
+      "args": ["scripts/verify-account-terms-database.mjs", "--orm"]
+    },
+    {
       "id": "versioned-retention-drill",
       "label": "Disposable PostgreSQL and S3 compatibility tests prove version erasure, lock denial and retained-reference retry",
       "runner": "node",
@@ -126,6 +150,36 @@
       "label": "Image signature and decompression-bomb upload tests",
       "runner": "npm",
       "args": ["--prefix", "apps/api", "run", "test:image-upload-security"]
+    },
+    {
+      "id": "request-parser-security",
+      "label": "Real compressed-body and pending multipart-filter teardown regressions",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:request-parsers"]
+    },
+    {
+      "id": "live-security-harness-safety",
+      "label": "Bounded staging harness rejects unsafe targets, false passes and incomplete CPU evidence",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:security-harness"]
+    },
+    {
+      "id": "operational-metrics-and-intake",
+      "label": "Private bounded metrics and emergency intake pause/resume with owned HTTP fixture",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:operational-metrics"]
+    },
+    {
+      "id": "migration-history-preflight",
+      "label": "Actual pending migration state and failed/divergent ledger checks on owned PostgreSQL",
+      "runner": "node",
+      "args": ["scripts/verify-migration-preflight.mjs"]
+    },
+    {
+      "id": "migration-wrapper-safety",
+      "label": "Migration wrapper refuses unsafe status/history/source using offline tool adapters",
+      "runner": "node",
+      "args": ["deploy/scripts/test-migration-wrapper.mjs"]
     },
     {
       "id": "input-validation",
@@ -269,6 +323,24 @@
       "args": ["--test", "scripts/disposable-billing-guard.test.mjs"]
     },
     {
+      "id": "billing-runtime-fixture",
+      "label": "Real billing HTTP/signature/SQL lifecycle and quota checks with synthetic provider adapters",
+      "runner": "node",
+      "args": ["scripts/verify-billing-runtime.mjs"]
+    },
+    {
+      "id": "merchant-runtime-fixture",
+      "label": "Merchant link race, OAuth/webhook/tenant catalog and redaction checks with synthetic provider transport",
+      "runner": "node",
+      "args": ["scripts/verify-merchant-runtime.mjs"]
+    },
+    {
+      "id": "shopify-scope-config",
+      "label": "Shopify app scope, URL and mandatory-webhook refusal tests",
+      "runner": "python",
+      "args": ["apps/shopify/scripts/test_shopify_config.py"]
+    },
+    {
       "id": "python-compile",
       "label": "Production Python compile validation",
       "runner": "python",
@@ -303,6 +375,24 @@
       "label": "CPU quality-scoring regression suite",
       "runner": "python",
       "args": ["-m", "drapixai_ai.scripts.validate_garment_skin_detection"]
+    },
+    {
+      "id": "lower-body-release-policy",
+      "label": "Lower-body 9.5 quality floor and case-level release evidence negative controls",
+      "runner": "python",
+      "args": ["-m", "unittest", "drapixai_ai.tests.test_lower_body_benchmark_policy", "drapixai_ai.tests.test_lower_body_benchmark_intake", "drapixai_ai.tests.test_lower_body_release_evidence", "-v"]
+    },
+    {
+      "id": "lower-body-person-validation",
+      "label": "Lower-body pose intake rejects unsupported poses, unverified checkpoints and ambiguous people",
+      "runner": "python",
+      "args": ["-m", "unittest", "drapixai_ai.tests.test_lower_body_person_validation", "-v"]
+    },
+    {
+      "id": "tryon-quality-publication",
+      "label": "Public result quality rejects invalid scores and severe lower-body defects",
+      "runner": "npm",
+      "args": ["--prefix", "apps/api", "run", "test:tryon-quality"]
     },
     {
       "id": "neutral-garment-regressions",

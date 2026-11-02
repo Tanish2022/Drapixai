@@ -3,10 +3,12 @@
  */
 
 import { Router } from 'express';
-import { aiFetch } from '../lib/ai-client';
+import { aiFetch, aiTransportFailure } from '../lib/ai-client';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { createRequestRedis } from '../lib/request-redis';
-import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
+import { acquireTryOnSlot } from '../lib/tryon-concurrency';
+import { dispatchTryOnWithUsage } from '../lib/tryon-dispatch';
+import { aiRequestSignal } from '../lib/ai-request-signal';
 import { requireTryOnIntake } from '../lib/tryon-intake';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import multer from 'multer';
@@ -1157,7 +1159,7 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
       const admission = await reserveTryOnUsage(prisma, user.id, apiKey.id, requestId, 'tryon');
       if (!admission.ok) return res.status(admission.reason === 'QUOTA_EXCEEDED' ? 429 : 403).json({ error: admission.reason });
       usageTicket = admission.ticket;
-      const slot = await acquireTryOnSlot(user.id);
+      const slot = await acquireTryOnSlot(user.id, aiRequestSignal(req, res));
       if (!slot.ok) {
         const unavailable = slot.reason === 'CONCURRENCY_CONTROL_UNAVAILABLE';
         res.setHeader('Retry-After', '2');
@@ -1171,17 +1173,13 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
         });
       }
 
-      let aiResponse: Response;
-      try {
-        await markUsageDispatched(prisma, usageTicket);
-        aiResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
+      const aiResponse = await dispatchTryOnWithUsage(prisma, usageTicket, slot.lease, () =>
+        aiFetch(`${AI_URL}/ai/tryon/base64`, {
           method: 'POST',
-          headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+          signal: AbortSignal.any([slot.lease.signal, aiRequestSignal(req, res)]),
+          headers: getAiHeaders({ 'Content-Type': 'application/json', 'X-Request-ID': slot.lease.token }),
           body: JSON.stringify(payload)
-        });
-      } finally {
-        await releaseTryOnSlot(slot.lease);
-      }
+        }));
 
       if (!aiResponse.ok) {
         const errText = await aiResponse.text();
@@ -1315,6 +1313,8 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
     }
   } catch (error) {
     console.error('Try-on error:', formatLogError(error));
+    const failure = aiTransportFailure(error);
+    if (failure) return res.status(failure.status).json(failure.body);
     res.status(500).json({ error: 'Try-on failed' });
   }
 });

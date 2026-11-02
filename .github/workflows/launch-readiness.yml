@@ -22,6 +22,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
       - name: Install checksum-pinned Gitleaks
         run: |
           curl --fail --location --silent --show-error \
@@ -33,6 +36,7 @@ jobs:
         run: |
           python deploy/scripts/test-secret-scanner-policy.py --gitleaks /tmp/gitleaks
           /tmp/gitleaks git --config .gitleaks.toml --redact --exit-code 1 .
+          node scripts/verify-source-secret-scan.mjs --gitleaks /tmp/gitleaks
 
   application:
     runs-on: ubuntu-22.04
@@ -75,12 +79,60 @@ jobs:
         run: npm --prefix apps/web ci
       - name: Launch contract tests
         run: npm --prefix apps/api run test:launch
+      - name: Transactional email delivery and TLS regression
+        run: |
+          npm --prefix apps/api run test:email-templates
+          npm --prefix apps/api run test:email-delivery
+          npm --prefix apps/api run test:email-events
+          npm --prefix apps/api run test:email-parser
+      - name: Verified email callbacks and durable suppression
+        run: |
+          docker pull postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+          docker pull redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+          node scripts/verify-email-events-runtime.mjs
+      - name: Neon staging target and TLS policy guards
+        run: |
+          npm --prefix apps/api run test:neon-staging
+          npm --prefix apps/api run test:neon-release
+          python deploy/scripts/test-database-transport-policy.py
+      - name: AI transport and durable admission boundary regressions
+        run: |
+          npm --prefix apps/api run test:ai-transport
+          npm --prefix apps/api run test:tryon-dispatch
+          npm --prefix apps/api run test:tryon-admission
+          node scripts/verify-private-redis.mjs
+      - name: Verify incremental database release and restricted grants
+        run: node scripts/verify-database-release-preparation.mjs
+      - name: Request parser teardown and compressed-body regressions
+        run: npm --prefix apps/api run test:request-parsers
+      - name: Live security harness safety and false-pass controls
+        run: npm --prefix apps/api run test:security-harness
+      - name: API log privacy regressions
+        run: npm --prefix apps/api run test:log-privacy
+      - name: Operational metrics privacy and emergency intake fixture
+        run: npm --prefix apps/api run test:operational-metrics
       - name: Shopper-media inventory and historical deletion regression
         run: |
+          node --test deploy/scripts/test-staging-storage-identity.mjs
+          node --test deploy/scripts/test-staging-storage-drill.mjs
+          npm --prefix apps/api run test:storage-credentials
           npm --prefix apps/api run test:shopper-media-inventory
           npm --prefix apps/api run test:storage-erasure
       - name: Shopify foundation tests
         run: npm --prefix apps/api run test:shopify
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Shopify scope/configuration refusal tests
+        run: |
+          python apps/shopify/scripts/test_shopify_config.py
+          python drapixai_ai/tests/test_admission_protocol.py
+      - name: Security tooling authorization and local HTTPS refusal tests
+        run: python deploy/security/test_zap_staging.py
+      - name: Outbound TLS identity and SSRF transport fixtures
+        run: node scripts/verify-outbound-tls.mjs
+      - name: Account terms archive and input validation
+        run: npm --prefix apps/api run test:account-terms
       - name: Authorization and storefront token tests
         run: |
           npm --prefix apps/api run test:authorization
@@ -88,6 +140,7 @@ jobs:
           npm --prefix apps/api run test:cors-origin-cache
           npm --prefix apps/api run test:image-upload-security
           npm --prefix apps/api run test:input-validation
+          npm --prefix apps/api run test:tryon-quality
           npm --prefix apps/api run test:async-errors
       - name: Distributed security controls
         env:
@@ -123,6 +176,12 @@ jobs:
         run: |
           node --test scripts/disposable-billing-guard.test.mjs
           npm --prefix apps/api run test:billing-database
+      - name: Verify billing HTTP lifecycle and quota accounting
+        # The billing fixture owns fresh services and synthetic outbound provider adapters.
+        run: node scripts/verify-billing-runtime.mjs
+      - name: Verify merchant integration HTTP and database boundaries
+        # Own fixtures; Shopify/feed/storage transport is synthetic and inference stays disabled.
+        run: node scripts/verify-merchant-runtime.mjs
       - name: Verify staging database privilege separation
         # The role test creates and removes its own no-host-port database.
         run: |
@@ -131,6 +190,15 @@ jobs:
       - name: Verify backup restore and failure rollback
         # Uses its own PostgreSQL container with no network or host ports.
         run: node scripts/verify-postgres-restore.mjs
+      - name: Verify migration history and pending-status handling
+        run: |
+          node scripts/verify-migration-preflight.mjs
+          node deploy/scripts/test-migration-wrapper.mjs
+      - name: Verify immutable account terms and real ORM transactions
+        run: |
+          node scripts/verify-account-terms-database.mjs
+          node scripts/verify-account-terms-database.mjs --orm
+          node scripts/verify-account-terms-database.mjs --http
       - name: Verify versioned retention against disposable storage and database
         # Creates its own loopback-only containers and uses no operator data.
         run: node scripts/verify-versioned-retention.mjs
@@ -155,6 +223,8 @@ jobs:
         run: npm --prefix apps/api run build
       - name: Web production build
         run: npm --prefix apps/web run build
+      - name: Website feedback and recovery regression
+        run: node scripts/test-website-feedback.cjs
       - name: Merchant onboarding readiness checks
         run: node --experimental-strip-types apps/web/scripts/merchant-onboarding-tests.cjs
       - name: Verify production HTML CSP nonces
@@ -165,8 +235,20 @@ jobs:
           npm --prefix apps/web audit --omit=dev --audit-level=high
       - name: Development and build dependency audit
         run: |
+          npm audit --include=dev --audit-level=high
           npm --prefix apps/api audit --include=dev --audit-level=high
           npm --prefix apps/web audit --include=dev --audit-level=high
+      - name: Retain CPU application verification evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: application-evidence-${{ github.sha }}
+          path: |
+            runtime/launch-evidence/*.json
+            runtime/launch-evidence/**/report.json
+            !runtime/launch-evidence/**/source/**
+          if-no-files-found: error
+          retention-days: 30
 
   ai-contracts:
     runs-on: ubuntu-22.04
@@ -215,6 +297,14 @@ jobs:
           python -m drapixai_ai.scripts.validate_garment_skin_detection
           python -m drapixai_ai.scripts.validate_tryon_scorer_neutral_garments
           python deploy/runpod/validate_upper_body_50_tooling.py
+      - name: Lower-body quality and release evidence policy
+        run: >-
+          python -m unittest
+          drapixai_ai.tests.test_lower_body_benchmark_policy
+          drapixai_ai.tests.test_lower_body_benchmark_intake
+          drapixai_ai.tests.test_lower_body_release_evidence -v
+      - name: Lower-body person and pose intake
+        run: python -m unittest drapixai_ai.tests.test_lower_body_person_validation -v
       - name: Concurrency evidence negative controls
         run: python deploy/scripts/test-concurrency-benchmark.py
       - name: Deployment shell syntax
@@ -279,11 +369,29 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  offline-zap-tooling:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Pull pinned official ZAP fixture image
+        run: docker pull ghcr.io/zaproxy/zaproxy@sha256:0075662e5c287cf0a68caebabbfea872e5dc461912ad6d7345fa02a290d0ccb6
+      - name: Verify generated captures in network-disabled ZAP
+        env:
+          DRAPIXAI_ZAP_OFFLINE_FIXTURE_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:0075662e5c287cf0a68caebabbfea872e5dc461912ad6d7345fa02a290d0ccb6
+        run: python deploy/security/test_zap_offline_runtime.py
+
   container-scan:
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
       - name: Build production edge images
         id: edge_build
         run: |

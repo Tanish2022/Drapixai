@@ -4,6 +4,11 @@ Recorded 2026-10-16 from the owner's order specification. Delivery is expected a
 the end of October 2026. This records an order, not inspected hardware or a
 passing deployment certification.
 
+29 October preparation update: Task 18 handover (operational evidence retained privately)
+provides source preservation, separate secret/identity transfer, private access,
+deployment sequencing and GPU fixture/test planning. Hardware receipt and actual
+host/GPU acceptance remain unverified; none of the order entries is a test pass.
+
 ## Ordered configuration
 
 | Component | Owner-provided specification |

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
 import BrandLogo from '@/app/components/BrandLogo';
+import FeedbackMessage from '@/app/components/FeedbackMessage';
+import { requestJson, userError } from '@/app/lib/user-feedback';
 
 export default function AdminAccess() {
   const [email, setEmail] = useState('');
@@ -19,18 +21,14 @@ export default function AdminAccess() {
     setStatus('');
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/admin/session', {
+      await requestJson('/api/admin/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, mfaCode }),
-      });
-      if (!response.ok) {
-        setStatus('Access denied. Check your credentials and try again.');
-        return;
-      }
+      }, { context: 'admin', fallback: 'Check your credentials and authenticator code, then try again.' });
       router.push('/admin');
-    } catch {
-      setStatus('Admin access is temporarily unavailable.');
+    } catch (error) {
+      setStatus(userError(error, 'Administrator access is temporarily unavailable. Please try again later.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -40,9 +38,9 @@ export default function AdminAccess() {
     <main className="min-h-screen bg-[#f4f6f2] text-[#172019]">
       <header className="border-b border-black/10 bg-[#fbfcf9]">
         <div className="mx-auto flex min-h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
-          <Link href="/" className="flex flex-col items-start gap-1" aria-label="DrapixAI home">
+          <Link href="/" className="flex flex-col items-start gap-1" aria-label="DrapixAI home — Restricted operations">
             <BrandLogo className="h-9 w-auto" />
-            <span className="block text-[10px] font-semibold uppercase text-[#748078]">Restricted operations</span>
+            <span className="block text-[10px] font-semibold uppercase text-[#59665e]">Restricted operations</span>
           </Link>
           <Link href="/" className="text-sm font-semibold text-[#667169] hover:text-[#172019]">Return to site</Link>
         </div>
@@ -78,7 +76,7 @@ export default function AdminAccess() {
                 {isSubmitting ? 'Checking access...' : 'Continue'} <ArrowRight className="h-4 w-4" />
               </button>
             </div>
-            {status ? <p role="alert" className="mt-4 border border-[#d6a29c] bg-[#fbefed] p-3 text-sm text-[#7c2d27]">{status}</p> : null}
+            <FeedbackMessage feedback={status ? {message: status, tone: 'error'} : null} />
           </form>
         </section>
 

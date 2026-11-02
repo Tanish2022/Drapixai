@@ -6,7 +6,7 @@ import { getUsagePeriodBounds, getUserMonthlyUsage, getUserQuotaUsage } from '..
 import { redactShopifyInstallationData } from '../services/shopify-redaction';
 import { appendSecurityAudit, verifySecurityAuditChain } from '../lib/audit-log';
 import {
-  reserveTryOnUsage, markUsageDispatched, releaseUndispatchedUsage,
+  reserveTryOnUsage, markUsageDispatched, releaseUndispatchedUsage, releaseProvenNoResultUsage,
   commitTryOnResultUsage, commitLegacyRenderUsage, QuotaTicket,
 } from '../lib/quota-reservations';
 
@@ -93,6 +93,15 @@ export const verifyQuotaReservations = async (prisma: PrismaClient, ownedUsers: 
     await assert.rejects(() => commitTryOnResultUsage(prisma, ticket, { ...data(ticket), userId: user.id + 1 }), /MISMATCH/);
     await assert.rejects(() => commitTryOnResultUsage(prisma, ticket, { ...data(ticket), personImageUrl: 'synthetic-rejected-reference' }), /MISMATCH/);
     console.log('PASS quota rollover, quality rejection, pre-dispatch release, replay and cross-tenant boundaries');
+    for (const reason of ['transport_not_invoked','ai_not_dispatched','ai_terminal_failure'] as const) {
+      const noResult = await reserve(); await markUsageDispatched(prisma, noResult);
+      await assert.rejects(() => releaseProvenNoResultUsage(prisma, {...noResult, userId: user.id+100000}, reason), /NOT_FOUND/);
+      assert.equal(await releaseProvenNoResultUsage(prisma, noResult, reason), true);
+      assert.equal(await releaseProvenNoResultUsage(prisma, noResult, reason), false);
+      assert.equal(await prisma.tryOnResult.count({where: {requestId: noResult.requestId}}), 0);
+    }
+    assert.equal(await releaseProvenNoResultUsage(prisma, ticket, 'transport_not_invoked'), false, 'A settled result cannot be uncharged through a no-result cleanup');
+    console.log('PASS exact-ticket no-transport/pre-enqueue/terminal-failure quota cleanup is idempotent and cannot change another tenant or settled result');
 
     const rollback = await reserve();
     await markUsageDispatched(prisma, rollback);

@@ -1,5 +1,12 @@
 # Node 22 shared-OpenSSL review candidate
 
+2 November follow-up: official Node 22.23.4 includes OpenSSL 3.5.9. The API/web
+Dockerfiles now pin verified official images for that release; see the
+Task 8 evidence (operational evidence retained privately).
+This directory remains the historical downstream review candidate and is not
+promoted by that change. Its source/signature/runtime pins continue to describe
+the old component, and its materializer refuses unreviewed Dockerfile bytes.
+
 **Not a production runtime or a completed security remediation.** This prepares a
 downstream Node 22.23.3 build that uses Debian's security-patched OpenSSL libraries
 instead of the stock Node binary's embedded OpenSSL 3.5.8. Production API/web

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
@@ -10,6 +13,7 @@ import { issueVerificationCode } from '../lib/verification';
 import { verifyPassword } from '../lib/password-hash';
 import { inputValidationMiddleware } from '../lib/input-validation';
 import { formatLogError } from '../lib/security';
+import { CURRENT_TERMS } from '../lib/account-terms';
 
 // A CLI fixture, never a public route. Production-mode auth/account routers are
 // mounted in a minimal loopback Express host, not the full production server.
@@ -34,7 +38,8 @@ const main = async () => {
   const redis = createClient({ url: redisUrl.toString(), socket: { connectTimeout: 1000, reconnectStrategy: false } });
   redis.on('error', () => undefined);
   const marker = `http_${crypto.randomBytes(8).toString('hex')}`;
-  const emails = ['a', 'b', 'boundary'].map(part => `${marker}-${part}@example.invalid`);
+  const emails = ['a', 'b', 'boundary', 'google'].map(part => `${marker}-${part}@example.invalid`);
+  const termsAcceptance = { accepted: true, version: CURRENT_TERMS.version, documentHash: CURRENT_TERMS.documentHash };
   const checks: string[] = [];
   const pass = (name: string) => { checks.push(name); console.log(`PASS ${name}`); };
   let server: http.Server | undefined;
@@ -43,13 +48,15 @@ const main = async () => {
     await redis.connect();
     assert.equal(await redis.dbSize(), 0, 'Only an empty disposable Redis DB is allowed');
     // Import actual compiled routes after fixture guards, before any requests.
+    process.env.DRAPIXAI_AUTH_SYNC_TOKEN = crypto.randomBytes(48).toString('hex');
     const auth = (await import('../routes/auth')).default;
+    const terms = (await import('../routes/account-terms')).default;
     const account = (await import('../routes/account')).default;
     const app = express();
     app.disable('x-powered-by');
     app.use(express.json({ limit: '16kb' }));
     app.use(inputValidationMiddleware);
-    app.use('/auth', auth); app.use('/account', account);
+    app.use('/auth/terms', terms); app.use('/auth', auth); app.use('/account', account);
     app.use((_error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       res.status(500).json({ error: 'FIXTURE_ROUTE_FAILURE' });
     });
@@ -58,7 +65,7 @@ const main = async () => {
       listener.once('error', reject);
     });
     const address = server.address(); assert.ok(address && typeof address !== 'string');
-    const request = (route: string, options: { body?: unknown; key?: string; client?: number; proxy?: boolean } = {}) =>
+    const request = (route: string, options: { body?: unknown; key?: string; client?: number; proxy?: boolean; providerSync?: boolean } = {}) =>
       new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: any }>((resolve, reject) => {
         const body = options.body === undefined ? undefined : Buffer.from(JSON.stringify(options.body));
         const req = http.request({ host: '127.0.0.1', port: address.port, path: route,
@@ -66,6 +73,7 @@ const main = async () => {
           signal: AbortSignal.timeout(6000), headers: {
             ...(body ? { 'Content-Type': 'application/json', 'Content-Length': String(body.length) } : {}),
             ...(options.key ? { Authorization: `Bearer ${options.key}` } : {}),
+            ...(options.providerSync ? { 'x-drapixai-auth-sync-token': process.env.DRAPIXAI_AUTH_SYNC_TOKEN! } : {}),
             ...(options.proxy === false ? {} : { 'x-drapixai-dashboard-proxy-token': process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN! }),
           } }, res => {
           const chunks: Buffer[] = []; let bytes = 0;
@@ -79,10 +87,20 @@ const main = async () => {
     const original = 'A1!a'+'x'.repeat(68)+'Original';
     const prefix = original.slice(0,72);
     const signup = await issueVerificationCode(prisma, { email: emails[0], purpose: 'signup' });
-    const registered = await request('/auth/register', { body: { email: emails[0], password: original, otp: signup.code, companyName: 'Fixture A' } });
+    for (const invalid of [undefined, { ...termsAcceptance, accepted: false }, { ...termsAcceptance, documentHash: '0'.repeat(64) }]) {
+      const denied = await request('/auth/register', { client: 5, body: { email: emails[0], password: original, otp: signup.code, termsAcceptance: invalid } });
+      assert.equal(denied.status, 400);
+      assert.equal(await prisma.user.count(), 0);
+      assert.equal(await prisma.accountTermsAcceptance.count(), 0);
+      assert.equal(await prisma.verificationCode.count({ where: { email: emails[0], consumedAt: null, attemptCount: 0 } }), 1);
+    }
+    const registered = await request('/auth/register', { body: { email: emails[0], password: original, otp: signup.code, companyName: 'Fixture A', termsAcceptance } });
     assert.equal(registered.status, 200, 'Real HTTP signup must succeed');
     let a = await prisma.user.findUniqueOrThrow({ where: { email: emails[0] } });
     assert.ok(a.passwordHash.startsWith('scrypt$v1$'));
+    const signupRecord = await prisma.accountTermsAcceptance.findUniqueOrThrow({ where: { userId_documentVersion: { userId: a.id, documentVersion: CURRENT_TERMS.version } } });
+    assert.equal(signupRecord.flow, 'password_signup'); assert.equal(signupRecord.documentHash, CURRENT_TERMS.documentHash);
+    pass('HTTP signup rejects absent, declined and stale terms before OTP consumption and records affirmative acceptance with account creation');
     const good = await login(a.email, original); assert.equal(good.status,200);
     assert.equal((await login(a.email,prefix+'Other')).status,401);
     assert.equal((await login(a.email,prefix)).status,401);
@@ -119,6 +137,26 @@ const main = async () => {
     pass('HTTP password change revokes prior credentials and pending recovery codes while the new full input works');
 
     const legacy = await login(b.email,short,2); assert.equal(legacy.status,200);
+    assert.equal(legacy.body.termsRequired, true);
+    assert.equal((await request('/account/profile', { key: legacy.body.apiKey, client: 2 })).status, 401);
+    const pending = await request('/auth/terms', { key: legacy.body.apiKey, client: 2 });
+    assert.equal(pending.status, 200); assert.equal(pending.body.accepted, false);
+    assert.equal((await request('/auth/terms', { key: legacy.body.apiKey, client: 2, proxy: false })).status, 403);
+    assert.equal((await request('/auth/terms', { client: 2 })).status, 401);
+    for (const body of [{ ...termsAcceptance, accepted: false }, { ...termsAcceptance, userId: a.id }, { ...termsAcceptance, version: 'old' }]) {
+      assert.equal((await request('/auth/terms', { key: legacy.body.apiKey, client: 2, body })).status, 400);
+      assert.equal(await prisma.accountTermsAcceptance.count({ where: { userId: b.id } }), 0);
+    }
+    assert.equal((await request('/auth/terms', { key: legacy.body.apiKey, client: 2, body: termsAcceptance })).status, 200);
+    assert.equal((await request('/account/profile', { key: legacy.body.apiKey, client: 2 })).status, 200);
+    const first = await prisma.accountTermsAcceptance.findUniqueOrThrow({ where: { userId_documentVersion: { userId: b.id, documentVersion: CURRENT_TERMS.version } } });
+    assert.equal(first.flow, 'authenticated_account');
+    assert.equal((await request('/auth/terms', { key: legacy.body.apiKey, client: 2, body: termsAcceptance })).status, 200);
+    const repeat = await prisma.accountTermsAcceptance.findUniqueOrThrow({ where: { id: first.id } });
+    assert.equal(repeat.acceptedAt.getTime(), first.acceptedAt.getTime());
+    assert.equal((await request('/auth/terms', { key: legacy.body.apiKey, client: 2 })).body.accepted, true);
+    assert.deepEqual(await prisma.accountTermsAcceptance.findUnique({ where: { id: signupRecord.id } }), signupRecord);
+    pass('HTTP existing-account session cannot use services before explicit acceptance; forged fields and proxy bypass fail, retry preserves first evidence and the other tenant');
     const upgraded = await prisma.user.findUniqueOrThrow({where:{id:b.id}});
     assert.ok(upgraded.passwordHash.startsWith('scrypt$v1$'));
     assert.equal(upgraded.authVersion,b.authVersion);
@@ -142,6 +180,19 @@ const main = async () => {
     assert.equal((await prisma.user.findUniqueOrThrow({where:{id:a.id}})).passwordHash,a.passwordHash);
     pass('HTTP verified recovery consumes OTP once, revokes old sessions and preserves the other tenant');
 
+    // Exercise the protected provider-sync boundary, not a live Google login.
+    const oauth = await request('/auth/oauth/google', { client: 6, providerSync: true,
+      body: { email: emails[3], name: 'Synthetic Google identity', issueNewKey: true } });
+    assert.equal(oauth.status, 200); assert.equal(oauth.body.termsRequired, true);
+    const google = await prisma.user.findUniqueOrThrow({ where: { email: emails[3] } });
+    assert.equal(await prisma.accountTermsAcceptance.count({ where: { userId: google.id } }), 0);
+    assert.equal((await request('/account/profile', { key: oauth.body.apiKey, client: 6 })).status, 401);
+    assert.equal((await request('/auth/terms', { key: oauth.body.apiKey, client: 6, body: termsAcceptance })).status, 200);
+    assert.equal((await request('/account/profile', { key: oauth.body.apiKey, client: 6 })).status, 200);
+    assert.equal((await request('/auth/logout', { key: oauth.body.apiKey, client: 6, body: {} })).status, 200);
+    assert.equal((await request('/auth/terms', { key: oauth.body.apiKey, client: 6 })).status, 401);
+    pass('HTTP protected Google sync never infers acceptance; explicit authenticated acceptance promotes the same credential and logout revokes it');
+
     const statuses: number[] = [];
     for (let i=0;i<6;i++) {
       const response = await login(`${marker}-unknown@example.invalid`,'E5!e'+ 'x'.repeat(20),4);
@@ -155,18 +206,23 @@ const main = async () => {
     }
     assert.ok(expiring>0);
     pass('HTTP identity rate limit uses real expiring Redis counters and returns Retry-After');
+    if (process.env.DRAPIXAI_TERMS_BROWSER_FIXTURE === 'I_ACKNOWLEDGE_DISPOSABLE_TERMS_BROWSER') {
+      const email = `${marker}-browser@example.invalid`, password = 'F6!f-synthetic-browser-only-password';
+      const { hashPassword } = await import('../lib/password-hash');
+      const browserUser = await prisma.user.create({ data: { email, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() } });
+      await promisify(execFile)(process.execPath, [path.resolve(__dirname, '../../../../scripts/verify-account-terms-browser.mjs')], {
+        cwd: path.resolve(__dirname, '../../../..'), timeout: 120000, windowsHide: true,
+        env: { ...process.env, DRAPIXAI_TERMS_BROWSER_API_URL: `http://127.0.0.1:${address.port}`, DRAPIXAI_TERMS_BROWSER_EMAIL: email, DRAPIXAI_TERMS_BROWSER_PASSWORD: password },
+      });
+      const record = await prisma.accountTermsAcceptance.findUniqueOrThrow({ where: { userId_documentVersion: { userId: browserUser.id, documentVersion: CURRENT_TERMS.version } } });
+      assert.equal(record.flow, 'authenticated_account'); assert.equal(record.documentHash, CURRENT_TERMS.documentHash);
+      pass('Real production browser login, proxy gate and keyboard acceptance persist the exact revision in PostgreSQL');
+    }
     console.log(JSON.stringify({passed:true,scope:'real production-mode auth/account routers over owned loopback HTTP, PostgreSQL and Redis; not full server, SMTP delivery, staging or inference',checks}));
   } finally {
     if(server){ server.closeAllConnections(); await new Promise<void>(resolve=>server!.close(()=>resolve())); }
-    const owned = await prisma.user.findMany({where:{email:{in:emails}},select:{id:true}});
-    const ids=owned.map(user=>user.id);
-    if(ids.length){
-      await prisma.verificationCode.deleteMany({where:{userId:{in:ids}}});
-      await prisma.apiKey.deleteMany({where:{userId:{in:ids}}});
-      await prisma.emailLog.deleteMany({where:{userId:{in:ids}}});
-      await prisma.user.deleteMany({where:{id:{in:ids}}});
-    }
-    await prisma.verificationCode.deleteMany({where:{email:{in:emails}}});
+    // Immutable assent is intentionally not deleted or weakened for cleanup.
+    // The wrapper destroys its labelled disposable database after this process.
     if(redis.isOpen) await redis.disconnect();
     await prisma.$disconnect();
   }

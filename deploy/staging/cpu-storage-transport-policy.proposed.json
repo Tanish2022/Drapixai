@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyNonTlsClientRequests",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::drapixai-cpu-staging-111122223333-ap-south-1",
+        "arn:aws:s3:::drapixai-cpu-staging-111122223333-ap-south-1/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false",
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyClientTlsBelow12",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::drapixai-cpu-staging-111122223333-ap-south-1",
+        "arn:aws:s3:::drapixai-cpu-staging-111122223333-ap-south-1/*"
+      ],
+      "Condition": {
+        "NumericLessThan": {
+          "s3:TlsVersion": 1.2
+        },
+        "Bool": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    }
+  ]
+}

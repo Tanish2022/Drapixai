@@ -12,7 +12,7 @@ This runbook applies to public production. Every action needs an incident or cha
 6. Deploy, then run `DRAPIXAI_KEY_ROTATION_APPROVAL=I_APPROVE_WEBHOOK_KEY_ROTATION npm --prefix apps/api run security:webhooks:rotate-key`.
 7. Deliver a signed staging webhook, verify it, then remove the previous webhook key.
 8. For the audit key, set the new current value and retain the old value in `DRAPIXAI_AUDIT_LOG_PREVIOUS_SECRETS`. Run `npm --prefix apps/api run security:audit:verify` before and after. Keep old audit verification keys in the restricted archive for as long as their audit records are retained.
-9. Revoke server/API keys in the database before notifying a customer of a credential replacement. Short-lived SDK/API tokens then expire naturally.
+9. Revoke server/API keys in the database before notifying a customer of a credential replacement. Verify the old key and already-issued dependent SDK/API tokens are rejected; do not treat token expiry alone as proof of parent-key revocation.
 10. Rotate database, Redis, S3, SMTP, Shopify, AI service, metrics, VPN, and origin credentials independently. Verify readiness and one real Standard try-on after each dependency boundary.
 
 Emergency rotation skips normal notice but not evidence, staging where feasible, or post-change verification.
@@ -26,10 +26,17 @@ usage reads, result metadata, audit access, and operator investigation:
 DRAPIXAI_TRYON_INTAKE_ENABLED=0 docker compose --env-file deploy/env/api.production.env -f deploy/docker-compose.edge.yml up -d --no-deps --force-recreate api
 ```
 
-Confirm `/metrics` reports `drapixai_tryon_intake_enabled 0`, then verify SDK,
+Confirm the authenticated private `/internal/metrics` endpoint reports
+`drapixai_tryon_intake_enabled 0`, then verify SDK,
 public API, and demo creation return HTTP `503`, `Retry-After: 60`, and
 `x-drapixai-intake-status: paused`. Existing result metadata reads must remain
 available. Record the incident/change ID and alert delivery evidence.
+
+The command above overrides one container recreation; it does not persist the
+pause in deployment configuration. Record and persist the paused value in the
+approved orchestrator/configuration source, and freeze other rollouts until
+their effective configuration is confirmed paused. A restart or rollback must
+not silently restore an older enabled value. The live drill must prove this.
 
 Resume only after the incident owner approves and dependency readiness is green:
 
@@ -37,7 +44,8 @@ Resume only after the incident owner approves and dependency readiness is green:
 DRAPIXAI_TRYON_INTAKE_ENABLED=1 docker compose --env-file deploy/env/api.production.env -f deploy/docker-compose.edge.yml up -d --no-deps --force-recreate api
 ```
 
-Confirm the metric returns to `1` and run one approved Standard smoke test. Do
+Update the durable deployment setting only with that approval. Confirm the
+metric returns to `1` and run one approved Standard smoke test. Do
 not increase candidate count, inference steps, or GPU concurrency during recovery.
 
 ## Breach response
@@ -62,11 +70,20 @@ instance or a forwarded production endpoint.
 
 1. Production migrations must use `deploy/scripts/migrate-with-evidence.sh`. The script creates a custom-format PostgreSQL backup, verifies its catalog, hashes it, records migration status, and points to the guarded restore command.
 
+   Set `DRAPIXAI_EXPECTED_GIT_REF` to the exact approved clean release commit.
+   The wrapper checks actual migration-ledger state and SQL checksums before
+   and after the diagnostic status command. Failed, divergent, changed or
+   unbaselined history blocks deployment. Exit code 1 may proceed only when
+   matching ledger/source snapshots independently prove pending migrations;
+   it is never ignored as a blanket override. Post-deploy history must contain
+   no pending migrations. Actual host/backup/rollback qualification is still
+   required before production use.
+
    Before a migration, the release operator must set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the exact database name returned by `SELECT current_database()` and set `DRAPIXAI_CHANGE_APPROVAL_ID` to the approved change record. The script connects first and stops before a backup or schema change if the identity differs.
 2. Store backups encrypted outside the application host and production account failure domain. Restrict restore permission more tightly than backup creation.
 3. Quarterly, restore the newest backup into an isolated recovery environment with `deploy/scripts/restore-postgres-backup.sh`.
 
-   Set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the isolated recovery database, `DRAPIXAI_RESTORE_APPROVAL_ID` to the incident/recovery approval record, and the environment-specific destructive confirmation. The restore tool checks the live database identity before issuing `pg_restore --clean`.
+   Set `DRAPIXAI_EXPECTED_DATABASE_NAME` to the isolated recovery database, `DRAPIXAI_RESTORE_APPROVAL_ID` to the incident/recovery approval record, and the environment-specific destructive confirmation. Also supply `DRAPIXAI_EXPECTED_BACKUP_SHA256` from the independently approved backup evidence (`backup_sha256`), retrieved through the restricted evidence store. Do not derive the expected value from the candidate backup itself or an untrusted adjacent checksum file. The tool rejects a missing/mismatched digest before connecting to the target, then checks the live database identity before issuing `pg_restore --clean`. Keep the approved backup immutable/read-only during verification and restoration.
 
    Restore runs in one transaction: a database error rolls back the replacement
    schema and data together. `--exit-on-error` alone is insufficient because
@@ -76,7 +93,8 @@ instance or a forwarded production endpoint.
    Do not add parallel restore jobs, which are incompatible with this guarantee.
 
    `node scripts/verify-postgres-restore.mjs` rehearses wrong-target/approval
-   refusals, invalid backup rejection, rollback after an injected post-data
+   and missing/wrong-digest refusals, catalog-valid altered backup rejection,
+   invalid backup rejection, rollback after an injected post-data
    failure, successful recovery of two synthetic tenants, and surviving audit
    UPDATE/DELETE/TRUNCATE protections. It creates and removes its own isolated
    PostgreSQL container. This local test does not prove off-host encrypted
@@ -111,3 +129,12 @@ instance or a forwarded production endpoint.
 - Readiness failure: remove the replica from traffic and diagnose the private dependency, not the public edge.
 
 Prometheus rules live in `deploy/monitoring/drapixai-alerts.yml`. Route warnings to operations and critical events to a 24/7 paging destination, then test every route quarterly.
+
+The owner selected both `admin@drapixai.com` and `support@drapixai.com` for
+critical-alert copies on 26 October 2026. The prepared, inactive example is
+`deploy/monitoring/alertmanager.email.yml.example`. It requires TLS and a
+separately managed SMTP password file; no credential has been installed or
+notification sent. Validate it with the chosen Alertmanager runtime before
+activation. Email copies alone do not establish 24/7 paging or acknowledgement.
+Named monitors, coverage hours, escalation/backup operator, RPO/RTO targets,
+actual delivery and recovery acknowledgements remain to be confirmed.

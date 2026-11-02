@@ -12,10 +12,12 @@ import {
   verifyShopifyQueryHmac,
   verifyShopifyState,
 } from '../lib/shopify-auth';
-import { encryptShopifySecret } from '../lib/shopify-crypto';
+import { assertShopifyTokenLease, encryptedShopifyTokenData, withShopifyTokenLease } from '../services/shopify-tokens';
+import { runDatabaseTransaction } from '../lib/database-transaction';
 import { formatLogError } from '../lib/security';
 import { requireTryOnIntake } from '../lib/tryon-intake';
-import { processShopifyCatalogPreparationBatch } from '../services/catalog-preparation';
+import { processShopifyCatalogPreparationBatch, retryShopifyPreparation } from '../services/catalog-preparation';
+import { deactivateShopifyInstallation, lockShopifyLifecycle } from '../services/shopify-catalog-state';
 import {
   buildShopifyThemeEditorUrl,
   exchangeShopifyCode,
@@ -26,7 +28,7 @@ import {
 
 const router = Router();
 const prisma = new PrismaClient();
-const scopes = (process.env.SHOPIFY_SCOPES || 'read_products').split(',').map((value) => value.trim()).filter(Boolean).join(',');
+const scopes = (process.env.SHOPIFY_SCOPES || 'read_products,write_app_proxy').split(',').map((value) => value.trim()).filter(Boolean).join(',');
 const useLegacyInstallFlow = process.env.SHOPIFY_USE_LEGACY_INSTALL_FLOW === '1';
 const publicApiBaseUrl = (process.env.DRAPIXAI_PUBLIC_API_BASE_URL || '').replace(/\/+$/, '');
 const webBaseUrl = (process.env.DRAPIXAI_WEB_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -40,6 +42,7 @@ const requireShopifyConfig = () => {
 const authMiddleware = async (req: any, res: any, next: any) => {
   const apiKey = await resolveActiveApiKey(prisma, req.headers.authorization);
   if (!apiKey) return res.status(401).json({ error: 'INVALID_API_KEY' });
+  if (apiKey.kind !== 'dashboard') return res.status(403).json({ error: 'DASHBOARD_KEY_REQUIRED' });
   const user = await prisma.user.findUnique({ where: { id: apiKey.userId } });
   if (!user) return res.status(401).json({ error: 'INVALID_API_KEY' });
   req.apiKey = apiKey;
@@ -94,21 +97,28 @@ router.get('/callback', async (req, res) => {
       return res.status(401).json({ error: 'INVALID_SHOPIFY_SIGNATURE' });
     }
 
-    const { accessToken, scopes: grantedScopes } = await exchangeShopifyCode(shop, code);
+    const {installation, linkToken} = await withShopifyTokenLease(prisma, shop, async lease => {
+    const tokens = await exchangeShopifyCode(shop, code);
+    const { accessToken, scopes: grantedScopes } = tokens;
     const granted = new Set(grantedScopes.split(',').map((value) => value.trim()).filter(Boolean));
     const missingScopes = scopes.split(',').filter((scope) => !granted.has(scope));
     if (missingScopes.length > 0) throw new Error('SHOPIFY_REQUIRED_SCOPES_MISSING');
     const shopInfo = await fetchShopifyShop(shop, accessToken);
     const linkToken = generateLinkToken();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    const existing = await prisma.shopifyInstallation.findUnique({ where: { shopDomain: shop } });
-    const installation = await prisma.shopifyInstallation.upsert({
+    const installation = await runDatabaseTransaction(prisma, async transaction => {
+    await lockShopifyLifecycle(transaction, shop);
+    await assertShopifyTokenLease(transaction, lease);
+    const existing = await transaction.shopifyInstallation.findUnique({ where: { shopDomain: shop } });
+    if (existing?.status === 'redacting') throw new Error('SHOPIFY_REDACTION_PENDING');
+    return transaction.shopifyInstallation.upsert({
       where: { shopDomain: shop },
       update: {
+        catalogEpoch: {increment: 1}, catalogRequestedVersion: {increment: 1}, catalogNextAttemptAt: new Date(),
+        catalogLeaseOwner: null, catalogLeaseExpiresAt: null,
         shopName: shopInfo.name,
         primaryDomain: shopInfo.primaryDomain,
-        encryptedAccessToken: encryptShopifySecret(accessToken),
-        scopes: grantedScopes,
+        ...encryptedShopifyTokenData(tokens),
         status: existing?.userId ? 'active' : 'pending_link',
         installedAt: new Date(),
         uninstalledAt: null,
@@ -119,11 +129,13 @@ router.get('/callback', async (req, res) => {
         shopDomain: shop,
         shopName: shopInfo.name,
         primaryDomain: shopInfo.primaryDomain,
-        encryptedAccessToken: encryptShopifySecret(accessToken),
-        scopes: grantedScopes,
+        ...encryptedShopifyTokenData(tokens),
         linkTokenHash: hashLinkToken(linkToken),
         linkTokenExpiresAt: expiresAt,
       },
+    });
+    });
+    return {installation, linkToken};
     });
 
     res.clearCookie(SHOPIFY_STATE_COOKIE, { path: '/shopify' });
@@ -137,6 +149,17 @@ router.get('/callback', async (req, res) => {
     redirect.searchParams.set('error', 'SHOPIFY_AUTH_FAILED');
     return res.redirect(redirect.toString());
   }
+});
+
+router.post('/link-preview', authMiddleware, requireDashboardProxy, async (req: any, res) => {
+  const id = Number(req.body?.installationId), token = req.body?.token;
+  if (!Number.isSafeInteger(id) || id <= 0 || typeof token !== 'string' || token.length > 256) return res.status(400).json({error:'SHOPIFY_LINK_INVALID'});
+  const installation = await prisma.shopifyInstallation.findUnique({where:{id}});
+  if (!installation || !['pending_link','active'].includes(installation.status) || !installation.linkTokenHash
+    || !installation.linkTokenExpiresAt || installation.linkTokenExpiresAt <= new Date()) return res.status(400).json({error:'SHOPIFY_LINK_EXPIRED'});
+  if (installation.linkTokenHash !== hashLinkToken(token)) return res.status(403).json({error:'SHOPIFY_LINK_INVALID'});
+  if (installation.userId && installation.userId !== req.user.id) return res.status(409).json({error:'SHOPIFY_STORE_ALREADY_LINKED'});
+  return res.set('Cache-Control','no-store').json({shopDomain:installation.shopDomain});
 });
 
 router.post('/link', authMiddleware, requireDashboardProxy, async (req: any, res) => {
@@ -155,7 +178,8 @@ router.post('/link', authMiddleware, requireDashboardProxy, async (req: any, res
     }
 
     const linked = await linkShopifyInstallation(prisma, installation, req.user.id);
-    const sync = await syncShopifyCatalog(prisma, linked.id, 'initial_link');
+    // Linking is already committed; a provider outage leaves durable sync work.
+    const sync = await syncShopifyCatalog(prisma, linked.id, 'initial_link').catch(() => ({status: 'pending'}));
     return res.json({
       ok: true,
       shop: linked.shopDomain,
@@ -191,6 +215,7 @@ router.post('/sync', authMiddleware, requireDashboardProxy, async (req: any, res
     return res.json({ ok: true, ...(await syncShopifyCatalog(prisma, installation.id, 'dashboard')) });
   } catch (error) {
     console.error('Shopify sync error:', formatLogError(error));
+    if (error instanceof Error && error.message === 'SHOPIFY_SYNC_BUSY') return res.status(202).set('Retry-After','5').json({ok:true,status:'pending'});
     return res.status(500).json({ error: 'SHOPIFY_SYNC_FAILED' });
   }
 });
@@ -207,7 +232,7 @@ router.get('/preparation', authMiddleware, requireDashboardProxy, async (req: an
         userId: req.user.id,
         source: { startsWith: 'shopify:' },
         isVariant: false,
-        preparationStatus: 'failed',
+        preparationStatus: {in: ['failed', 'reconciliation_required']},
       },
       select: { productId: true, productName: true, preparationError: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
@@ -234,32 +259,14 @@ router.post('/prepare', authMiddleware, requireDashboardProxy, requireTryOnIntak
 
 router.post('/preparation/retry', authMiddleware, requireDashboardProxy, async (req: any, res) => {
   const productId = String(req.body?.productId || '').trim();
-  const result = await prisma.catalogProduct.updateMany({
-    where: {
-      userId: req.user.id,
-      source: { startsWith: 'shopify:' },
-      isVariant: false,
-      preparationStatus: { in: ['failed', 'retry'] },
-      ...(productId ? { productId } : {}),
-    },
-    data: {
-      preparationStatus: 'queued',
-      preparationAttempts: 0,
-      preparationError: null,
-      preparationQueuedAt: new Date(),
-      preparationNextAttemptAt: null,
-    },
-  });
-  return res.json({ ok: true, queued: result.count });
+  const result = await retryShopifyPreparation(prisma, req.user.id, productId || undefined);
+  return res.json({ok: true, ...result});
 });
 
 router.delete('/disconnect', authMiddleware, requireDashboardProxy, async (req: any, res) => {
   const installation = await prisma.shopifyInstallation.findFirst({ where: { userId: req.user.id, status: 'active' } });
   if (!installation) return res.status(404).json({ error: 'SHOPIFY_INSTALLATION_NOT_FOUND' });
-  await prisma.$transaction([
-    prisma.shopifyInstallation.update({ where: { id: installation.id }, data: { status: 'disconnected' } }),
-    ...(installation.storefrontApiKeyId ? [prisma.apiKey.update({ where: { id: installation.storefrontApiKeyId }, data: { isActive: false } })] : []),
-  ]);
+  await deactivateShopifyInstallation(prisma, installation.shopDomain, 'disconnected');
   return res.json({ ok: true });
 });
 

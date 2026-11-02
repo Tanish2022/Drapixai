@@ -96,6 +96,23 @@ export const releaseUndispatchedUsage = async (prisma: PrismaClient, ticket: Quo
   });
 };
 
+// Server-only lifecycle proof, never supplied from request JSON. The caller
+// must establish no transport invocation or an authenticated terminal receipt.
+export const releaseProvenNoResultUsage = async (
+  prisma: PrismaClient, ticket: QuotaTicket,
+  reason: 'transport_not_invoked' | 'ai_not_dispatched' | 'ai_terminal_failure',
+) => {
+  if (ticket.kind !== 'tryon' || !['transport_not_invoked','ai_not_dispatched','ai_terminal_failure'].includes(reason)) throw new Error('QUOTA_RELEASE_PROOF_INVALID');
+  return runDatabaseTransaction(prisma, async transaction => {
+    await lockAccountUsage(transaction, ticket.userId);
+    const reservation = await readTicket(transaction, ticket);
+    if (reservation.status !== 'reserved' || reservation.tryOnResultId != null || reservation.renderId != null) return false;
+    await transaction.usageReservation.update({ where: { id: ticket.id }, data: { status: 'released', settledAt: new Date() } });
+    await auditReservation(transaction, ticket, 'billing.quota_released', { reason });
+    return true;
+  });
+};
+
 export const commitTryOnResultUsage = async (
   prisma: PrismaClient, ticket: QuotaTicket, data: Prisma.TryOnResultUncheckedCreateInput,
 ) => {

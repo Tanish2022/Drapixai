@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Activity, CheckCircle2, RefreshCw, TriangleAlert } from 'lucide-react';
 import MarketingFooter from '@/app/components/MarketingFooter';
 import MarketingNav from '@/app/components/MarketingNav';
+import { timedFetch as fetch } from '@/app/lib/user-feedback';
 
 type ServiceState = 'checking' | 'operational' | 'degraded';
 
@@ -24,10 +25,11 @@ export default function StatusClient() {
       const response = await fetch('/api/health', { cache: 'no-store' });
       const payload = (await response.json().catch(() => null)) as PublicReadiness | null;
       next.storefront = response.ok && payload?.services?.storefront === true ? 'operational' : 'degraded';
-      next.api = payload?.services?.api === true ? 'operational' : 'degraded';
-      next.data = payload?.services?.data === true ? 'operational' : 'degraded';
-      next.ai = payload?.services?.ai === true ? 'operational' : 'degraded';
-      setCheckedAt(payload?.checkedAt ? new Date(payload.checkedAt) : new Date());
+      next.api = response.ok && payload?.services?.api === true ? 'operational' : 'degraded';
+      next.data = response.ok && payload?.services?.data === true ? 'operational' : 'degraded';
+      next.ai = response.ok && payload?.services?.ai === true ? 'operational' : 'degraded';
+      const reported = typeof payload?.checkedAt === 'string' ? new Date(payload.checkedAt) : null;
+      setCheckedAt(reported && Number.isFinite(reported.getTime()) ? reported : new Date());
     } catch {
       next.storefront = 'degraded';
       setCheckedAt(new Date());
@@ -61,7 +63,7 @@ export default function StatusClient() {
       </section>
 
       <section className="mx-auto max-w-[1440px] px-5 py-16 sm:px-8 lg:px-12">
-        <div className={`border-l-4 p-6 ${allOperational ? 'border-[#31725b] bg-[#eaf0e9]' : 'border-[#b7832f] bg-[#fbf5e9]'}`}>
+        <div role="status" aria-atomic="true" className={`border-l-4 p-6 ${allOperational ? 'border-[#31725b] bg-[#eaf0e9]' : 'border-[#b7832f] bg-[#fbf5e9]'}`}>
           <div className="flex items-center gap-3">{allOperational ? <CheckCircle2 className="h-6 w-6 text-[#31725b]" /> : <TriangleAlert className="h-6 w-6 text-[#9a6a1d]" />}<h2 className="text-xl font-semibold">{allOperational ? 'All checked services operational' : checking ? 'Checking services' : 'One or more services need attention'}</h2></div>
           <p className="mt-2 text-sm text-[#68736b]">{checkedAt ? `Last checked ${checkedAt.toLocaleString()}` : 'Waiting for the first readiness check.'}</p>
         </div>
@@ -78,7 +80,7 @@ export default function StatusClient() {
           })}
         </div>
 
-        <p className="mt-8 max-w-3xl text-sm leading-6 text-[#748078]">This page reports technical readiness, not generation quality. Production launch quality remains governed separately by product certification and result rejection controls.</p>
+        <p className="mt-8 max-w-3xl text-sm leading-6 text-[#59665e]">This page reports technical readiness, not generation quality. Production launch quality remains governed separately by product certification and result rejection controls.</p>
       </section>
       <MarketingFooter />
     </main>

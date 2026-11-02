@@ -1,5 +1,6 @@
 import assert from 'assert';
 import crypto from 'crypto';
+import { CURRENT_TERMS } from '../lib/account-terms';
 import {
   issuePublicApiToken,
   resolvePublicApiToken,
@@ -25,6 +26,7 @@ const apiKey = {
   expiresAt: null,
 };
 const prisma = {
+  accountTermsAcceptance: { findUnique: async () => ({ documentHash: CURRENT_TERMS.documentHash }) },
   apiKey: {
     findFirst: async ({ where }: any) =>
       where.id === apiKey.id && where.userId === apiKey.userId ? apiKey : null,

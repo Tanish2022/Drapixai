@@ -21,10 +21,18 @@
     "email:previews": "npm run build && node scripts/render-email-previews.js",
     "test:outreach": "node scripts/outreach-tests.js",
     "test:email-templates": "ts-node src/scripts/email-template-tests.ts",
+    "test:email-delivery": "ts-node src/scripts/email-delivery-tests.ts",
+    "test:email-events": "ts-node src/scripts/email-event-tests.ts",
+    "test:email-parser": "node scripts/email-parser-security-tests.cjs",
+    "test:request-parsers": "node scripts/request-parser-security-tests.cjs",
+    "test:neon-staging": "ts-node src/scripts/neon-staging-tests.ts",
+    "test:neon-release": "ts-node src/scripts/neon-release-preparation-tests.ts",
     "test:launch": "ts-node src/scripts/launch-readiness-tests.ts",
     "test:shopify": "ts-node src/scripts/shopify-foundation-tests.ts",
+    "test:shopify-runtime": "ts-node src/scripts/shopify-runtime-database-tests.ts",
     "test:storefront-key-lifecycle": "ts-node src/scripts/storefront-key-lifecycle-smoke.ts",
     "test:authorization": "ts-node src/scripts/authorization-tests.ts",
+    "test:account-terms": "ts-node src/scripts/account-terms-tests.ts",
     "test:storefront-tokens": "ts-node src/scripts/storefront-token-tests.ts",
     "test:audit-immutability": "ts-node src/scripts/verify-audit-immutability.ts",
     "test:cors-origin-cache": "ts-node src/scripts/cors-origin-cache-tests.ts",
@@ -35,16 +43,24 @@
     "test:log-privacy": "ts-node src/scripts/log-privacy-tests.ts",
     "test:shopper-media-inventory": "ts-node src/scripts/shopper-media-inventory-tests.ts",
     "test:storage-erasure": "ts-node src/scripts/storage-erasure-tests.ts",
+    "test:storage-credentials": "ts-node src/scripts/storage-credential-tests.ts",
     "test:admin-mfa": "ts-node src/scripts/admin-mfa-tests.ts",
     "test:tryon-intake": "ts-node src/scripts/tryon-intake-tests.ts",
+    "test:operational-metrics": "ts-node src/scripts/operational-metrics-tests.ts",
+    "test:ai-transport": "ts-node src/scripts/ai-transport-tests.ts",
+    "test:tryon-dispatch": "ts-node src/scripts/tryon-dispatch-tests.ts",
+    "test:tryon-admission": "node ../../scripts/verify-tryon-admission.mjs",
     "test:billing-security": "ts-node src/scripts/billing-security-tests.ts",
     "test:billing-database": "ts-node src/scripts/billing-database-tests.ts",
+    "test:billing-http": "ts-node src/scripts/billing-http-database-tests.ts",
     "test:p0-database": "ts-node src/scripts/p0-database-tests.ts",
     "billing:verify-catalog": "ts-node src/scripts/verify-stripe-catalog.ts",
     "test:input-validation": "ts-node src/scripts/input-validation-tests.ts",
+    "test:tryon-quality": "ts-node src/scripts/tryon-quality-tests.ts",
     "security:audit:verify": "ts-node src/scripts/verify-security-audit.ts",
     "security:webhooks:rotate-key": "ts-node src/scripts/rotate-webhook-encryption.ts",
     "test:security:live": "ts-node src/scripts/live-security-boundary-tests.ts",
+    "test:security-harness": "ts-node src/scripts/live-security-harness-tests.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push"
@@ -61,9 +77,9 @@
     "express": "5.2.1",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
-    "multer": "2.4.0",
+    "multer": "2.5.0",
     "node-cron": "^4.2.1",
-    "nodemailer": "10.1.1",
+    "nodemailer": "10.1.4",
     "redis": "^4.6.0",
     "sharp": "0.35.5",
     "stripe": "22.5.0"
@@ -80,6 +96,6 @@
     "typescript": "^5.0.0"
   },
   "overrides": {
-    "qs": "6.16.0"
+    "qs": "6.16.1"
   }
 }

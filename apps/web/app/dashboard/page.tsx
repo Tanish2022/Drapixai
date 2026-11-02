@@ -9,6 +9,8 @@ import { PUBLIC_API_BASE_URL, getSdkScriptUrl } from '@/app/lib/public-env';
 import { useThemePreference } from '@/app/lib/theme-client';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
 import { useWorkspaceAnchor } from '@/app/lib/use-workspace-anchor';
+import FeedbackMessage, { LoadFailure, useFeedback } from '@/app/components/FeedbackMessage';
+import { getApiErrorMessage, requestJson, userError, WebsiteError, timedFetch as fetch, copyText } from '@/app/lib/user-feedback';
 
 interface UsageData {
   email?: string | null;
@@ -123,9 +125,6 @@ const parseCatalogCsv = (csvText: string): GarmentSyncRow[] => {
   }).filter((item) => item.productId);
 };
 
-const getApiErrorMessage = (payload: { message?: string; error?: string } | null | undefined, fallback: string) =>
-  payload?.message || payload?.error || fallback;
-
 const dashboardApiPath = (path: string) => '/api/dashboard/proxy/' + path.replace(/^\/+/, '');
 
 const humanizeGarmentId = (value: string) =>
@@ -176,7 +175,8 @@ export default function Dashboard() {
   const [selectedProducts, setSelectedProducts] = useState<Record<string, string>>({});
   const [matchStatusMessage, setMatchStatusMessage] = useState('');
   const [activeMatchGarmentId, setActiveMatchGarmentId] = useState('');
-  const [toast, setToast] = useState('');
+  const { feedback, notify: setToast, dismiss, run: runAction, busy: actionBusy } = useFeedback();
+  const [loadError, setLoadError] = useState('');
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [previewError, setPreviewError] = useState('');
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -218,25 +218,20 @@ export default function Dashboard() {
       : 'border border-white/10 bg-[#1b251e] px-4 py-2 transition-colors hover:bg-[#253229]';
 
   const refreshGarments = async () => {
-    const data = await fetch(dashboardApiPath('sdk/garments'))
-      .then((res) => res.json())
-      .catch(() => ({ items: [] }));
-    setGarments(data.items || []);
+    const data = await requestJson(dashboardApiPath('sdk/garments'));
+    if (!Array.isArray(data.items)) throw new Error('INVALID_GARMENTS_RESPONSE');
+    setGarments(data.items);
   };
 
   const refreshCatalog = async () => {
-    const data = await fetch(dashboardApiPath('sdk/catalog'))
-      .then((res) => res.json())
-      .catch(() => ({ items: [] }));
-    setCatalogProducts(data.items || []);
+    const data = await requestJson(dashboardApiPath('sdk/catalog'));
+    if (!Array.isArray(data.items)) throw new Error('INVALID_CATALOG_RESPONSE');
+    setCatalogProducts(data.items);
   };
 
   const refreshUsage = async () => {
-    const res = await fetch(dashboardApiPath('analytics/summary'));
-    if (res.status === 401) {
-      throw new Error('UNAUTHORIZED');
-    }
-    const data = await res.json();
+    const data = await requestJson(dashboardApiPath('analytics/summary'));
+    if (typeof data.planName !== 'string' || typeof data.quotaRemaining !== 'number') throw new Error('INVALID_SUMMARY_RESPONSE');
     setUsage(data);
   };
 
@@ -271,8 +266,10 @@ export default function Dashboard() {
             return;
           }
         }
-      } catch {
-        // ignore and redirect below
+        if (sessionResponse.status !== 401) throw new WebsiteError(getApiErrorMessage(null, 'Workspace access is temporarily unavailable.', sessionResponse.status));
+      } catch (error) {
+        if (active) { setLoadError(userError(error, 'We could not load your workspace. Please try again.')); setIsBootstrapping(false); }
+        return;
       }
 
       if (active) {
@@ -291,15 +288,13 @@ export default function Dashboard() {
     if (!apiKey) return;
 
     Promise.all([refreshUsage(), refreshGarments(), refreshCatalog(), refreshStorefrontKeyStatus()]).catch(async (error: Error) => {
-      if (error.message === 'UNAUTHORIZED') {
+      if (error instanceof WebsiteError && error.status === 401) {
         setApiKey('');
         await fetch('/api/dashboard/session', { method: 'DELETE' }).catch(() => undefined);
         router.replace('/auth/login?next=/dashboard');
         return;
       }
-      console.error(error);
-      setGarments([]);
-      setCatalogProducts([]);
+      setLoadError(userError(error, 'We could not load workspace data. Please try again.'));
     });
   }, [apiKey, router]);
 
@@ -390,7 +385,7 @@ export default function Dashboard() {
     preparePreview().catch((error: unknown) => {
       if (!cancelled) {
         setPreviewStatus('error');
-        setPreviewError(error instanceof Error ? error.message : 'PREVIEW_INIT_FAILED');
+        setPreviewError(userError(error, 'The private preview is unavailable. Check service status and try again later.'));
       }
     });
 
@@ -402,22 +397,10 @@ export default function Dashboard() {
     };
   }, [previewProductId]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(''), 2600);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
-
-  const handleLogout = () => {
-    fetch('/api/dashboard/session', { method: 'DELETE' })
-      .catch(() => undefined)
-      .finally(() => {
-        signOut({ redirect: false })
-          .catch(() => undefined)
-          .finally(() => {
-            router.push('/');
-          });
-      });
+  const handleLogout = async () => {
+    await requestJson('/api/dashboard/session', { method: 'DELETE' });
+    await signOut({ redirect: false });
+    router.push('/');
   };
 
   const handleCatalogSync = async () => {
@@ -445,8 +428,8 @@ export default function Dashboard() {
     });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setCatalogSyncStatus(data?.error || 'Catalog sync failed.');
-        setToast(data?.error || 'Catalog sync failed.');
+        setCatalogSyncStatus(getApiErrorMessage(data, 'Catalog sync did not finish. Check the latest product status before retrying.', res.status));
+        setToast(getApiErrorMessage(data, 'Catalog sync did not finish. Check the product status before retrying.', res.status), 'error');
         return;
       }
 
@@ -458,7 +441,7 @@ export default function Dashboard() {
       await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
     } catch {
       setCatalogSyncStatus('Catalog sync failed.');
-      setToast('Catalog sync failed.');
+      setToast('Catalog sync failed.', 'error');
     }
   };
 
@@ -485,11 +468,12 @@ export default function Dashboard() {
     if (!res.ok) {
       const message = getApiErrorMessage(data, 'Bulk upload failed.');
       setBulkGarmentStatus(message);
-      setToast(message);
+      setToast(message, 'error');
       return;
     }
 
-    const items = Array.isArray(data?.items) ? data.items : [];
+    if (!Array.isArray(data?.items)) throw new WebsiteError('The upload response was incomplete. Refresh garment status before retrying.');
+    const items = data.items;
     const successCount = items.filter((item: { cacheKey?: string }) => Boolean(item.cacheKey)).length;
     const failedCount = items.length - successCount;
     const firstFailure = items.find((item: { message?: string; error?: string }) => item.message || item.error);
@@ -499,7 +483,7 @@ export default function Dashboard() {
         ? `Uploaded ${successCount} garments. ${failedCount} file(s) failed. ${getApiErrorMessage(firstFailure, 'Review the rejected uploads and use isolated garment-only images.')}`
         : `Uploaded ${successCount} garments.${betaCount ? ` ${betaCount} beta-category item(s) still need closer preview review.` : ''}${failedCount ? ` ${failedCount} files still need cleaner garment assets.` : ''}`
     );
-    setToast(`Bulk upload complete. ${successCount} garments are now ready for matching.`);
+    setToast(`${successCount} garment(s) prepared. ${failedCount} failed or need attention. Review each status before continuing.`, failedCount ? 'error' : 'success');
     setBulkGarmentFiles([]);
     await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
   };
@@ -526,7 +510,7 @@ export default function Dashboard() {
       if (!res.ok) {
         const message = getApiErrorMessage(data, 'Unable to confirm the mapping.');
         setMatchStatusMessage(message);
-        setToast(message);
+        setToast(message, 'error');
         return;
       }
 
@@ -535,7 +519,7 @@ export default function Dashboard() {
       await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
     } catch {
       setMatchStatusMessage('Unable to confirm the mapping.');
-      setToast('Unable to confirm the mapping.');
+      setToast('Unable to confirm the mapping.', 'error');
     } finally {
       setActiveMatchGarmentId('');
     }
@@ -555,7 +539,7 @@ export default function Dashboard() {
       if (!res.ok) {
         const message = getApiErrorMessage(data, 'Unable to clear the mapping.');
         setMatchStatusMessage(message);
-        setToast(message);
+        setToast(message, 'error');
         return;
       }
 
@@ -564,12 +548,13 @@ export default function Dashboard() {
       await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
     } catch {
       setMatchStatusMessage('Unable to clear the mapping.');
-      setToast('Unable to clear the mapping.');
+      setToast('Unable to clear the mapping.', 'error');
     } finally {
       setActiveMatchGarmentId('');
     }
   };
 
+  if (loadError) return <LoadFailure title="Workspace data is unavailable" message={loadError} />;
   if (isBootstrapping || !usage) {
     return (
       <div className={`${pageClass} flex items-center justify-center`}>
@@ -699,14 +684,10 @@ export default function Dashboard() {
 
   return (
     <div className={pageClass}>
-      {toast ? (
-        <div className="fixed right-6 top-24 z-50 border border-[#9bb6a8] bg-[#eaf0e9] px-4 py-3 text-sm font-semibold text-[#183f32] shadow-lg">
-          {toast}
-        </div>
-      ) : null}
       <WorkspaceHeader active="dashboard" onLogout={handleLogout} />
 
       <main className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-12">
+        <FeedbackMessage feedback={feedback} onDismiss={dismiss} />
         <div className="mb-8">
           <p className={`mb-3 text-xs font-bold uppercase ${themePreference === 'light' ? 'text-[#31725b]' : 'text-[#7fb29a]'}`}>Onboarding workspace</p>
           <h1 className="mb-3 max-w-4xl font-serif text-4xl leading-tight">From garment upload to a confirmed live product.</h1>
@@ -730,7 +711,7 @@ export default function Dashboard() {
               <Link href="/pricing" className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 transition-colors ${themePreference === 'light' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500 text-white hover:bg-rose-400'}`}>
                 Upgrade now
               </Link>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center gap-2 ${actionClass}`}>
+              <a href="mailto:support@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center gap-2 ${actionClass}`}>
                 Contact sales
               </a>
             </div>
@@ -1011,32 +992,33 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row gap-4">
             <input
               type="text"
-              value={storefrontApiKey || (storefrontKeyExists ? 'Active storefront key hidden' : 'No storefront key created')}
+              aria-label="Storefront key" value={storefrontApiKey || (storefrontKeyExists ? 'Active storefront key hidden' : 'No storefront key created')}
               readOnly
               className={inputClass}
             />
             <button
               type="button"
               disabled={!storefrontApiKey}
-              onClick={() => navigator.clipboard.writeText(storefrontApiKey).then(() => setToast('Storefront key copied.'))}
+              onClick={() => runAction(async () => { await copyText(storefrontApiKey); setToast('Storefront key copied.', 'success'); })}
               className={actionClass}
             >
               <span className="inline-flex items-center gap-2"><Copy className="w-4 h-4" />Copy</span>
             </button>
             <button
-              onClick={async () => {
+              onClick={() => void runAction(async () => {
                 const res = await fetch(dashboardApiPath('analytics/api-key/rotate'), {
                   method: 'POST'
     });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok || !data?.apiKey) {
-                  setToast('Unable to create the storefront key right now.');
+                  setToast('Unable to create the storefront key right now.', 'error');
                   return;
                 }
                 setStorefrontApiKey(data.apiKey);
                 setStorefrontKeyExists(true);
                 setToast(storefrontKeyExists ? 'Storefront key rotated. Update the installed widget with this new key.' : 'Storefront key created. Copy it now.');
-              }}
+              })}
+              disabled={actionBusy}
               className={actionClass}
             >
               <span className="inline-flex items-center gap-2"><KeyRound className="w-4 h-4" />{storefrontKeyExists ? 'Rotate' : 'Create'}</span>
@@ -1048,26 +1030,10 @@ export default function Dashboard() {
           <h2 className="text-xl font-bold mb-2">Live storefront domain</h2>
           <p className={`mb-4 ${mutedTextClass}`}>This matters only when you are close to launch. If you are still testing image quality and product prep, you can leave live domain work inside Settings for later.</p>
           <div className="flex gap-4">
-            <input
-              type="text"
-              defaultValue={usage.domain || ''}
-              placeholder="yourbrand.com"
-              className={inputClass}
-              onBlur={async (e) => {
-                const value = e.target.value.trim();
-                if (!value || !apiKey) return;
-                const res = await fetch(dashboardApiPath('analytics/domain'), {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ domain: value })
-    });
-                if (res.ok) {
-                  const data = await res.json();
-                  setUsage((prev) => (prev ? { ...prev, domain: data.domain, storeConnected: true } : prev));
-                  setToast('Store domain updated.');
-                }
-              }}
-            />
+            <div>
+              <p>{usage.domain || 'No store domain saved yet.'}</p>
+              <Link href="/settings#store-basics" className="inline-flex min-h-11 items-center font-semibold underline">Edit and verify store domain in Settings</Link>
+            </div>
           </div>
         </div>
 
@@ -1198,7 +1164,7 @@ export default function Dashboard() {
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
                 Upload multiple garment files at once. DrapixAI validates the assets first, then uses catalog discovery to move toward suggested matches and later manual confirmation.
               </p>
-              <input
+              <input aria-label="Garment photos for bulk upload"
                 type="file"
                 accept="image/*"
                 multiple
@@ -1206,7 +1172,7 @@ export default function Dashboard() {
                 className={`p-2 text-sm ${mutedTextClass}`}
               />
               <select
-                value={bulkGarmentType}
+                aria-label="Bulk garment type" value={bulkGarmentType}
                 onChange={(e) => setBulkGarmentType(e.target.value === 'lower' ? 'lower' : 'upper')}
                 className={`${inputClass} mt-3 w-full`}
               >
@@ -1232,7 +1198,7 @@ export default function Dashboard() {
               <p className={`text-sm mb-3 ${mutedTextClass}`}>
                 Upload a CSV with <span className="font-mono">productId</span> and optional <span className="font-mono">productName</span>, <span className="font-mono">category</span>, or <span className="font-mono">garmentType</span>. This is the discovery layer that helps DrapixAI understand which products exist before matching garments.
               </p>
-              <input
+              <input aria-label="Catalog CSV file"
                 type="file"
                 accept=".csv,text/csv"
                 onChange={(e) => setCatalogCsvFile(e.target.files?.[0] || null)}
@@ -1286,13 +1252,13 @@ export default function Dashboard() {
             <div className="flex flex-col md:flex-row gap-3">
               <input
                 type="text"
-                value={garmentUploadId}
+                aria-label="Garment asset label (optional)" value={garmentUploadId}
                 onChange={(e) => setGarmentUploadId(e.target.value)}
                 placeholder="asset label (optional)"
                 className={inputClass}
               />
               <select
-                value={garmentUploadCategory}
+                aria-label="Garment category" value={garmentUploadCategory}
                 onChange={(e) => setGarmentUploadCategory(e.target.value)}
                 className={inputClass}
               >
@@ -1303,21 +1269,21 @@ export default function Dashboard() {
                 ))}
               </select>
               <select
-                value={garmentUploadType}
+                aria-label="Garment type" value={garmentUploadType}
                 onChange={(e) => setGarmentUploadType(e.target.value === 'lower' ? 'lower' : 'upper')}
                 className={inputClass}
               >
                 <option value="upper">Upper-body production</option>
                 <option value="lower">Lower-body V1 beta</option>
               </select>
-              <input
+              <input aria-label="Garment photo"
                 type="file"
                 accept="image/*"
                 onChange={(e) => setGarmentFile(e.target.files?.[0] || null)}
                 className={`p-2 text-sm ${mutedTextClass}`}
               />
               <button
-                onClick={async () => {
+                onClick={() => void runAction(async () => {
                   if (!apiKey || !garmentFile) {
                     setGarmentStatus('Please provide a garment image.');
                     return;
@@ -1341,7 +1307,7 @@ export default function Dashboard() {
                   if (!res.ok) {
                     const message = getApiErrorMessage(data, 'Upload failed.');
                     setGarmentStatus(message);
-                    setToast(message);
+                    setToast(message, 'error');
                     return;
                   }
                   const warningSuffix =
@@ -1356,7 +1322,8 @@ export default function Dashboard() {
                   setGarmentUploadCategory('');
                   setGarmentFile(null);
                   await Promise.all([refreshUsage(), refreshGarments(), refreshCatalog()]);
-                }}
+                })}
+                disabled={actionBusy}
                 className={actionClass}
               >
                 Upload
@@ -1450,7 +1417,7 @@ export default function Dashboard() {
                     {g.matchReason ? <p className={`text-xs mt-2 ${mutedTextClass}`}>{g.matchReason}</p> : null}
                     <div className="mt-4 flex flex-col gap-3">
                       <select
-                        value={selectedProducts[g.garmentId] || ''}
+                        aria-label="Product to match with this garment" value={selectedProducts[g.garmentId] || ''}
                         onChange={(e) =>
                           setSelectedProducts((current) => ({
                             ...current,
@@ -1534,7 +1501,7 @@ export default function Dashboard() {
           <p className={`mb-4 ${mutedTextClass}`}>
             Upper-body garments only. You can embed the launcher on a single product page or auto-attach it across eligible product cards in your storefront.
           </p>
-          <pre className={`p-4 rounded-lg overflow-x-auto text-sm ${themePreference === 'light' ? 'bg-slate-950 text-slate-100 border border-slate-800' : 'bg-white/5 border border-white/10'}`}>
+          <pre tabIndex={0} aria-label="Storefront integration example" className={`p-4 rounded-lg overflow-x-auto text-sm ${themePreference === 'light' ? 'bg-slate-950 text-slate-100 border border-slate-800' : 'bg-white/5 border border-white/10'}`}>
 {`<script src="${getSdkScriptUrl()}"></script>
 
 <!-- Single product mode -->

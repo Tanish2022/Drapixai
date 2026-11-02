@@ -35,4 +35,12 @@ const formatted = formatLogError(error);
 assert.ok(!formatted.includes(email));
 assert.ok(!formatted.includes(bearer));
 
+for (const name of ['image_base64', 'personImageBase64', 'clothImageBase64', 'garment_image_base64', 'result_image_base64', 'imageBase64']) {
+  for (const payload of [imagePayload, 'AB-_'.repeat(128)]) {
+    const input = `decoder rejected {"${name}":"${payload}"}`;
+    assert.ok(!formatLogError(new Error(input)).includes(payload), `Image payload field ${name} must be redacted`);
+  }
+}
+assert.ok(formatLogError(new Error('UPLOAD_INVALID: decoder rejected image bytes')).includes('UPLOAD_INVALID'));
+
 console.log('API log privacy tests passed.');

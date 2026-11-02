@@ -19,6 +19,7 @@ type DashboardSessionRequestBody = {
   mobileNumber?: string | null;
   otp?: string;
   apiKey?: string;
+  termsAcceptance?: unknown;
 };
 
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
           selectedPlan: body.selectedPlan,
           mobileNumber: body.mobileNumber,
           otp: body.otp,
+          termsAcceptance: body.termsAcceptance,
         }
       : {
           email: body.email,
@@ -104,9 +106,13 @@ export async function POST(request: Request) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     cache: 'no-store',
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => null);
+  if (!authResponse) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
+    status: 503, headers: { 'Retry-After': '1' },
   });
 
-  const authPayload = (await authResponse.json().catch(() => null)) as { apiKey?: string; error?: string } | null;
+  const authPayload = (await authResponse.json().catch(() => null)) as { apiKey?: string; error?: string; termsRequired?: boolean } | null;
   if (!authResponse.ok) {
     if (authResponse.status === 503) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
       status: 503, headers: { 'Retry-After': '1' },
@@ -120,7 +126,7 @@ export async function POST(request: Request) {
   }
 
   await persistDashboardCookie(apiKey);
-  return noStoreJson({ ok: true });
+  return noStoreJson({ ok: true, termsRequired: authPayload?.termsRequired === true });
 }
 
 export async function DELETE(request: Request) {
@@ -134,6 +140,7 @@ export async function DELETE(request: Request) {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.apiKey}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
     }).catch(() => null);
   }
   clearSessionCookies(cookieStore, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE);

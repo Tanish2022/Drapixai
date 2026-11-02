@@ -83,7 +83,11 @@ const sendStoredImage = async (res: any, storedUrl: string | null | undefined) =
 };
 
 const adminAuth = async (req: any, res: any, next: any) => {
-  const activeKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+  // Identity verification establishes the MFA cookie; operational routes still
+  // require current terms. This lets an operator reach the acceptance screen.
+  const activeKey = await resolveActiveApiKey(prisma, req.headers.authorization, {
+    allowUnacceptedTerms: req.method === 'GET' && req.path === '/verify',
+  });
   if (!activeKey) {
     return res.status(401).json({ error: 'INVALID_API_KEY' });
   }

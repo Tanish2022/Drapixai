@@ -212,10 +212,14 @@ router.post('/email/request-change', async (req, res) => {
     }),
   ]);
 
-  await Promise.all([
+  const deliveries = await Promise.all([
     sendOtpEmail(resolved.user.email, currentEmailCode.code, 'email_change_current', resolved.user.id),
     sendOtpEmail(normalizedNewEmail, newEmailCode.code, 'email_change_new', resolved.user.id),
   ]);
+  if (deliveries.some(delivery => !delivery.sent
+    && !(delivery.skipped && process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST))) {
+    return res.status(503).json({ error: 'EMAIL_DELIVERY_UNAVAILABLE' });
+  }
 
   return res.json({
     ok: true,

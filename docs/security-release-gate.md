@@ -167,26 +167,48 @@ closed.
 2. Create two disposable brand tenants, one ready product per tenant, one shopper token for tenant A, and one try-on result for tenant B.
 3. Run `npm --prefix apps/api run test:security:live` with two disposable tenants and:
    - `DRAPIXAI_SECURITY_TEST_API_URL`
+   - `DRAPIXAI_SECURITY_TEST_APPROVED_API_ORIGIN` (exact approved HTTPS origin)
+   - `DRAPIXAI_SECURITY_TEST_AUTHORIZATION_REF` (owned synthetic staging scope)
+   - `DRAPIXAI_EXPECTED_GIT_REF` (exact release commit)
    - `DRAPIXAI_SECURITY_TEST_SERVER_KEY_A`
    - `DRAPIXAI_SECURITY_TEST_SHOPPER_TOKEN_A`
+   - `DRAPIXAI_SECURITY_TEST_SHOPPER_TOKEN_B`
    - `DRAPIXAI_SECURITY_TEST_EXPIRED_SHOPPER_TOKEN_A`
    - `DRAPIXAI_SECURITY_TEST_PRODUCT_A`
    - `DRAPIXAI_SECURITY_TEST_PRODUCT_B`
    - `DRAPIXAI_SECURITY_TEST_RESULT_B`
    - `DRAPIXAI_SECURITY_TEST_ORIGIN_A`
+   - `DRAPIXAI_SECURITY_TEST_ORIGIN_B`
    - `DRAPIXAI_SECURITY_TEST_PUBLIC_API_TOKEN_A`
    - `DRAPIXAI_SECURITY_TEST_RATE_LIMIT_PATH`
    - `DRAPIXAI_SECURITY_TEST_RATE_LIMIT_ATTEMPTS`
    - `DRAPIXAI_SECURITY_TEST_ENVIRONMENT`
 
+   `DRAPIXAI_SECURITY_TEST_MODE=full` is required for release certification
+   (and is the harness default). Both tenants must positively validate their own
+   products; tenant B's synthetic result must accept one owner-feedback row.
+   The origin must have a staging label, match the separately recorded approved
+   origin, and contain no path/query/credentials. Redirects, service errors,
+   missing endpoints and invalid credentials cannot count as successful denials.
+   Limits are 250 requests, 10 seconds per request, two minutes per run and
+   64 KiB per response; no automatic retries or valid inference images are sent.
+
+   Before GPU availability, an authorized operator may explicitly select
+   `DRAPIXAI_SECURITY_TEST_MODE=cpu`. This checks the authenticated 503 intake
+   pause without multipart uploads or enabling inference. It reports
+   `PARTIAL_CPU`, keeps malicious-upload coverage pending and exits 2. The
+   certification runner rejects this mode; it never closes a live launch gate.
+
    The staging-only harness exercises cross-tenant product and result access, expired-token replay, cross-origin token replay, forged image uploads, brand-to-admin privilege escalation, localhost webhook SSRF, hostile-origin CORS/CSRF behavior, and bounded API-key rate limiting. Use an access token scoped to `api:usage` and `api:webhooks`; configure the staging API-key rate limit to 20 for this temporary test, then restore it. Delete the test tenants afterward.
-4. Run the authorized staging-only scanner with an approved digest-pinned ZAP image. The helper refuses any host whose name does not include `staging`, requires `DRAPIXAI_PENTEST_ENVIRONMENT=staging`, and requires a written authorization reference:
+4. Supplement the assessment with the governed bounded HTTPS capture/offline ZAP workflow (operational evidence retained privately). It requires an exact approved origin/IP/path set, active authorization document/hash and clean release. It rejects redirects; ZAP analyzes recorded responses with networking disabled. This narrower passive scope does not replace crawling, authenticated or independent testing:
 
    ```bash
    export DRAPIXAI_PENTEST_ENVIRONMENT=staging
-   export DRAPIXAI_PENTEST_AUTHORIZATION_ID=SEC-YYYY-NNNN
-   export DRAPIXAI_ZAP_IMAGE=approved-zap-image@sha256:replace-with-64-hex-digest
-   bash deploy/scripts/pentest-staging.sh https://staging.example.com
+   export DRAPIXAI_PENTEST_ACTIVE_TEST_ACK=I_HAVE_WRITTEN_AUTHORIZATION_FOR_THIS_STAGING_TARGET
+   bash deploy/scripts/pentest-staging.sh \
+     --authorization /secure/zap-authorization.json \
+     --authorization-sha256 REVIEWED_DOCUMENT_SHA256 \
+     --target https://EXACT_APPROVED_STAGING_ORIGIN
    ```
 5. Run the governed Strix black-box assessment from a dedicated security runner
    using `docs/strix-security-testing.md`. It must target only the exact staging

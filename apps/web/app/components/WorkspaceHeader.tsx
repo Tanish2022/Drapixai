@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import BrandLogo from './BrandLogo';
+import { useRef, useState } from 'react';
+import FeedbackMessage from './FeedbackMessage';
 
 type WorkspacePage = 'onboarding' | 'dashboard' | 'sdk' | 'subscription' | 'settings';
 
@@ -20,12 +22,22 @@ const links: Array<{ href: string; label: string; id: WorkspacePage }> = [
 ];
 
 export default function WorkspaceHeader({ active, onLogout }: WorkspaceHeaderProps) {
+  const running = useRef(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+  const logout = async () => {
+    if (running.current || !onLogout) return;
+    running.current = true; setSigningOut(true); setLogoutError('');
+    try { await onLogout(); }
+    catch { setLogoutError('We could not confirm sign-out. Check your connection and try again. Close this browser before leaving a shared device.'); }
+    finally { running.current = false; setSigningOut(false); }
+  };
   return (
     <header className="border-b border-black/10 bg-[#fbfcf9] text-[#172019]">
       <div className="mx-auto flex min-h-20 max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-3 sm:px-8 lg:px-12">
-        <Link href="/dashboard" className="flex flex-col items-start gap-1" aria-label="DrapixAI workspace">
+        <Link href="/dashboard" className="flex flex-col items-start gap-1" aria-label="DrapixAI Brand workspace">
           <BrandLogo className="h-9 w-auto" />
-          <span className="block text-[10px] font-semibold uppercase text-[#748078]">Brand workspace</span>
+          <span className="block text-[10px] font-semibold uppercase text-[#59665e]">Brand workspace</span>
         </Link>
 
         <nav className="order-3 flex w-full items-center gap-1 overflow-x-auto border-t border-black/10 pt-3 sm:order-none sm:w-auto sm:border-0 sm:pt-0" aria-label="Workspace navigation">
@@ -44,12 +56,13 @@ export default function WorkspaceHeader({ active, onLogout }: WorkspaceHeaderPro
         <div className="flex items-center gap-2">
           <Link href="/" className="hidden px-3 py-2 text-sm font-semibold text-[#667169] hover:text-[#172019] md:inline-flex">View site</Link>
           {onLogout ? (
-            <button type="button" onClick={() => void onLogout()} className="inline-flex h-10 w-10 items-center justify-center border border-black/15 bg-white text-[#536057] hover:bg-[#eef2ed] hover:text-[#172019]" aria-label="Sign out" title="Sign out">
+            <button type="button" disabled={signingOut} onClick={() => void logout()} className="inline-flex h-10 w-10 items-center justify-center border border-black/15 bg-white text-[#536057] hover:bg-[#eef2ed] hover:text-[#172019]" aria-label={signingOut ? 'Signing out' : 'Sign out'} title="Sign out">
               <LogOut className="h-4 w-4" />
             </button>
           ) : null}
         </div>
       </div>
+      {logoutError && <div className="mx-auto max-w-5xl px-5"><FeedbackMessage feedback={{ message: logoutError, tone: 'error' }} /></div>}
     </header>
   );
 }

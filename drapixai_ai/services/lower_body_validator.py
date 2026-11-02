@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import io
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from typing import Callable
 
 import numpy as np
 from PIL import Image, ImageFilter
+
+from drapixai_ai.services.lower_body_pose import (
+    LowerBodyPose,
+    get_lower_body_pose_estimator,
+    validate_lower_body_pose,
+)
 
 
 @dataclass(frozen=True)
@@ -14,21 +21,61 @@ class LowerBodyValidation:
     warnings: tuple[str, ...] = field(default_factory=tuple)
     width: int = 0
     height: int = 0
+    pose_checked: bool = False
+    person_count: int | None = None
+    pose_backend: str | None = None
+    pose_measurements: dict[str, float] = field(default_factory=dict)
 
 
-def validate_lower_body_person(image_bytes: bytes) -> LowerBodyValidation:
-    """Lightweight lower-body gate for the future beta path.
+def validate_lower_body_person(
+    image_bytes: bytes | Image.Image,
+    *,
+    pose_estimator: Callable[[Image.Image], LowerBodyPose] | None = None,
+    require_pose: bool = True,
+) -> LowerBodyValidation:
+    """Validate framing and all-person pose evidence before lower-body inference.
 
-    This intentionally avoids adding a hard dependency on pose estimation. It is
-    a conservative first pass; production beta should replace or augment it with
-    pose/keypoint checks before public release.
+    The explicit heuristic-only mode is for offline scaffold diagnostics. It
+    emits an unverified-pose warning and cannot qualify as release evidence.
     """
-
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        source = image_bytes if isinstance(image_bytes, Image.Image) else Image.open(io.BytesIO(image_bytes))
+        if source.width * source.height > 40_000_000:
+            return LowerBodyValidation(False, "IMAGE_PIXEL_LIMIT")
+        if getattr(source, "n_frames", 1) != 1:
+            return LowerBodyValidation(False, "INVALID_IMAGE")
+        image = source.convert("RGB")
     except Exception:
         return LowerBodyValidation(ok=False, reason="INVALID_IMAGE")
 
+    framing = _validate_lower_body_framing(image)
+    if not framing.ok:
+        return framing
+    if not require_pose:
+        return replace(framing, warnings=(*framing.warnings, "LOWER_BODY_POSE_NOT_CHECKED"))
+    try:
+        if pose_estimator is None:
+            from drapixai_ai.configs.settings import settings
+
+            pose_estimator = get_lower_body_pose_estimator(settings.fashn_weights_dir)
+        pose = pose_estimator(image)
+        if not isinstance(pose, LowerBodyPose):
+            return replace(framing, ok=False, reason="INVALID_POSE_EVIDENCE")
+        result = validate_lower_body_pose(pose, image_width=image.width, image_height=image.height)
+    except Exception:
+        return replace(framing, ok=False, reason="LOWER_BODY_POSE_UNAVAILABLE")
+    return replace(
+        framing,
+        ok=result.ok,
+        reason=result.reason,
+        pose_checked=True,
+        person_count=pose.person_count,
+        pose_backend=pose.backend,
+        pose_measurements=dict(result.measurements),
+    )
+
+
+def _validate_lower_body_framing(image: Image.Image) -> LowerBodyValidation:
     width, height = image.size
     if width <= 0 or height <= 0:
         return LowerBodyValidation(ok=False, reason="INVALID_DIMENSIONS")

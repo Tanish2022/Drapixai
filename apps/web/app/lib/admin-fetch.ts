@@ -6,7 +6,7 @@ export const createAdminFetch = (onExpired: () => void) => {
   let expired = false;
   return async (path: string, init?: RequestInit) => {
     if (expired) return expiredResponse();
-    const response = await fetch(`/api/admin/proxy/${path}`, init);
+    const response = await timedFetch(`/api/admin/proxy/${path}`, init);
     if (expired) {
       void response.body?.cancel().catch(() => undefined);
       return expiredResponse();
@@ -18,3 +18,4 @@ export const createAdminFetch = (onExpired: () => void) => {
     return response;
   };
 };
+import { timedFetch } from './user-feedback';

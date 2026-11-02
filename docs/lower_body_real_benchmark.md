@@ -50,6 +50,33 @@ Automated gates remain separate:
 
 A case passes the release gate only when every automated metric passes and an admin marks it approved with all four review dimensions rated at least 4/5 and no severe failure. A category is consistent only when it has at least 12 eligible cases, at least 90% automated pass rate, and at least 95% admin and combined pass rates. Two complete passing runs with distinct seeds are required. Each run must have zero inference failures, zero severe visual failures, and A100 end-to-end p95 latency at or below 35 seconds.
 
+The overall score must be a finite number in [0, 1] and **at least 0.95** for
+every accepted case, in every category. Exactly 0.95 passes the score boundary;
+0.949999 does not. The boundary follows the active goal's minimum 9.5/10
+requirement. Scores, visual metrics and category pass rates measure different
+things: category acceptance rates never permit a sub-threshold result to be
+published. Failed attempts must be rejected and remain in the denominator.
+
+The release evaluator independently checks case scores, current category
+thresholds, strict preprocessing, warnings and named reviews. Only the exact
+matching `LOWER_BODY_PROFILE:<CATEGORY>` and `LOWER_BODY_V1_REVIEW_REQUIRED`
+labels are informational; other warnings block automated acceptance. Missing,
+boolean, non-finite and out-of-range scores fail. Reported aggregate pass
+percentages cannot override case-level failures. At least 12 cases per category
+and two runs remain policy floors even if a manifest or CLI requests less.
+
+Rerun intake validation before using the updated release evaluator. Intake now
+records `eligible_case_ids`; each run must contain that exact slug/category set
+with no duplicates. Historical reports lacking these identities require fresh
+validation and review and are not grandfathered into a release approval.
+
+Each accepted case must also have strict `person_validation` evidence showing
+`ok: true`, `pose_checked: true`, one detected person and the configured DWPose
+backend. Heuristic-only scaffold output is excluded. The API offloads lower-body
+pose checks to a thread to keep its event loop responsive; the worker checks
+lower-body inputs again before individual or batched diffusion. Real-photo
+accuracy certification is still required.
+
 ## Commands
 
 ```bash

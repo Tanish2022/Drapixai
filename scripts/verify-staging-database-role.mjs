@@ -86,9 +86,8 @@ try {
     "-f", "/opt/drapixai/verify-database-role.sql",
   ]);
   assert.ok(verified.includes("PASS: runtime DML and audit append work"));
-  checks.push("runtime DML and audit append succeed; administrative, DDL, audit mutation and truncate operations fail");
-  const residue = sql('SELECT count(*) FROM public."SecurityAuditLog"; SELECT to_regclass(\'public.drapixai_role_probe\') IS NULL AS probe_removed;');
-  assert.match(residue, /\b0\b/);
+  checks.push("runtime DML, audit append and terms append/read succeed; administrative, DDL, evidence mutation and truncate operations fail");
+  const residue = sql('SELECT (SELECT count(*) FROM public."SecurityAuditLog") = 0 AND (SELECT count(*) FROM public."TermsDocument") = 0 AND (SELECT count(*) FROM public."AccountTermsAcceptance") = 0 AND (SELECT count(*) FROM public."User") = 0 AND to_regclass(\'public.drapixai_role_probe\') IS NULL AS clean;');
   assert.match(residue, /\bt\b/);
   checks.push("verifier rolls back synthetic rows and probe table");
 } catch (error) {

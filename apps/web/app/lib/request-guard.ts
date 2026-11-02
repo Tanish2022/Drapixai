@@ -52,12 +52,12 @@ const getProxyBodyLimitBytes = () => {
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_PROXY_BODY_LIMIT_BYTES;
 };
 
-export const readLimitedProxyBody = async (request: Request) => {
+export const readLimitedProxyBody = async (request: Request, explicitMaxBytes?: number) => {
   if (['GET', 'HEAD'].includes(request.method.toUpperCase())) {
     return { body: undefined as BodyInit | undefined, rejection: null as NextResponse | null };
   }
 
-  const maxBytes = getProxyBodyLimitBytes();
+  const maxBytes = explicitMaxBytes ?? getProxyBodyLimitBytes();
   const rawContentLength = request.headers.get('content-length');
   const contentLength = rawContentLength ? Number(rawContentLength) : 0;
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {

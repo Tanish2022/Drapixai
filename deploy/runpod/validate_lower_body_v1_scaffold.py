@@ -89,11 +89,12 @@ def main() -> None:
         "checks": {},
     }
 
-    validation = validate_lower_body_person(person_bytes)
+    validation = validate_lower_body_person(person_bytes, require_pose=False)
     report["checks"]["person_validation"] = {
         "ok": validation.ok,
         "reason": validation.reason,
         "warnings": validation.warnings,
+        "pose_checked": validation.pose_checked,
     }
     if not validation.ok:
         raise SystemExit(json.dumps(report, indent=2))

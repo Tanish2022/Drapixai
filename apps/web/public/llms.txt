@@ -1,22 +1,21 @@
 # DrapixAI
 
-> Product-faithful virtual try-on for fashion brands. DrapixAI prepares and certifies garments before storefront activation, generates Standard upper-body try-ons, and rejects results that fall below publishability thresholds.
+> DrapixAI is developing upper-body virtual try-on for fashion brands. The website is in pre-launch preparation. Live availability, commercial permissions and controlled-pilot acceptance remain subject to launch review. This optional reference file is not an indexing instruction, access control or a guarantee of AI citations.
 
 ## Public documentation
 
 - Developer quickstart: /docs
-- Live demo: /demo
-- SDK installation: /sdk-install
+- Merchant guide and answers: /virtual-try-on
 - Help and troubleshooting: /help
 - Service status: /status
 - Changelog: /changelog
 - Privacy: /privacy
 - Terms: /terms
 
-## Supported launch scope
+## Intended launch scope
 
 Current upper-body evaluation scope includes eligible shirts, t-shirts, polos, blouses and clean tops. Each product needs review; listing a garment category is not proof that every product or generated result is suitable for publication.
-The public shopper pipeline uses Standard quality only.
+The intended shopper pipeline uses Standard quality only. A development Shopify integration is not evidence of an App Store listing or live-store acceptance.
 
 ## Browser SDK
 

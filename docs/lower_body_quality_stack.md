@@ -120,7 +120,8 @@ Dedicated FASHN lower-worker additions:
 
 - Python 3.11
 - CUDA 12.4 and cuDNN 9
-- `fashn-vton==1.5.0`
+- FASHN source version 1.5.0, pinned by commit and SHA-256 in
+  `drapixai_ai/requirements.lower-body-models.txt` (the version is not published on PyPI)
 - `fashn-human-parser==0.1.1`
 - `onnxruntime-gpu==1.20.1`
 - FASHN VTON 1.5 model weights and DWPose ONNX weights pinned to explicit revisions
@@ -161,8 +162,13 @@ Hard rejects:
 - `ANKLES_NOT_VISIBLE`
 - `FULL_BODY_REQUIRED`
 - `PERSON_IMAGE_TOO_SMALL`
-- `SITTING_POSE_UNSUPPORTED` once pose checks are added
-- `MULTI_PERSON_UNSUPPORTED` once person count checks are added
+- `SITTING_POSE_UNSUPPORTED` / `BENT_LEG_POSE_UNSUPPORTED`
+- `MULTI_PERSON_UNSUPPORTED`
+- `CROSSED_LEGS_UNSUPPORTED`, `FEET_NOT_VISIBLE`, and landmark visibility failures
+
+DWPose intake is now implemented and unit-tested. See
+`docs/lower-body-person-validation.md` for provisioning, conservative geometric
+rules and the pending real-image accuracy/occlusion validation.
 
 Garment image v1:
 
@@ -282,11 +288,17 @@ Deliverables:
 
 Launch gates:
 
-- Average quality score >= `0.90`
-- Admin-approved rate >= `80%`
-- No repeated severe leg distortion
-- No repeated shoe corruption when preserve-shoes is enabled
-- No severe face/background changes
+- Every accepted result has a finite score >= `0.95` and passes all category
+  region/fidelity checks; an average cannot qualify a result.
+- At least 12 cleared cases per category, targeting 24, across all seven categories.
+- Automated pass rate >= `90%`; admin and combined pass rates >= `95%` per category.
+- Two complete, reviewed runs on the identical manifest with distinct seeds.
+- Zero inference failures or severe visual failures, including leg, shoe,
+  face or background corruption.
+- A100 end-to-end p95 <=35 seconds under the current lower-body evaluator;
+  public product latency approval and live capacity evidence remain required.
+
+See `docs/lower_body_real_benchmark.md` for the authoritative category policy.
 
 ### Phase 7: Internal Beta
 

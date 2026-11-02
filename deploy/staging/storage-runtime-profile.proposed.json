@@ -1,0 +1,12 @@
+{
+  "name": "drapixai-cpu-staging-storage",
+  "roleArns": ["arn:aws:iam::111122223333:role/drapixai-cpu-staging-storage"],
+  "durationSeconds": 900,
+  "enabled": false,
+  "acceptRoleSessionName": false,
+  "attributeMappings": [
+    {"certificateField": "x509Subject", "mappingRules": [{"specifier": "CN"}]},
+    {"certificateField": "x509Issuer", "mappingRules": [{"specifier": "CN"}]}
+  ],
+  "tags": [{"key": "Environment", "value": "cpu-staging"}]
+}

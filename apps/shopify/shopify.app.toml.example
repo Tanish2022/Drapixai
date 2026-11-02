@@ -1,13 +1,13 @@
 client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"
 name = "DrapixAI Virtual Try-On"
-application_url = "https://api.drapixai.com/shopify/install"
-embedded = false
+application_url = "https://api.drapixai.com/shopify/app"
+embedded = true
 
 [build]
-automatically_update_urls_on_dev = true
+automatically_update_urls_on_dev = false
 
 [access_scopes]
-scopes = "read_products"
+scopes = "read_products,write_app_proxy"
 use_legacy_install_flow = false
 
 [auth]

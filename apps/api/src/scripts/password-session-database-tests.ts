@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from '../lib/password-hash';
 import { applyVerifiedPassword, issueApiKeyForUser, resolveActiveApiKey } from '../lib/api-key-auth';
 import { requireDisposableDatabase } from '../lib/disposable-database';
 import { ensureAdminUser } from '../services/admin-bootstrap';
+import { CURRENT_TERMS, recordAccountTermsAcceptance } from '../lib/account-terms';
 
 // Only the existing guarded P0 fixture calls this. Every user/code/DDL object
 // below belongs to this invocation; no merchant records or external targets.
@@ -23,6 +24,9 @@ export const verifyPasswordSessions = async (prisma: PrismaClient, ownedUsers: n
       email: `${marker}@example.invalid`, passwordHash: await bcrypt.hash(password, 4), emailVerifiedAt: new Date(),
     } });
     userId = user.id; ownedUsers.push(user.id);
+    // Explicit synthetic fixture choice, never inferred production acceptance.
+    await prisma.$transaction(tx => recordAccountTermsAcceptance(tx, user.id,
+      { accepted: true, version: CURRENT_TERMS.version, documentHash: CURRENT_TERMS.documentHash }, 'authenticated_account'));
     const upgradedHash = await hashPassword(password);
     const key = await issueApiKeyForUser(prisma, user.id, { passwordProof: { snapshot: user, upgradedHash } });
     assert.ok(await resolveActiveApiKey(prisma, key));

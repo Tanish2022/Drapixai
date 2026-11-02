@@ -11,7 +11,7 @@ DRAPIXAI_STRIPE_PRICE_GROWTH=replace-with-stripe-test-growth-price-id
 DRAPIXAI_STRIPE_PRICE_PRO=replace-with-stripe-test-pro-price-id
 DRAPIXAI_SECRETS_PROVIDER=aws-secrets-manager
 DRAPIXAI_AWS_SECRET_ID=drapixai/sandbox/api
-DATABASE_URL=postgresql://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-db.internal:5432/drapixai_sandbox?sslmode=verify-full
+DATABASE_URL=postgresql://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-db.internal:5432/drapixai_sandbox?sslmode=require&sslaccept=strict
 REDIS_URL=rediss://SANDBOX_USER:SANDBOX_PASSWORD@sandbox-redis.internal:6379/1
 DRAPIXAI_AI_URL=https://sandbox-ai.drapixai.internal
 DRAPIXAI_AI_ALLOWED_HOSTS=sandbox-ai.drapixai.internal

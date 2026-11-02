@@ -63,6 +63,7 @@ def main() -> None:
             quality_score=score.score,
             metrics=score.metrics,
             admin_status=str(case.get("admin_review", {}).get("status", "pending")),
+            warnings=score.warnings,
         )
         scored_cases.append(
             {

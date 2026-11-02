@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import Stripe from 'stripe';
-import { normalizeSelectedPlan, type PublicPlanKey } from './plans';
+import { type PublicPlanKey } from './plans';
 
 export const STRIPE_API_VERSION = '2026-07-29.dahlia' as const;
 export const STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300;
@@ -125,22 +125,21 @@ export type StripeSubscriptionSnapshot = {
 export const getStripeSubscriptionSnapshot = (input: unknown): StripeSubscriptionSnapshot => {
   const subscription = (input || {}) as Record<string, any>;
   const items = Array.isArray(subscription.items?.data) ? subscription.items.data : [];
-  const priceId = items.map((item: any) => stripeObjectId(item?.price)).find(Boolean) || null;
-  const metadataPlan = normalizeSelectedPlan(subscription.metadata?.plan);
-  const periodEnds = [
-    finiteUnixDate(subscription.current_period_end),
-    ...items.map((item: any) => finiteUnixDate(item?.current_period_end)),
-  ].filter((value): value is Date => Boolean(value));
+  // This product sells one licensed monthly plan, quantity one. Metadata is a
+  // tenant/linking hint, never proof that a configured price was purchased.
+  const supportedItem = items.length === 1 && (items[0]?.quantity === undefined || items[0]?.quantity === 1)
+    ? items[0] : null;
+  const priceId = stripeObjectId(supportedItem?.price);
+  const periodEnd = finiteUnixDate(supportedItem?.current_period_end)
+    || finiteUnixDate(subscription.current_period_end);
   const metadataUserId = Number(subscription.metadata?.drapixai_user_id);
 
   return {
     customerId: stripeObjectId(subscription.customer),
     subscriptionId: stripeObjectId(subscription.id),
-    plan: getPlanForStripePrice(priceId) || metadataPlan,
+    plan: supportedItem ? getPlanForStripePrice(priceId) : null,
     status: String(subscription.status || '').trim().toLowerCase(),
-    currentPeriodEndsAt: periodEnds.length
-      ? new Date(Math.max(...periodEnds.map((date) => date.getTime())))
-      : null,
+    currentPeriodEndsAt: periodEnd,
     metadataUserId: Number.isSafeInteger(metadataUserId) && metadataUserId > 0 ? metadataUserId : null,
   };
 };

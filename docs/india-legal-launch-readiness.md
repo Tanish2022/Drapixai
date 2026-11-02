@@ -23,6 +23,12 @@ These statements must match the deployed service before publication. The source
 of truth for the current implementation is `apps/web/app/privacy/page.tsx`,
 `apps/api/src/lib/privacy.ts`, and the retention implementation.
 
+Latest scoped evidence: Task 14 assessment, 27 October 2026 (operational evidence retained privately),
+including the artifact rights register, current business/provider facts and
+unsigned reviewer handoff. The current official index lists an October 2026
+Removal of Difficulties Order; its operative text and current corrigenda still
+need reconciliation by counsel. This document is not a consolidated legal opinion.
+
 ## Required counsel deliverables
 
 1. **Public Privacy Policy**: purpose-specific photo processing notice, no
