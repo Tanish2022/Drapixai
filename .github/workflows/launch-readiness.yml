@@ -265,14 +265,16 @@ jobs:
         run: >-
           python -m pip install
           pip-audit==2.9.0
-          pillow==12.3.0
+          pillow==13.0.0
           numpy==1.26.4
           opencv-python-headless==4.10.0.84
           scipy==1.13.1
           scikit-image==0.24.0
           PyYAML==6.0.1
       - name: Verify immutable Standard release profile
-        run: python deploy/scripts/verify-standard-release-profile.py
+        run: |
+          python deploy/scripts/verify-standard-release-profile.py
+          python deploy/security/test_render_ai_candidate.py
       - name: Verify staging topology and negative controls
         run: |
           python deploy/scripts/verify-staging-topology.py
@@ -366,6 +368,26 @@ jobs:
         with:
           name: checkpoint-review-candidate-${{ github.sha }}
           path: runtime/security-candidate/accelerate/review/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build and verify isolated SAM validation backport
+        run: |
+          mkdir -p runtime/security-candidate/rembg
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            https://files.pythonhosted.org/packages/0c/ac/bade7f6ef1694c82c424129f0e35262b1578984ac1f716780fbf4930c9c3/rembg-2.0.69-py3-none-any.whl \
+            --output runtime/security-candidate/rembg/rembg-2.0.69-py3-none-any.whl
+          timeout 60s python deploy/security/rembg/test_candidate.py \
+            --wheel runtime/security-candidate/rembg/rembg-2.0.69-py3-none-any.whl
+          python deploy/security/rembg/build_candidate.py \
+            --wheel runtime/security-candidate/rembg/rembg-2.0.69-py3-none-any.whl \
+            --output-dir runtime/security-candidate/rembg/review
+      - name: Retain review-only SAM backport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sam-review-candidate-${{ github.sha }}
+          path: runtime/security-candidate/rembg/review/*
           if-no-files-found: error
           retention-days: 30
 
