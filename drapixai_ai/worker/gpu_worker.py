@@ -9,14 +9,14 @@ from typing import Any, Dict, Sequence
 
 import torch
 from PIL import Image, ImageFilter
-from rq import SimpleWorker, Worker
+from rq import Queue, SimpleWorker, Worker
 from rq.connections import pop_connection, push_connection
 from rq.timeouts import JobTimeoutException, TimerDeathPenalty
 from rq.utils import utcnow
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.pipeline.tryon_pipeline import DrapixAITryOnPipeline
-from drapixai_ai.queue.redis_queue import get_queue, get_redis
+from drapixai_ai.queue.redis_queue import create_worker_redis
 from drapixai_ai.services.logger import get_logger
 from drapixai_ai.services.transient_spool import (
     cleanup_expired_transients,
@@ -525,14 +525,11 @@ def main() -> None:
 
     role = settings.worker_role.strip().lower()
     if role == "upper":
-        queues = [get_queue(settings.queue_name)]
+        queue_names = [settings.queue_name]
     elif role == "lower":
-        queues = [get_queue(settings.lower_body_queue_name)]
+        queue_names = [settings.lower_body_queue_name]
     elif role == "both":
-        queues = [
-            get_queue(settings.queue_name),
-            get_queue(settings.lower_body_queue_name),
-        ]
+        queue_names = [settings.queue_name, settings.lower_body_queue_name]
     else:
         raise ValueError(f"UNSUPPORTED_WORKER_ROLE:{settings.worker_role}")
     if use_cuda:
@@ -540,7 +537,9 @@ def main() -> None:
         worker_cls = AdaptiveBatchWorker if settings.adaptive_batching else CUDASimpleWorker
     else:
         worker_cls = WindowsSimpleWorker if os.name == "nt" else Worker
-    worker = worker_cls(queues, connection=get_redis())
+    connection = create_worker_redis()
+    queues = [Queue(name, connection=connection) for name in queue_names]
+    worker = worker_cls(queues, connection=connection)
     worker.work(with_scheduler=False)
 
 

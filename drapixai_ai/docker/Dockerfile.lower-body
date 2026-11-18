@@ -34,12 +34,13 @@ WORKDIR /workspace/drapixai
 
 COPY drapixai_ai/requirements.rtx-pro-6000.txt /tmp/requirements.txt
 COPY drapixai_ai/requirements.lower-body.txt /tmp/requirements.lower-body.txt
+COPY drapixai_ai/requirements.lower-body-models.txt /tmp/requirements.lower-body-models.txt
 
 RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install -r /tmp/requirements.txt \
     && python -m pip uninstall -y onnxruntime opencv-python-headless \
     && python -m pip install -r /tmp/requirements.lower-body.txt \
-    && python -m pip install --no-deps fashn-human-parser==0.1.1 fashn-vton==1.5.0 \
+    && python -m pip install --no-deps -r /tmp/requirements.lower-body-models.txt \
     && python -m pip check \
     && python - <<'PY'
 import sys

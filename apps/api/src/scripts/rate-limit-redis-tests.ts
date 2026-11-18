@@ -12,11 +12,11 @@ export const verifyRateLimitRedis = async (control: ReturnType<typeof createClie
   const key = (suffix: string) => { const value = `${prefix}:${suffix}`; fixtureKeys.push(value); return value; };
   const evaluate = (client: ReturnType<typeof createClient>, name: string, ttl = 30000) =>
     client.eval(RATE_LIMIT_CONSUME_SCRIPT, { keys: [name], arguments: [String(ttl)] });
-  const second = createClient({ url: redisUrl });
+  const second = createClient({ url: redisUrl, socket: { connectTimeout: 3000, reconnectStrategy: false } });
   const username = prefix;
   const password = crypto.randomBytes(32).toString('hex');
   const restrictedUrl = new URL(redisUrl); restrictedUrl.username = username; restrictedUrl.password = password;
-  const restricted = createClient({ url: restrictedUrl.href });
+  const restricted = createClient({ url: restrictedUrl.href, socket: { connectTimeout: 3000, reconnectStrategy: false } });
   second.on('error', () => {}); restricted.on('error', () => {});
   let aclCreated = false;
   const realNow = Date.now;
@@ -42,7 +42,9 @@ export const verifyRateLimitRedis = async (control: ReturnType<typeof createClie
     assert.equal(await control.exists(expiring), 0, 'A consumed rate-limit bucket must actually expire');
 
     assert.equal(await control.sendCommand(['ACL', 'GETUSER', username]), null, 'Refuse to modify an existing ACL user');
-    await control.sendCommand(['ACL', 'SETUSER', username, 'on', `>${password}`, `~${prefix}:*`, '+eval', '+pttl', '+incr']);
+    // The disposable fixture may use a non-default logical database. Permit
+    // connection SELECT without granting the deliberately denied PEXPIRE/SET.
+    await control.sendCommand(['ACL', 'SETUSER', username, 'on', `>${password}`, `~${prefix}:*`, '+select', '+eval', '+pttl', '+incr']);
     aclCreated = true; await restricted.connect();
     // Real negative control reproduces old INCR -> denied PEXPIRE behavior.
     const legacy = key('legacy'); await restricted.incr(legacy);

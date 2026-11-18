@@ -1,3 +1,4 @@
 NODE_ENV=production
-NEXT_PUBLIC_API_URL=https://api.staging.drapixai.com
-NEXT_PUBLIC_WEB_URL=https://staging.drapixai.com
+DRAPIXAI_PUBLIC_INDEXING=0
+NEXT_PUBLIC_API_BASE_URL=https://api.staging.drapixai.com
+NEXT_PUBLIC_WEB_BASE_URL=https://staging.drapixai.com

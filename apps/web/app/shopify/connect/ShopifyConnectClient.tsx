@@ -7,7 +7,7 @@ import { ArrowRight, CheckCircle2, ExternalLink, LoaderCircle, ShieldCheck, Stor
 import BrandLogo from '@/app/components/BrandLogo';
 
 type Props = { installation: string; token: string; error: string };
-type ConnectState = 'checking' | 'linking' | 'complete' | 'error';
+type ConnectState = 'checking' | 'confirm' | 'linking' | 'complete' | 'error';
 
 const connectionMessageFor = (code: string) => {
   switch (code) {
@@ -32,6 +32,7 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
   const [message, setMessage] = useState(error ? connectionMessageFor(error) : 'Checking your DrapixAI workspace...');
   const [sync, setSync] = useState<{ seen?: number; eligible?: number; ready?: number; queued?: number; skipped?: number } | null>(null);
   const [themeEditorUrl, setThemeEditorUrl] = useState('');
+  const [shopDomain, setShopDomain] = useState('');
 
   useEffect(() => {
     if (error) return;
@@ -48,24 +49,21 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
         router.replace(`/auth/login?next=${encodeURIComponent(next)}`);
         return;
       }
-      setState('linking');
-      setMessage('Attaching the store and importing supported products...');
-      const response = await fetch('/api/dashboard/proxy/shopify/link', {
+      const response = await fetch('/api/dashboard/proxy/shopify/link-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ installationId: Number(installation), token }),
       });
-      const payload = await response.json().catch(() => null) as { error?: string; themeEditorUrl?: string | null; sync?: { seen?: number; eligible?: number; ready?: number; queued?: number; skipped?: number } } | null;
+      const payload = await response.json().catch(() => null) as { error?: string; shopDomain?: string } | null;
       if (!response.ok) {
         setState('error');
         setMessage(connectionMessageFor(payload?.error || 'SHOPIFY_LINK_FAILED'));
         return;
       }
-      setSync(payload?.sync || null);
-      setThemeEditorUrl(payload?.themeEditorUrl || '');
-      setState('complete');
-      setMessage('Your Shopify store is connected. Eligible product images are queued for safe garment preparation and review.');
-      window.history.replaceState({}, '', '/shopify/connect?connected=1');
+      if (!payload?.shopDomain) throw new Error('SHOPIFY_LINK_INVALID');
+      setShopDomain(payload.shopDomain);
+      setState('confirm');
+      setMessage('Confirm this store belongs in your signed-in DrapixAI workspace. Connecting imports supported products for review.');
     };
 
     void connect().catch(() => {
@@ -74,13 +72,25 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
     });
   }, [error, installation, router, token]);
 
+  const confirmConnection = async () => {
+    setState('linking');setMessage('Connecting your store and importing supported products…');
+    try {
+      const response = await fetch('/api/dashboard/proxy/shopify/link', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({installationId:Number(installation),token})});
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {setState('error');setMessage(connectionMessageFor(payload?.error || 'SHOPIFY_LINK_FAILED'));return;}
+      setSync(payload?.sync || null);setThemeEditorUrl(payload?.themeEditorUrl || '');setState('complete');
+      setMessage('Your Shopify store is connected. Eligible products are queued for garment preparation and review. Try-on remains unavailable until setup and service checks are complete.');
+      window.history.replaceState({}, '', '/shopify/connect?connected=1');
+    } catch {setState('error');setMessage(connectionMessageFor('SHOPIFY_LINK_FAILED'));}
+  };
+
   return (
     <main className="min-h-screen bg-[#f4f6f2] text-[#172019]">
       <header className="border-b border-black/10 bg-[#fbfcf9]">
         <div className="mx-auto flex min-h-20 max-w-[1440px] items-center justify-between px-5 sm:px-8 lg:px-12">
-          <Link href="/dashboard" className="flex flex-col items-start gap-1" aria-label="DrapixAI workspace">
+          <Link href="/dashboard" className="flex flex-col items-start gap-1" aria-label="DrapixAI workspace — Shopify connection">
             <BrandLogo className="h-9 w-auto" />
-            <span className="block text-[10px] font-semibold uppercase text-[#748078]">Shopify connection</span>
+            <span className="block text-[10px] font-semibold uppercase text-[#59665e]">Shopify connection</span>
           </Link>
           <span className="inline-flex items-center gap-2 text-xs font-bold uppercase text-[#31725b]"><ShieldCheck className="h-4 w-4" />Secure handoff</span>
         </div>
@@ -93,8 +103,9 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
               {state === 'complete' ? <CheckCircle2 className="h-6 w-6 text-[#31725b]" /> : state === 'error' ? <TriangleAlert className="h-6 w-6 text-[#9a6a1d]" /> : <LoaderCircle className="h-6 w-6 animate-spin text-[#31725b]" />}
             </div>
             <p className="mt-7 text-xs font-bold uppercase text-[#31725b]">Secure store authorization</p>
-            <h1 className="mt-4 font-serif text-5xl leading-[1.02] text-[#101712]">{state === 'complete' ? 'Shopify is connected.' : state === 'error' ? 'Connection needs attention.' : 'Preparing your catalog.'}</h1>
-            <p className="mt-5 max-w-lg leading-7 text-[#5d6961]">{message}</p>
+            <h1 className="mt-4 font-serif text-5xl leading-[1.02] text-[#101712]">{state === 'complete' ? 'Shopify is connected.' : state === 'confirm' ? 'Confirm your store.' : state === 'error' ? 'Connection needs attention.' : 'Checking your connection.'}</h1>
+            <p role="status" aria-live="polite" className="mt-5 max-w-lg leading-7 text-[#5d6961]">{message}</p>
+            {state === 'confirm' ? <div className="mt-5"><p className="break-all font-semibold">{shopDomain}</p><button type="button" onClick={() => void confirmConnection()} className="mt-4 inline-flex min-h-12 items-center justify-center bg-[#183f32] px-5 text-sm font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-4">Connect this store to my workspace</button><p className="mt-3 text-sm">Wrong workspace? <Link href="/dashboard" className="underline">Return to your dashboard</Link> before continuing.</p></div> : null}
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               {state === 'complete' && themeEditorUrl ? <a href={themeEditorUrl} className="inline-flex h-12 items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]">Add try-on block <ExternalLink className="h-4 w-4" /></a> : null}
@@ -111,13 +122,13 @@ export default function ShopifyConnectClient({ installation, token, error }: Pro
 
             {state === 'complete' && sync ? (
               <dl className="mt-10 grid grid-cols-3 border-y border-black/10">
-                <div className="py-6"><dt className="text-xs font-bold uppercase text-[#748078]">Seen</dt><dd className="mt-2 text-3xl font-semibold">{sync.seen || 0}</dd></div>
+                <div className="py-6"><dt className="text-xs font-bold uppercase text-[#59665e]">Seen</dt><dd className="mt-2 text-3xl font-semibold">{sync.seen || 0}</dd></div>
                 <div className="border-x border-black/10 px-5 py-6"><dt className="text-xs font-bold uppercase text-[#31725b]">Eligible</dt><dd className="mt-2 text-3xl font-semibold">{sync.eligible || 0}</dd></div>
-                <div className="pl-5 py-6"><dt className="text-xs font-bold uppercase text-[#748078]">Queued</dt><dd className="mt-2 text-3xl font-semibold">{sync.queued || 0}</dd></div>
+                <div className="pl-5 py-6"><dt className="text-xs font-bold uppercase text-[#59665e]">Queued</dt><dd className="mt-2 text-3xl font-semibold">{sync.queued || 0}</dd></div>
               </dl>
             ) : (
               <ol className="mt-10 border-t border-black/10">
-                {['Verify the secure installation link', 'Attach the store to this workspace', 'Import eligible upper-body products', 'Queue garment preparation for review'].map((item, index) => <li key={item} className="grid grid-cols-[3rem_1fr] border-b border-black/10 py-5 text-sm font-semibold"><span className="text-[#8d9890]">0{index + 1}</span>{item}</li>)}
+                {['Verify the secure installation link', 'Attach the store to this workspace', 'Import eligible upper-body products', 'Queue garment preparation for review'].map((item, index) => <li key={item} className="grid grid-cols-[3rem_1fr] border-b border-black/10 py-5 text-sm font-semibold"><span className="text-[#59665e]">0{index + 1}</span>{item}</li>)}
               </ol>
             )}
 

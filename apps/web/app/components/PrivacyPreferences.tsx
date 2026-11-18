@@ -51,7 +51,7 @@ export default function PrivacyPreferences() {
       setAnalytics(readPrivacyPreferences()?.analytics === true);
       setCustomize(true); setVisible(true); setStatus('');
       setOpenRequest((request) => request + 1);
-    }} className="fixed bottom-3 left-3 z-[60] min-h-11 border border-[#183f32] bg-[#fbfcf9] px-3 py-2 text-sm font-semibold text-[#183f32] shadow-sm">
+    }} className="relative mx-5 my-3 inline-flex min-h-11 items-center border border-[#183f32] bg-[#fbfcf9] px-3 py-2 text-sm font-semibold text-[#183f32] shadow-sm sm:fixed sm:bottom-3 sm:left-3 sm:z-[60] sm:m-0">
       Cookie preferences
     </button>
     {visible ? <section aria-labelledby="privacy-preferences-heading" className="relative z-[80] border-b border-[#183f32] bg-[#fbfcf9] p-5 text-[#172019] sm:px-8 lg:px-12">

@@ -1,0 +1,32 @@
+# Reviewed shape only: hostname is proposed, not provisioned. No CLI deploy/dev
+# until private staging, certificate, reachability and secrets are verified.
+client_id = "REPLACE_WITH_SHOPIFY_CLIENT_ID"
+name = "DrapixAI Virtual Try-On Dev"
+application_url = "https://staging-api.drapixai.com/shopify/app"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+
+[access_scopes]
+scopes = "read_products,write_app_proxy"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = ["https://staging-api.drapixai.com/shopify/callback"]
+
+[app_proxy]
+url = "https://staging-api.drapixai.com/shopify/storefront/proxy"
+prefix = "apps"
+subpath = "drapixai"
+
+[webhooks]
+api_version = "2026-07"
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled", "products/create", "products/update", "products/delete"]
+uri = "https://staging-api.drapixai.com/shopify/webhooks"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://staging-api.drapixai.com/shopify/webhooks"

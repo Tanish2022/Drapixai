@@ -22,6 +22,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
       - name: Install checksum-pinned Gitleaks
         run: |
           curl --fail --location --silent --show-error \
@@ -33,6 +36,7 @@ jobs:
         run: |
           python deploy/scripts/test-secret-scanner-policy.py --gitleaks /tmp/gitleaks
           /tmp/gitleaks git --config .gitleaks.toml --redact --exit-code 1 .
+          node scripts/verify-source-secret-scan.mjs --gitleaks /tmp/gitleaks
 
   application:
     runs-on: ubuntu-22.04
@@ -75,12 +79,61 @@ jobs:
         run: npm --prefix apps/web ci
       - name: Launch contract tests
         run: npm --prefix apps/api run test:launch
+      - name: Transactional email delivery and TLS regression
+        run: |
+          npm --prefix apps/api run test:email-templates
+          npm --prefix apps/api run test:email-delivery
+          npm --prefix apps/api run test:email-events
+          npm --prefix apps/api run test:email-parser
+      - name: Verified email callbacks and durable suppression
+        run: |
+          docker pull postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+          docker pull redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+          node scripts/verify-email-events-runtime.mjs
+      - name: Neon staging target and TLS policy guards
+        run: |
+          npm --prefix apps/api run test:neon-staging
+          npm --prefix apps/api run test:neon-release
+          python deploy/scripts/test-database-transport-policy.py
+      - name: AI transport and durable admission boundary regressions
+        run: |
+          npm --prefix apps/api run test:ai-transport
+          npm --prefix apps/api run test:tryon-dispatch
+          npm --prefix apps/api run test:tryon-admission
+          node scripts/verify-private-redis.mjs
+      - name: Verify incremental database release and restricted grants
+        run: node scripts/verify-database-release-preparation.mjs
+      - name: Request parser teardown and compressed-body regressions
+        run: npm --prefix apps/api run test:request-parsers
+      - name: Live security harness safety and false-pass controls
+        run: npm --prefix apps/api run test:security-harness
+      - name: API log privacy regressions
+        run: npm --prefix apps/api run test:log-privacy
+      - name: Operational metrics privacy and emergency intake fixture
+        run: npm --prefix apps/api run test:operational-metrics
       - name: Shopper-media inventory and historical deletion regression
         run: |
+          node --test deploy/scripts/test-staging-storage-identity.mjs
+          node --test deploy/scripts/test-staging-storage-drill.mjs
+          npm --prefix apps/api run test:storage-credentials
           npm --prefix apps/api run test:shopper-media-inventory
           npm --prefix apps/api run test:storage-erasure
+          npm --prefix apps/api run test:storage-replay
       - name: Shopify foundation tests
         run: npm --prefix apps/api run test:shopify
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Shopify scope/configuration refusal tests
+        run: |
+          python apps/shopify/scripts/test_shopify_config.py
+          python drapixai_ai/tests/test_admission_protocol.py
+      - name: Security tooling authorization and local HTTPS refusal tests
+        run: python deploy/security/test_zap_staging.py
+      - name: Outbound TLS identity and SSRF transport fixtures
+        run: node scripts/verify-outbound-tls.mjs
+      - name: Account terms archive and input validation
+        run: npm --prefix apps/api run test:account-terms
       - name: Authorization and storefront token tests
         run: |
           npm --prefix apps/api run test:authorization
@@ -88,6 +141,7 @@ jobs:
           npm --prefix apps/api run test:cors-origin-cache
           npm --prefix apps/api run test:image-upload-security
           npm --prefix apps/api run test:input-validation
+          npm --prefix apps/api run test:tryon-quality
           npm --prefix apps/api run test:async-errors
       - name: Distributed security controls
         env:
@@ -123,6 +177,12 @@ jobs:
         run: |
           node --test scripts/disposable-billing-guard.test.mjs
           npm --prefix apps/api run test:billing-database
+      - name: Verify billing HTTP lifecycle and quota accounting
+        # The billing fixture owns fresh services and synthetic outbound provider adapters.
+        run: node scripts/verify-billing-runtime.mjs
+      - name: Verify merchant integration HTTP and database boundaries
+        # Own fixtures; Shopify/feed/storage transport is synthetic and inference stays disabled.
+        run: node scripts/verify-merchant-runtime.mjs
       - name: Verify staging database privilege separation
         # The role test creates and removes its own no-host-port database.
         run: |
@@ -131,6 +191,15 @@ jobs:
       - name: Verify backup restore and failure rollback
         # Uses its own PostgreSQL container with no network or host ports.
         run: node scripts/verify-postgres-restore.mjs
+      - name: Verify migration history and pending-status handling
+        run: |
+          node scripts/verify-migration-preflight.mjs
+          node deploy/scripts/test-migration-wrapper.mjs
+      - name: Verify immutable account terms and real ORM transactions
+        run: |
+          node scripts/verify-account-terms-database.mjs
+          node scripts/verify-account-terms-database.mjs --orm
+          node scripts/verify-account-terms-database.mjs --http
       - name: Verify versioned retention against disposable storage and database
         # Creates its own loopback-only containers and uses no operator data.
         run: node scripts/verify-versioned-retention.mjs
@@ -143,6 +212,10 @@ jobs:
           trap 'rm -f deploy/env/api.production.env deploy/env/web.production.env deploy/env/ai.production.env' EXIT
           docker compose --env-file deploy/env/api.production.example -f deploy/docker-compose.edge.yml config --quiet
           docker compose --env-file deploy/env/ai.production.example -f deploy/docker-compose.ai.yml config --quiet
+      - name: Verify container resource ceilings and OOM containment
+        run: |
+          docker pull node:22-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f
+          node scripts/verify-container-resources.mjs
       - name: Verify Docker build context privacy
         run: node scripts/verify-docker-build-context.mjs
       - name: Validate launch gate tooling and production CSP
@@ -155,6 +228,8 @@ jobs:
         run: npm --prefix apps/api run build
       - name: Web production build
         run: npm --prefix apps/web run build
+      - name: Website feedback and recovery regression
+        run: node scripts/test-website-feedback.cjs
       - name: Merchant onboarding readiness checks
         run: node --experimental-strip-types apps/web/scripts/merchant-onboarding-tests.cjs
       - name: Verify production HTML CSP nonces
@@ -165,8 +240,20 @@ jobs:
           npm --prefix apps/web audit --omit=dev --audit-level=high
       - name: Development and build dependency audit
         run: |
+          npm audit --include=dev --audit-level=high
           npm --prefix apps/api audit --include=dev --audit-level=high
           npm --prefix apps/web audit --include=dev --audit-level=high
+      - name: Retain CPU application verification evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: application-evidence-${{ github.sha }}
+          path: |
+            runtime/launch-evidence/*.json
+            runtime/launch-evidence/**/report.json
+            !runtime/launch-evidence/**/source/**
+          if-no-files-found: error
+          retention-days: 30
 
   ai-contracts:
     runs-on: ubuntu-22.04
@@ -183,14 +270,18 @@ jobs:
         run: >-
           python -m pip install
           pip-audit==2.9.0
-          pillow==12.3.0
+          redis==5.0.8
+          rq==1.16.2
+          pillow==13.0.0
           numpy==1.26.4
           opencv-python-headless==4.10.0.84
           scipy==1.13.1
           scikit-image==0.24.0
           PyYAML==6.0.1
       - name: Verify immutable Standard release profile
-        run: python deploy/scripts/verify-standard-release-profile.py
+        run: |
+          python deploy/scripts/verify-standard-release-profile.py
+          python deploy/security/test_render_ai_candidate.py
       - name: Verify staging topology and negative controls
         run: |
           python deploy/scripts/verify-staging-topology.py
@@ -204,6 +295,8 @@ jobs:
           python -m compileall -q drapixai_ai deploy/runpod
       - name: AI ingress security regression
         run: python -m drapixai_ai.scripts.validate_ai_ingress_security
+      - name: AI Redis deadline and worker dequeue regression
+        run: timeout 20s python -m unittest drapixai_ai.tests.test_redis_deadlines
       - name: AI log privacy regression
         run: python -m drapixai_ai.scripts.validate_log_privacy
       - name: Garment cache expiry regression
@@ -215,6 +308,14 @@ jobs:
           python -m drapixai_ai.scripts.validate_garment_skin_detection
           python -m drapixai_ai.scripts.validate_tryon_scorer_neutral_garments
           python deploy/runpod/validate_upper_body_50_tooling.py
+      - name: Lower-body quality and release evidence policy
+        run: >-
+          python -m unittest
+          drapixai_ai.tests.test_lower_body_benchmark_policy
+          drapixai_ai.tests.test_lower_body_benchmark_intake
+          drapixai_ai.tests.test_lower_body_release_evidence -v
+      - name: Lower-body person and pose intake
+        run: python -m unittest drapixai_ai.tests.test_lower_body_person_validation -v
       - name: Concurrency evidence negative controls
         run: python deploy/scripts/test-concurrency-benchmark.py
       - name: Deployment shell syntax
@@ -231,8 +332,6 @@ jobs:
           --progress-spinner off
           --ignore-vuln PYSEC-2026-2274
           --ignore-vuln GHSA-55v6-g8pm-pw4c
-          --ignore-vuln PYSEC-2026-3447
-          --ignore-vuln GHSA-rrmf-rvhw-rf47
 
   ai-checkpoint-candidate:
     runs-on: ubuntu-22.04
@@ -256,7 +355,7 @@ jobs:
             --output-dir runtime/security-candidate/accelerate/review
       - name: Install CPU-only loader test runtime
         run: |
-          python -m pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install \
             runtime/security-candidate/accelerate/accelerate-1.11.0-py3-none-any.whl \
             huggingface_hub==1.23.0 safetensors==0.8.0 psutil==7.1.3
@@ -279,11 +378,60 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Build and verify isolated SAM validation backport
+        run: |
+          mkdir -p runtime/security-candidate/rembg
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            https://files.pythonhosted.org/packages/0c/ac/bade7f6ef1694c82c424129f0e35262b1578984ac1f716780fbf4930c9c3/rembg-2.0.69-py3-none-any.whl \
+            --output runtime/security-candidate/rembg/rembg-2.0.69-py3-none-any.whl
+          timeout 60s python deploy/security/rembg/test_candidate.py \
+            --wheel runtime/security-candidate/rembg/rembg-2.0.69-py3-none-any.whl
+          python deploy/security/rembg/build_candidate.py \
+            --wheel runtime/security-candidate/rembg/rembg-2.0.69-py3-none-any.whl \
+            --output-dir runtime/security-candidate/rembg/review
+      - name: Retain review-only SAM backport
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sam-review-candidate-${{ github.sha }}
+          path: runtime/security-candidate/rembg/review/*
+          if-no-files-found: error
+          retention-days: 30
+
+  offline-zap-tooling:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Pull pinned official ZAP fixture image
+        run: docker pull ghcr.io/zaproxy/zaproxy@sha256:0075662e5c287cf0a68caebabbfea872e5dc461912ad6d7345fa02a290d0ccb6
+      - name: Verify generated captures in network-disabled ZAP
+        env:
+          DRAPIXAI_ZAP_OFFLINE_FIXTURE_IMAGE: ghcr.io/zaproxy/zaproxy@sha256:0075662e5c287cf0a68caebabbfea872e5dc461912ad6d7345fa02a290d0ccb6
+        run: python deploy/security/test_zap_offline_runtime.py
+      - name: Retain synthetic offline fixture diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: offline-fixture-evidence-${{ github.sha }}
+          path: |
+            runtime/launch-evidence/security-tooling-task2-20261030/offline-runtime.json
+            runtime/launch-evidence/security-tooling-task2-20261030/zap-offline-*/out/*
+            runtime/launch-evidence/security-tooling-task2-20261030/zap-timeout-*/out/scanner.log
+          if-no-files-found: error
+          retention-days: 30
+
   container-scan:
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
       - name: Build production edge images
         id: edge_build
         run: |

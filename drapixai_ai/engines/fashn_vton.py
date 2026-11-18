@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from typing import Any
+from pathlib import Path
 
 from PIL import Image
 
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.engines.base import TryOnEngine
+from drapixai_ai.services.lower_body_artifacts import verify_lower_body_artifacts
 
 
 class FashnVTONEngine(TryOnEngine):
@@ -13,13 +15,16 @@ class FashnVTONEngine(TryOnEngine):
 
     name = "fashn_vton_1_5"
 
-    def __init__(self) -> None:
+    def __init__(self, *, weights_dir: str | None = None, device: str | None = None) -> None:
+        self.weights_dir = weights_dir or settings.fashn_weights_dir
+        self.device = device or settings.device
         self.pipeline: Any | None = None
         self.loaded = False
         self.last_generation_mask: Image.Image | None = None
         self.last_generation_masks: list[Image.Image | None] = []
         self.last_safety_blocked = False
         self.last_safety_blocked_flags: list[bool] = []
+        self.model_identity: dict[str, object] | None = None
 
     def load(self) -> None:
         if self.loaded:
@@ -31,10 +36,20 @@ class FashnVTONEngine(TryOnEngine):
                 "FASHN_VTON_NOT_INSTALLED: use the dedicated lower-body worker environment"
             ) from exc
 
-        self.pipeline = TryOnPipeline(
-            weights_dir=settings.fashn_weights_dir,
-            device=settings.device,
+        identity = verify_lower_body_artifacts(Path(self.weights_dir))
+        parser_directory = str(Path(self.weights_dir).resolve() / "human_parser")
+
+        class PinnedParserPipeline(TryOnPipeline):
+            def _setup_hp_model(self) -> None:
+                from fashn_human_parser import FashnHumanParser
+
+                self.hp_model = FashnHumanParser(model_id=parser_directory, device=str(self.device))
+
+        self.pipeline = PinnedParserPipeline(
+            weights_dir=self.weights_dir,
+            device=self.device,
         )
+        self.model_identity = identity
         self.loaded = True
 
     @staticmethod

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import BrandLogo from '@/app/components/BrandLogo';
 import { createAdminFetch } from '@/app/lib/admin-fetch';
+import FeedbackMessage, { LoadFailure, useFeedback } from '@/app/components/FeedbackMessage';
+import { getApiErrorMessage, userError, WebsiteError } from '@/app/lib/user-feedback';
 
 interface AdminGarment {
   id: number;
@@ -117,6 +119,8 @@ const accuracyLabel = (key: string) =>
 
 export default function AdminDashboard() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const { feedback, notify, dismiss, run, busy } = useFeedback();
   const [website, setWebsite] = useState<AdminWebsiteAnalytics | null>(null);
   const [ops, setOps] = useState<AdminOps | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -146,7 +150,8 @@ export default function AdminDashboard() {
         }
 
         if (!overviewRes.ok || !websiteRes.ok || !opsRes.ok || !resultsRes.ok) {
-          throw new Error('ADMIN_DASHBOARD_LOAD_FAILED');
+          const failed = [overviewRes, websiteRes, opsRes, resultsRes].find(response => !response.ok)!;
+          throw new WebsiteError(getApiErrorMessage(null, 'Administration data is unavailable.', failed.status));
         }
 
         const [overviewData, websiteData, opsData, resultsData] = await Promise.all([
@@ -163,9 +168,8 @@ export default function AdminDashboard() {
         setTryOnResults(resultsData.items || []);
         setSessionReady(true);
       } catch (error) {
-        console.error(error);
         if (active) {
-          router.push('/admin-access');
+          setLoadError(userError(error, 'We could not load administration data. Please try again.'));
         }
       }
     };
@@ -177,20 +181,33 @@ export default function AdminDashboard() {
   }, [router, adminFetch]);
 
   const fetchGarments = async (filter = garmentFilter) => {
+    try {
     const res = await adminFetch(`garments?filter=${encodeURIComponent(filter)}`);
-    if (res.ok) {
-      const data = await res.json();
-      setGarments(data.items || []);
-    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new WebsiteError(getApiErrorMessage(data, 'Could not refresh garments.', res.status));
+    if (!Array.isArray(data?.items)) throw new Error('INVALID_GARMENTS_RESPONSE');
+    setGarments(data.items);
+    } catch (error) { notify(userError(error, 'We could not refresh the garment list. Check again before making another decision.'), 'error'); }
   };
 
   const fetchTryOnResults = async (filter = tryOnFilter) => {
+    try {
     const res = await adminFetch(`tryon-results?filter=${encodeURIComponent(filter)}`);
-    if (res.ok) {
-      const data = await res.json();
-      setTryOnResults(data.items || []);
-    }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new WebsiteError(getApiErrorMessage(data, 'Could not refresh results.', res.status));
+    if (!Array.isArray(data?.items)) throw new Error('INVALID_RESULTS_RESPONSE');
+    setTryOnResults(data.items);
+    } catch (error) { notify(userError(error, 'We could not refresh the result list. Check again before making another decision.'), 'error'); }
   };
+
+  const reviewAction = async (path: string, init: RequestInit, refresh: () => Promise<void>) => run(async () => {
+    const response = await adminFetch(path, init);
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new WebsiteError(getApiErrorMessage(data, 'This review decision could not be saved. Refresh its status before trying again.', response.status));
+    if (!data) throw new Error('INVALID_REVIEW_RESPONSE');
+    notify('Review decision saved.', 'success');
+    await refresh();
+  });
 
   useEffect(() => {
     if (!sessionReady || garments.length === 0) return;
@@ -246,11 +263,12 @@ export default function AdminDashboard() {
     };
   }, [sessionReady, tryOnResults]);
 
+  if (loadError) return <LoadFailure title="Administration data is unavailable" message={loadError} />;
   if (!overview || !website || !ops) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f4f6f2] text-[#172019]">
-        <p className="text-[#68736b]">Loading administration data...</p>
-      </div>
+      <main className="flex min-h-screen items-center justify-center bg-[#f4f6f2] text-[#172019]">
+        <h1 role="status" className="text-[#68736b]">Loading administration data...</h1>
+      </main>
     );
   }
 
@@ -258,17 +276,18 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-[#f4f6f2] text-[#172019]">
       <header className="border-b border-black/10 bg-[#fbfcf9]">
         <div className="mx-auto flex min-h-20 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-12">
-          <Link href="/" className="flex flex-col items-start gap-1" aria-label="DrapixAI home">
+          <Link href="/" className="flex flex-col items-start gap-1" aria-label="DrapixAI home — Quality operations">
             <BrandLogo className="h-9 w-auto" />
-            <span className="block text-[10px] font-semibold uppercase text-[#748078]">Quality operations</span>
+            <span className="block text-[10px] font-semibold uppercase text-[#59665e]">Quality operations</span>
           </Link>
           <div className="flex items-center gap-4">
             <button
-              onClick={() => {
-                fetch('/api/admin/session', { method: 'DELETE' }).finally(() => {
-                  router.push('/');
-                });
-              }}
+              disabled={busy}
+              onClick={() => void run(async () => {
+                const response = await fetch('/api/admin/session', { method: 'DELETE', signal: AbortSignal.timeout(15000) });
+                if (!response.ok) throw new WebsiteError('We could not confirm sign-out. Check your connection and try again.');
+                router.push('/');
+              })}
               className="text-sm font-semibold text-[#667169] hover:text-[#172019]"
             >
               Admin Logout
@@ -279,6 +298,7 @@ export default function AdminDashboard() {
       </header>
 
       <main className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-12">
+        <FeedbackMessage feedback={feedback} onDismiss={dismiss} />
         <div className="mb-10 border-b border-black/10 pb-8"><p className="text-xs font-bold uppercase text-[#31725b]">Internal operations</p><h1 className="mt-4 font-serif text-4xl leading-tight">Quality and launch control.</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-[#68736b]">Review platform health, generated results, garment certification, latency, warnings, and customer-facing approval decisions.</p></div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
@@ -444,7 +464,7 @@ export default function AdminDashboard() {
                 }`}
               >
                 <span className="block text-sm font-semibold">{filter.label}</span>
-                <span className="mt-1 block text-xs text-[#748078]">{filter.description}</span>
+                <span className="mt-1 block text-xs text-[#59665e]">{filter.description}</span>
               </button>
             ))}
           </div>
@@ -460,7 +480,7 @@ export default function AdminDashboard() {
                       <div>
                         <p className="text-sm font-semibold">Result #{item.id}</p>
                         <p className="text-xs text-[#68736b]">{item.userEmail} / {new Date(item.createdAt).toLocaleString()}</p>
-                        <p className="mt-1 text-xs text-[#748078]">Product: {item.productId || 'not linked'} / Garment: {item.garmentId || 'not linked'}</p>
+                        <p className="mt-1 text-xs text-[#59665e]">Product: {item.productId || 'not linked'} / Garment: {item.garmentId || 'not linked'}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <span className={`px-2 py-1 rounded-md border text-xs font-semibold ${confidenceClass(item.confidenceBadge)}`}>
                             {item.confidenceBadge || 'Review'}
@@ -472,19 +492,19 @@ export default function AdminDashboard() {
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                         <div className="border border-black/10 bg-white px-3 py-2">
-                          <p className="text-[#748078]">Score</p>
+                          <p className="text-[#59665e]">Score</p>
                           <p className="font-semibold">{typeof item.qualityScore === 'number' ? item.qualityScore.toFixed(2) : 'n/a'}</p>
                         </div>
                         <div className="border border-black/10 bg-white px-3 py-2">
-                          <p className="text-[#748078]">Latency</p>
+                          <p className="text-[#59665e]">Latency</p>
                           <p className={(item.latencyMs || 0) > 12000 ? 'font-semibold text-[#9a6a1d]' : 'font-semibold text-[#31725b]'}>{item.latencyMs ? `${(item.latencyMs / 1000).toFixed(1)}s` : 'n/a'}</p>
                         </div>
                         <div className="border border-black/10 bg-white px-3 py-2">
-                          <p className="text-[#748078]">AI Time</p>
+                          <p className="text-[#59665e]">AI Time</p>
                           <p className="font-semibold">{item.processingMs ? `${(item.processingMs / 1000).toFixed(1)}s` : 'n/a'}</p>
                         </div>
                         <div className="border border-black/10 bg-white px-3 py-2">
-                          <p className="text-[#748078]">Engine</p>
+                          <p className="text-[#59665e]">Engine</p>
                           <p className="font-semibold">{item.engine}</p>
                         </div>
                       </div>
@@ -500,7 +520,7 @@ export default function AdminDashboard() {
                               className="h-64 w-full bg-[#f4f6f2] object-contain"
                             />
                           ) : (
-                            <div className="flex h-64 items-center justify-center text-sm text-[#748078]">No image stored</div>
+                            <div className="flex h-64 items-center justify-center text-sm text-[#59665e]">No image stored</div>
                           )}
                         </div>
                       ))}
@@ -524,19 +544,13 @@ export default function AdminDashboard() {
                     ) : null}
                     <div className="flex gap-2 mt-4">
                       <button
-                        onClick={async () => {
-                          await adminFetch(`tryon-results/${item.id}/approve`, { method: 'POST' });
-                          fetchTryOnResults();
-                        }}
+                        onClick={() => void reviewAction(`tryon-results/${item.id}/approve`, { method: 'POST' }, () => fetchTryOnResults())} disabled={busy}
                         className="border border-[#31725b] bg-[#183f32] px-3 py-2 text-sm font-semibold text-white hover:bg-[#245a48]"
                       >
                         Approve
                       </button>
                       <button
-                        onClick={async () => {
-                          await adminFetch(`tryon-results/${item.id}/reject`, { method: 'POST' });
-                          fetchTryOnResults();
-                        }}
+                        onClick={() => void reviewAction(`tryon-results/${item.id}/reject`, { method: 'POST' }, () => fetchTryOnResults())} disabled={busy}
                         className="border border-[#d6a29c] bg-[#fbefed] px-3 py-2 text-sm font-semibold text-[#7c2d27] hover:bg-[#f7dfdc]"
                       >
                         Reject
@@ -574,7 +588,7 @@ export default function AdminDashboard() {
                 }`}
               >
                 <span className="block text-sm font-semibold">{filter.label}</span>
-                <span className="mt-1 block text-xs text-[#748078]">{filter.description}</span>
+                <span className="mt-1 block text-xs text-[#59665e]">{filter.description}</span>
               </button>
             ))}
           </div>
@@ -586,7 +600,7 @@ export default function AdminDashboard() {
                 <div key={g.id} className="border border-black/10 bg-[#fbfcf9] p-4">
                   <p className="text-xs text-[#68736b]">User ID: {g.userId}</p>
                   <p className="text-base font-mono">{g.garmentId}</p>
-                  <p className="mt-1 text-xs text-[#748078]">{g.productName || g.displayName || 'Unnamed garment'}{g.category ? ` / ${g.category}` : ''}</p>
+                  <p className="mt-1 text-xs text-[#59665e]">{g.productName || g.displayName || 'Unnamed garment'}{g.category ? ` / ${g.category}` : ''}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="border border-black/10 bg-white px-2 py-1 text-xs">garment uploaded</span>
                     <span className={g.cacheKey ? 'border border-[#9bb6a8] bg-[#eaf0e9] px-2 py-1 text-xs text-[#183f32]' : 'border border-[#d5b77d] bg-[#fbf5e9] px-2 py-1 text-xs text-[#7c5620]'}>
@@ -612,23 +626,17 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex gap-2 mt-3">
                     <button
-                      onClick={async () => {
-                        await adminFetch(`garments/${g.id}/approve`, { method: 'POST' });
-                        fetchGarments();
-                      }}
+                      onClick={() => void reviewAction(`garments/${g.id}/approve`, { method: 'POST' }, () => fetchGarments())} disabled={busy}
                       className="border border-[#31725b] bg-[#183f32] px-3 py-2 text-sm font-semibold text-white hover:bg-[#245a48]"
                     >
                       Approve
                     </button>
                     <button
-                      onClick={async () => {
-                        await adminFetch(`garments/${g.id}/reject`, {
+                      onClick={() => void reviewAction(`garments/${g.id}/reject`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ reason: 'Rejected by admin' })
-                        });
-                        fetchGarments();
-                      }}
+                        }, () => fetchGarments())} disabled={busy}
                       className="border border-[#d6a29c] bg-[#fbefed] px-3 py-2 text-sm font-semibold text-[#7c2d27] hover:bg-[#f7dfdc]"
                     >
                       Reject

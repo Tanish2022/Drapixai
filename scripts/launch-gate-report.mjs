@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { prepareComposeEnvFiles } from "./lib/temporary-compose-env.mjs";
+import { npmInvocation } from "./lib/npm-invocation.mjs";
 
 const usage = "Usage: node scripts/launch-gate-report.mjs [--scope=repository|all] [--evidence=path]";
 const cliArgs = process.argv.slice(2);
@@ -43,14 +44,7 @@ const childProcessEnv = (overrides = {}) => {
 };
 
 const commandFor = (runner, args) => {
-  if (runner === "npm" && process.platform === "win32") {
-    const quote = (arg) => /^[A-Za-z0-9_./:=@-]+$/.test(arg) ? arg : `"${arg.replaceAll('"', '\\"')}"`;
-    return {
-      command: process.env.ComSpec || "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", `npm.cmd ${args.map(quote).join(" ")}`]
-    };
-  }
-  if (runner === "npm") return { command: "npm", args };
+  if (runner === "npm") return npmInvocation(args);
   if (runner === "python") {
     return {
       command: process.env.DRAPIXAI_PYTHON || (process.platform === "win32" ? "python.exe" : "python3"),

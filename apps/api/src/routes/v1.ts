@@ -1,7 +1,8 @@
 import crypto from 'crypto';
 import { isPublicRemoteUrl } from '../lib/network-address';
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import sdkRoutes from './sdk';
 import {
   getApiEnvironment,
@@ -18,14 +19,13 @@ import { appendSecurityAudit } from '../lib/audit-log';
 import {
   createWebhookSecret,
   encryptWebhookSecret,
-  queueWebhookEvent,
 } from '../services/webhooks';
-import { formatLogError } from '../lib/security';
+import { PUBLIC_TRYON_ROUTE, PublicTryOnReceipt, publicTryOnReceiptOwner } from '../lib/public-tryon-completion';
+import { detectImageMimeType, formatLogError } from '../lib/security';
 import { requireTryOnIntake } from '../lib/tryon-intake';
 import openApiV1 from '../openapi/v1';
 
 const router = Router();
-const prisma = new PrismaClient();
 const TOKEN_SCOPES = new Set(['api:tryon', 'api:usage', 'api:webhooks']);
 const WEBHOOK_EVENTS = new Set(['tryon.completed', 'tryon.rejected']);
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -43,7 +43,6 @@ const requestIdMiddleware = (req: any, res: any, next: any) => {
 const errorEnvelopeMiddleware = (req: any, res: any, next: any) => {
   const originalJson = res.json.bind(res);
   res.json = (body: any) => {
-    req.publicApiResponseBody = body;
     if (res.statusCode >= 400 && typeof body?.error === 'string') {
       return originalJson({
         error: {
@@ -139,7 +138,9 @@ const replayIdempotentResult = async (req: any, res: any, record: any) => {
   }
   const image = await readStoredObject(result.resultImageUrl);
   if (!image) return false;
-  res.setHeader('Content-Type', 'image/png');
+  const contentType = detectImageMimeType(image);
+  if (!contentType) return false;
+  res.setHeader('Content-Type', contentType);
   res.setHeader('x-drapixai-tryon-result-id', String(result.id));
   res.setHeader('x-drapixai-engine', result.engine);
   if (result.qualityScore !== null) res.setHeader('x-drapixai-quality-score', String(result.qualityScore));
@@ -229,8 +230,8 @@ router.post('/tryons', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requir
     return res.status(400).json({ error: 'VALID_IDEMPOTENCY_KEY_REQUIRED' });
   }
   const keyHash = crypto.createHash('sha256').update(idempotencyKey).digest('hex');
-  let record = await prisma.apiIdempotencyRecord.findUnique({
-    where: { userId_route_keyHash: { userId: req.user.id, route: 'POST /v1/tryons', keyHash } },
+  const record = await prisma.apiIdempotencyRecord.findUnique({
+    where: { userId_route_keyHash: { userId: req.user.id, route: PUBLIC_TRYON_ROUTE, keyHash } },
   });
   if (record?.state === 'completed') {
     if (await replayIdempotentResult(req, res, record)) return;
@@ -239,54 +240,47 @@ router.post('/tryons', accessTokenAuth, apiKeyRateLimit, tenantRateLimit, requir
       message: 'This request already completed. DrapixAI does not retain shopper preview bytes; use the original response or create a new logical try-on with a new key.',
     });
   }
-  if (record?.state === 'processing' && record.expiresAt > new Date()) {
+  const inProgress = () => {
     res.setHeader('Retry-After', '2');
     return res.status(409).json({ error: 'IDEMPOTENT_REQUEST_IN_PROGRESS' });
-  }
+  };
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + IDEMPOTENCY_TTL_MS);
+  let receipt: PublicTryOnReceipt;
   if (record) {
-    record = await prisma.apiIdempotencyRecord.update({
-      where: { id: record.id },
-      data: { state: 'processing', responseStatus: null, tryOnResultId: null, expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS) },
+    if (record.state !== 'failed' && (record.state !== 'processing' || record.expiresAt > now)) return inProgress();
+    const claimed = await prisma.apiIdempotencyRecord.updateMany({
+      where: { id: record.id, state: record.state, expiresAt: record.expiresAt },
+      data: { apiKeyId: req.apiKey.id, state: 'processing', responseStatus: null, tryOnResultId: null, expiresAt },
     });
+    if (claimed.count !== 1) return inProgress();
+    receipt = { id: record.id, userId: req.user.id, apiKeyId: req.apiKey.id, expiresAt };
   } else {
     try {
-      record = await prisma.apiIdempotencyRecord.create({
+      receipt = await prisma.apiIdempotencyRecord.create({
         data: {
           userId: req.user.id,
           apiKeyId: req.apiKey.id,
-          route: 'POST /v1/tryons',
+          route: PUBLIC_TRYON_ROUTE,
           keyHash,
-          expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS),
+          expiresAt,
         },
       });
-    } catch {
-      return res.status(409).json({ error: 'IDEMPOTENT_REQUEST_IN_PROGRESS' });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return inProgress();
+      throw error;
     }
   }
 
-  res.on('finish', () => {
-    const resultId = Number(res.getHeader('x-drapixai-tryon-result-id') || req.publicApiResponseBody?.tryOnResultId || 0);
-    const completed = (res.statusCode >= 200 && res.statusCode < 300) || (res.statusCode === 422 && resultId > 0);
-    void prisma.apiIdempotencyRecord.update({
-      where: { id: record!.id },
-      data: {
-        state: completed ? 'completed' : 'failed',
-        responseStatus: res.statusCode,
-        tryOnResultId: resultId || null,
-      },
-    }).then(async () => {
-      if (!resultId) return;
-      const result = await prisma.tryOnResult.findFirst({ where: { id: resultId, userId: req.user.id } });
-      if (!result) return;
-      await queueWebhookEvent(prisma, req.user.id, res.statusCode === 422 ? 'tryon.rejected' : 'tryon.completed', {
-        tryon_id: String(result.id),
-        product_id: result.productId,
-        status: result.status,
-        quality_score: result.qualityScore,
-        latency_ms: result.latencyMs,
-        warnings: result.warnings,
-      });
-    }).catch((error) => console.error('Public API completion bookkeeping error:', formatLogError(error)));
+  res.locals.publicTryOnReceipt = receipt;
+  res.once('finish', () => {
+    // Only reusable failures belong here. Results and their webhooks commit
+    // before the SDK responds, and ambiguous dispatches retain their claim.
+    if (res.statusCode < 400 || res.locals.publicTryOnOutcomePending) return;
+    void prisma.apiIdempotencyRecord.updateMany({
+      where: publicTryOnReceiptOwner(receipt),
+      data: { state: 'failed', responseStatus: res.statusCode },
+    }).catch((error) => console.error('Public API failure receipt error:', formatLogError(error)));
   });
 
   req.url = '/tryon';

@@ -1,9 +1,16 @@
-import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { hashApiKey, issueApiKeyForUser } from '../lib/api-key-auth';
+import { requireDisposableDatabase } from '../lib/disposable-database';
+import { CURRENT_TERMS } from '../lib/account-terms';
 
+requireDisposableDatabase(process.env);
+const apiTarget = new URL(process.env.API_URL || 'http://127.0.0.1:8000');
+if (!['http:', 'https:'].includes(apiTarget.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(apiTarget.hostname)
+    || apiTarget.username || apiTarget.password || apiTarget.search || apiTarget.hash || apiTarget.pathname !== '/') {
+  throw new Error('Lifecycle smoke requires an explicitly configured loopback disposable API');
+}
 const prisma = new PrismaClient();
 const apiUrl = (process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
@@ -25,6 +32,7 @@ const run = async () => {
   let userId: number | null = null;
 
   try {
+    assertCondition(await prisma.user.count() === 0, 'Lifecycle smoke requires a new empty disposable database');
     const user = await prisma.user.create({
       data: {
         email,
@@ -41,6 +49,13 @@ const run = async () => {
       kind: 'dashboard',
       domainWhitelist: 'smoke.example.com',
     });
+
+    const acceptance = await fetch(`${apiUrl}/auth/terms`, {
+      method: 'POST', headers: dashboardHeaders(firstDashboardKey),
+      body: JSON.stringify({ accepted: true, version: CURRENT_TERMS.version, documentHash: CURRENT_TERMS.documentHash }),
+      signal: AbortSignal.timeout(10000),
+    });
+    assertCondition(acceptance.ok, `Synthetic account acceptance failed with ${acceptance.status}`);
 
     const rotateResponse = await fetch(`${apiUrl}/analytics/api-key/rotate`, {
       method: 'POST',
@@ -115,7 +130,10 @@ const run = async () => {
   } finally {
     if (userId !== null) {
       await prisma.apiKey.deleteMany({ where: { userId } });
-      await prisma.user.deleteMany({ where: { id: userId } });
+      // Never disable immutable assent protections to clean up a test. The
+      // caller must destroy this disposable database after the smoke process.
+      const accepted = await prisma.accountTermsAcceptance.count({ where: { userId } });
+      if (!accepted) await prisma.user.deleteMany({ where: { id: userId } });
     }
     await prisma.$disconnect();
   }

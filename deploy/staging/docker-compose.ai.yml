@@ -4,12 +4,16 @@ services:
   redis:
     image: ${DRAPIXAI_REDIS_IMAGE:?set DRAPIXAI_REDIS_IMAGE}
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - exec redis-server --save '' --appendonly no --requirepass "$$(cat /run/secrets/ai_redis_password)"
+    cpus: 0.25
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 128
+    environment:
+      DRAPIXAI_REDIS_MAXMEMORY_MB: "768"
+    command: ["sh", "/opt/drapixai/private-redis.sh", "server", "/run/secrets/ai_redis_password"]
     volumes:
       - ./private/ai_redis_password:/run/secrets/ai_redis_password:ro
+      - ../scripts/private-redis.sh:/opt/drapixai/private-redis.sh:ro
     read_only: true
     tmpfs:
       - /data:size=256m,mode=0700
@@ -24,6 +28,10 @@ services:
   ai-api:
     image: ${DRAPIXAI_AI_RELEASE_IMAGE:?set DRAPIXAI_AI_RELEASE_IMAGE}
     restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 8g
+    memswap_limit: 8g
+    pids_limit: 512
     env_file:
       - ../env/ai.staging.env
       - ../release/standard-catvton-rc1.env
@@ -51,6 +59,10 @@ services:
   ai-worker:
     image: ${DRAPIXAI_AI_RELEASE_IMAGE:?set DRAPIXAI_AI_RELEASE_IMAGE}
     restart: unless-stopped
+    cpus: 6.0
+    mem_limit: 64g
+    memswap_limit: 64g
+    pids_limit: 1024
     env_file:
       - ../env/ai.staging.env
       - ../release/standard-catvton-rc1.env

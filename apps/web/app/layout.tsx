@@ -1,69 +1,75 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
+import { headers } from 'next/headers';
 import './globals.css';
 import Providers from './providers';
 import SupportAssistant from './components/SupportAssistant';
 import SkipToContent from './components/SkipToContent';
+import StructuredData from './components/StructuredData';
+import discoveryPolicy from './lib/discovery-policy.cjs';
+import { discoveryPage } from './lib/discovery-pages';
+import { BUSINESS_DETAILS } from './lib/business-details';
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_BASE_URL || 'http://localhost:3000'),
+export async function generateMetadata(): Promise<Metadata> {
+  const pathname = (await headers()).get('x-drapixai-pathname') || '';
+  const page = discoveryPage(pathname);
+  const index = discoveryPolicy.publicIndexingEnabled() && !!page;
+  const title = page ? `${page.title} | DrapixAI` : 'DrapixAI';
+  const description = page?.description || 'DrapixAI account and service information.';
+  return {
+  metadataBase: new URL(discoveryPolicy.PUBLIC_ORIGIN),
   title: {
-    default: 'DrapixAI - Product-Faithful Virtual Try-On',
+    default: title,
     template: '%s | DrapixAI',
   },
-  description: 'Product-faithful virtual try-on for fashion brands, with garment certification, quality-gated results, and native storefront experiences.',
-  keywords: [
-    'AI virtual try-on',
-    'eCommerce',
-    'fashion technology',
-    'AI infrastructure',
-    'conversion optimization',
-    'product visualization',
-    'garment try-on',
-    'fashion tech',
-  ],
+  description,
+  alternates: page ? { canonical: pathname } : undefined,
   authors: [{ name: 'DrapixAI' }],
   creator: 'DrapixAI',
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://drapixai.com',
+    ...(page ? { url: pathname } : {}),
     siteName: 'DrapixAI',
-    title: 'DrapixAI - Product-Faithful Virtual Try-On',
-    description: 'Certify every product, preserve the real garment, and keep weak try-on results away from shoppers.',
+    title,
+    description,
     images: [
       {
-        url: '/og-image.png',
+        url: '/og-drapixai-20261031-v2.png',
         width: 1200,
         height: 630,
-        alt: 'DrapixAI - AI Virtual Try-On',
+        alt: 'DrapixAI — Virtual try-on for fashion storefronts',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'DrapixAI - Product-Faithful Virtual Try-On',
-    description: 'Certify every product, preserve the real garment, and keep weak try-on results away from shoppers.',
-    images: ['/og-image.png'],
+    title,
+    description,
+    images: [{ url: '/og-drapixai-20261031-v2.png', alt: 'DrapixAI — Virtual try-on for fashion storefronts' }],
   },
   robots: {
-    index: true,
-    follow: true,
+    index,
+    follow: index,
     googleBot: {
-      index: true,
-      follow: true,
+      index,
+      follow: index,
       'max-video-preview': -1,
       'max-image-preview': 'large',
       'max-snippet': -1,
     },
   },
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
-    apple: '/apple-touch-icon.png',
+    icon: [
+      { url: '/favicon.ico?v=20261031-source' },
+      { url: '/favicon-32x32.png?v=20261031-source', sizes: '32x32', type: 'image/png' },
+    ],
+    shortcut: '/favicon-16x16.png?v=20261031-source',
+    apple: '/apple-touch-icon.png?v=20261031-source',
   },
-  manifest: '/site.webmanifest',
+  manifest: '/site.webmanifest?v=20261031-source',
 };
+}
 
 export default async function RootLayout({
   children,
@@ -73,9 +79,20 @@ export default async function RootLayout({
   // The proxy creates a fresh CSP nonce per request. Prerendered HTML cannot
   // attach that nonce to Next.js bootstrap scripts and would block hydration.
   await connection();
+  const pathname = (await headers()).get('x-drapixai-pathname');
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body className="bg-background text-foreground antialiased">
+        {pathname === '/' && <StructuredData data={{
+          '@context': 'https://schema.org', '@graph': [
+            { '@type': 'Organization', '@id': `${discoveryPolicy.PUBLIC_ORIGIN}/#organization`,
+              name: 'DrapixAI', legalName: BUSINESS_DETAILS.legalName, url: discoveryPolicy.PUBLIC_ORIGIN,
+              email: BUSINESS_DETAILS.email, telephone: '+916351079022', address: BUSINESS_DETAILS.address },
+            { '@type': 'WebSite', '@id': `${discoveryPolicy.PUBLIC_ORIGIN}/#website`,
+              url: discoveryPolicy.PUBLIC_ORIGIN, name: 'DrapixAI',
+              publisher: { '@id': `${discoveryPolicy.PUBLIC_ORIGIN}/#organization` } },
+          ],
+        }} />}
         <SkipToContent />
         <Providers>
           <SupportAssistant />

@@ -4,6 +4,10 @@ services:
   postgres:
     image: ${DRAPIXAI_POSTGRES_IMAGE:?set DRAPIXAI_POSTGRES_IMAGE}
     restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 4g
+    memswap_limit: 4g
+    pids_limit: 256
     environment:
       POSTGRES_USER: drapixai_staging
       POSTGRES_DB: drapixai_staging
@@ -27,14 +31,18 @@ services:
   redis:
     image: ${DRAPIXAI_REDIS_IMAGE:?set DRAPIXAI_REDIS_IMAGE}
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - exec redis-server --save '' --appendonly no --requirepass "$$(cat /run/secrets/redis_password)"
+    cpus: 0.25
+    mem_limit: 1g
+    memswap_limit: 1g
+    pids_limit: 128
+    environment:
+      DRAPIXAI_REDIS_MAXMEMORY_MB: "768"
+    command: ["sh", "/opt/drapixai/private-redis.sh", "server", "/run/secrets/redis_password"]
     volumes:
       - ./private/redis_password:/run/secrets/redis_password:ro
+      - ../scripts/private-redis.sh:/opt/drapixai/private-redis.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      test: ["CMD", "sh", "/opt/drapixai/private-redis.sh", "health", "/run/secrets/redis_password"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -52,6 +60,10 @@ services:
   api:
     image: ${DRAPIXAI_API_RELEASE_IMAGE:?set DRAPIXAI_API_RELEASE_IMAGE}
     restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 4g
+    memswap_limit: 4g
+    pids_limit: 256
     env_file:
       - ../env/api.staging.env
     environment:
@@ -71,7 +83,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
-      - /app/apps/api/uploads:size=256m,mode=0700,uid=1000,gid=1000
+      - /app/apps/api/uploads:size=256m,mode=0700,uid=65532,gid=65532
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -83,8 +95,14 @@ services:
   web:
     image: ${DRAPIXAI_WEB_RELEASE_IMAGE:?set DRAPIXAI_WEB_RELEASE_IMAGE}
     restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 2g
+    memswap_limit: 2g
+    pids_limit: 256
     env_file:
       - ../env/web.staging.env
+    environment:
+      DRAPIXAI_PUBLIC_INDEXING: "0"
     depends_on:
       - api
     ports:
@@ -92,7 +110,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
-      - /app/apps/web/.next/cache:size=128m,mode=0700,uid=1000,gid=1000
+      - /app/apps/web/.next/cache:size=128m,mode=0700,uid=65532,gid=65532
     security_opt:
       - no-new-privileges:true
     cap_drop:

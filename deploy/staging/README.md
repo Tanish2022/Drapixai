@@ -4,6 +4,38 @@ This topology keeps staging PostgreSQL, Redis, and GPU services
 off the public internet. It is intentionally separate from every production
 database, Redis database, bucket, secret record, queue, volume, and AI endpoint.
 
+## Private CPU stage with managed PostgreSQL
+
+CPU, RAM, swap and process ceilings are defined on each service. Review
+[resource budgets and workstation acceptance](../../docs/workstation/resource-budgets.md)
+before starting staging alongside production.
+
+For the initial CPU stage, layer `docker-compose.neon-cpu.yml` after
+`docker-compose.edge.yml` using Docker Compose 2.24.4 or later. The override
+removes local PostgreSQL and its volume, keeps Redis on the private network, and
+forces try-on intake and Stripe billing off. API and web remain on loopback.
+Use the private access path on the workstation for this stage. The full API
+`/ready` check still requires the private AI service. Record CPU component
+health separately while AI is absent.
+
+Provide the verified pooled staging runtime URL through the existing mounted API
+secret. The database owner URL belongs only to the separately approved migration
+workflow. Check the expected branch, migration ledger and grants before starting
+the API. Keep `DRAPIXAI_TRYON_INTAKE_ENABLED=0` in the images environment. Compose
+interpolates the base file before merging, so it also requires a value for
+`DRAPIXAI_POSTGRES_IMAGE` even though this topology removes the service.
+
+```bash
+docker compose --env-file deploy/staging/.images.env \
+  -f deploy/staging/docker-compose.edge.yml \
+  -f deploy/staging/docker-compose.neon-cpu.yml \
+  config --no-env-resolution --services
+```
+
+Expect only `redis`, `api`, and `web`. Confirm the merged configuration and
+approved artifact digests before starting anything. The local PostgreSQL
+procedure below applies to the standalone edge topology.
+
 ## Public path
 
 Only the chosen HTTPS WAF or secure tunnel is public. It forwards the staging web
@@ -58,6 +90,28 @@ in plaintext.
 4. Issue separate GPU server and API client certificates from the private CA, then install the CA certificate and API client certificate/key at
    `/run/secrets/drapixai-internal-ca.pem` in the API container. Configure the GPU
    reverse proxy with a certificate for `drapixai-ai.staging.internal`.
+
+   Compose mounts the host files `deploy/staging/private/drapixai-internal-ca.pem`,
+   `drapixai-ai-client.crt` and `drapixai-ai-client.key`; the CA private key must
+   remain with its issuer. After the actual staging API JSON and all three TLS
+   files have been provisioned, prepare their private Linux ownership before
+   starting the API:
+
+   ```bash
+   sudo python3 deploy/staging/prepare-secret-permissions.py
+   sudo python3 deploy/staging/prepare-secret-permissions.py --check
+   ```
+
+   This validates all four regular, single-link files first, then sets them to
+   UID/GID 65532 with mode `0400` and protects the directory as root-owned `0700`.
+   It changes metadata only. Database-bootstrap, Redis and other files keep their
+   own ownership and contents. Subsequent secret edits require the approved
+   sudo/secret-manager workflow and another permission check; the generator's
+   `--force` remains unsuitable for rotating an installed environment. New MFA
+   seeds use canonical Base32; enroll and verify the operator before launch.
+   This procedure does not validate TLS chains or turn generated SMTP/AWS
+   placeholder values into working provider credentials. Supply and verify the
+   real isolated provider configuration before full-server staging tests.
 
 5. On the GPU host, follow `deploy/workstation/internal-proxy/README.md` to bind Nginx only to its VPN IP and require the API client certificate.
 
@@ -181,6 +235,15 @@ the repository and not in shell history. It must provide the variables listed in
 set -a; . /run/secrets/drapixai-live-security-test.env; set +a
 npm --prefix apps/api run test:security:live | tee runtime/launch-evidence/live-security-boundary.json
 ```
+
+The harness also requires an exact approved origin and authorization reference,
+the exact release commit, and tenant B's own shopper token/origin for positive
+controls; see `docs/security-release-gate.md` and `certification.env.example`.
+Use disposable synthetic data: one valid tenant B feedback row is written as
+an ownership control. A future CPU-only staging run may set
+`DRAPIXAI_SECURITY_TEST_MODE=cpu` with inference intake kept disabled. Its
+`PARTIAL_CPU` output and exit 2 are incomplete evidence, not certification.
+Do not enable inference to satisfy the upload probe before the GPU/runtime gates.
 
 The saved JSON must report every check and a `429` rate-limit response. It covers
 cross-tenant access, expired and cross-origin credential replay, forged-image

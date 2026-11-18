@@ -4,6 +4,55 @@
     ? new URL('.', sdkScriptElement.src).toString().replace(/\/$/, '')
     : window.location.origin;
 
+  async function withRequestDeadline(controller, timeoutMs, run) {
+    var signal = controller.signal;
+    var rejectOnAbort;
+    var aborted = new Promise(function (_, reject) {
+      rejectOnAbort = function () { reject(signal.reason); };
+      signal.addEventListener('abort', rejectOnAbort, { once: true });
+    });
+    var timer = setTimeout(function () {
+      controller.abort(new Error('TRY_ON_TIMEOUT'));
+    }, timeoutMs);
+    try {
+      return await Promise.race([aborted, run(signal)]);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', rejectOnAbort);
+    }
+  }
+
+  async function readResponseBlob(response, maxBytes, contentType) {
+    if (Number(response.headers.get('Content-Length')) > maxBytes) {
+      throw new Error('SDK_RESPONSE_TOO_LARGE');
+    }
+    if (!response.body) return new Blob([], { type: contentType });
+    var reader = response.body.getReader();
+    var chunks = [];
+    var total = 0;
+    try {
+      while (true) {
+        var next = await reader.read();
+        if (next.done) return new Blob(chunks, { type: contentType });
+        total += next.value.byteLength;
+        if (total > maxBytes) throw new Error('SDK_RESPONSE_TOO_LARGE');
+        chunks.push(next.value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  async function readResponseJson(response) {
+    var body = await readResponseBlob(response, 64 * 1024, 'application/json');
+    var text = await body.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return {};
+    }
+  }
+
   function createWatermarkedBlob(imageUrl) {
     return new Promise(function (resolve, reject) {
       var image = new Image();
@@ -312,6 +361,9 @@
         buyUrlAttribute: options.buyUrlAttribute || 'data-drapix-buy-url',
         logoUrl: sanitizeAssetUrl(options.logoUrl || sdkAssetBaseUrl + '/drapixai_wordmark.webp', sdkAssetBaseUrl + '/drapixai_wordmark.webp')
       };
+      if (!Number.isFinite(config.timeoutMs) || config.timeoutMs <= 0 || config.timeoutMs > 2147483647) {
+        config.timeoutMs = 20000;
+      }
 
       function reportStartupError(message, productId) {
         if (typeof options.onError === 'function') {
@@ -320,9 +372,10 @@
         return new Error(message);
       }
 
-      async function resolveCredential(productId) {
+      async function resolveCredential(productId, signal) {
         if (config.tokenProvider) {
           var issuedToken = await config.tokenProvider(String(productId || config.productId));
+          signal.throwIfAborted();
           return normalizeStorefrontCredential(issuedToken, productId, reportStartupError);
         }
         return normalizeStorefrontCredential(config.storefrontToken, productId, reportStartupError);
@@ -352,20 +405,30 @@
 
       ensureWidgetStyles();
 
-      var validateRes;
+      var validationController = new AbortController();
+      var validation;
       try {
-        var validationCredential = await resolveCredential(config.productId);
-        validateRes = await fetch(config.baseUrl + '/sdk/validate', {
-          method: 'POST',
-          headers: buildAuthorizationHeaders(validationCredential, true),
-          body: JSON.stringify({ productId: config.productId })
+        validation = await withRequestDeadline(validationController, config.timeoutMs, async function (signal) {
+          var credential = await resolveCredential(config.productId, signal);
+          signal.throwIfAborted();
+          var response = await fetch(config.baseUrl + '/sdk/validate', {
+            method: 'POST',
+            headers: buildAuthorizationHeaders(credential, true),
+            body: JSON.stringify({ productId: config.productId }),
+            signal: signal,
+            redirect: 'error',
+            cache: 'no-store'
+          });
+          return { ok: response.ok, body: await readResponseJson(response) };
         });
-      } catch (_) {
-        throw reportStartupError('VALIDATION_NETWORK_FAILED');
+      } catch (error) {
+        throw reportStartupError(error && error.message === 'TRY_ON_TIMEOUT' ? 'VALIDATION_TIMEOUT' : 'VALIDATION_NETWORK_FAILED');
+      } finally {
+        validationController.abort();
       }
 
-      if (!validateRes.ok) {
-        var validateErr = await validateRes.json().catch(function () { return {}; });
+      if (!validation.ok) {
+        var validateErr = validation.body;
         throw reportStartupError(validateErr && (validateErr.message || validateErr.error) || 'VALIDATION_FAILED');
       }
 
@@ -707,6 +770,7 @@
         shareBtn.addEventListener('click', handleShare);
 
         runBtn.addEventListener('click', async function () {
+          if (activeController) return;
           if (!personInput.files || !personInput.files[0]) {
             status.textContent = 'Please upload your front-facing image first.';
             return;
@@ -740,9 +804,12 @@
             }
           }, 520);
 
+          var controller = new AbortController();
+          activeController = controller;
           try {
+            var selectedPhoto = personInput.files[0];
             var form = new FormData();
-            form.append('person_image', personInput.files[0]);
+            form.append('person_image', selectedPhoto);
             form.append('productId', productId || config.productId);
             form.append('quality', config.quality);
             form.append('garment_type', config.garmentType);
@@ -753,38 +820,38 @@
             }
 
             var startedAt = Date.now();
-            var tryOnCredential = await resolveCredential(productId || config.productId);
-            if (isClosed || !consent.checked) {
-              if (!isClosed) status.textContent = 'Consent withdrawn. No try-on was submitted.';
-              return;
-            }
-            activeController = typeof AbortController !== 'undefined' ? new AbortController() : null;
-            var timeoutId = activeController ? setTimeout(function () {
-              activeController.abort();
-            }, config.timeoutMs) : null;
-            var res = await fetch(config.baseUrl + '/sdk/tryon', {
-              method: 'POST',
-              headers: buildAuthorizationHeaders(tryOnCredential, false),
-              body: form,
-              signal: activeController ? activeController.signal : undefined
-            });
-            if (timeoutId) {
-              clearTimeout(timeoutId);
-            }
-
-            if (!res.ok) {
-              var err = await res.json().catch(function () { return {}; });
-              if (err && err.error === 'TRYON_RESULT_NOT_PUBLISHABLE') {
-                throw new Error(err.message || 'This preview did not pass DrapixAI quality checks. Please retry with a clearer front-facing photo.');
+            var previewResult = await withRequestDeadline(controller, config.timeoutMs, async function (signal) {
+              var credential = await resolveCredential(productId || config.productId, signal);
+              signal.throwIfAborted();
+              if (!consent.checked || selectedPhoto !== personInput.files[0]) {
+                throw new Error('Consent withdrawn. No try-on was submitted.');
               }
-              throw new Error(err && (err.message || err.error) || 'TRY_ON_FAILED');
-            }
-
-            var metadata = readTryOnMetadata(res);
+              var response = await fetch(config.baseUrl + '/sdk/tryon', {
+                method: 'POST',
+                headers: buildAuthorizationHeaders(credential, false),
+                body: form,
+                signal: signal,
+                redirect: 'error',
+                cache: 'no-store'
+              });
+              if (!response.ok) {
+                var err = await readResponseJson(response);
+                if (err && err.error === 'TRYON_RESULT_NOT_PUBLISHABLE') {
+                  throw new Error(err.message || 'This preview did not pass DrapixAI quality checks. Please retry with a clearer front-facing photo.');
+                }
+                throw new Error(err && (err.message || err.error) || 'TRY_ON_FAILED');
+              }
+              var contentType = (response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+              if (SUPPORTED_IMAGE_TYPES.indexOf(contentType) === -1) throw new Error('SDK_INVALID_IMAGE_RESPONSE');
+              var blob = await readResponseBlob(response, 64 * 1024 * 1024, contentType);
+              if (!blob.size) throw new Error('SDK_INVALID_IMAGE_RESPONSE');
+              return { blob: blob, metadata: readTryOnMetadata(response) };
+            });
+            if (isClosed) return;
+            var metadata = previewResult.metadata;
             if (!metadata.latencyMs) {
               metadata.latencyMs = Date.now() - startedAt;
             }
-            var blob = await res.blob();
             if (activeResultUrl) {
               URL.revokeObjectURL(activeResultUrl);
             }
@@ -792,7 +859,8 @@
             if (typeof options.onResult === 'function') {
               options.onResult(metadata);
             }
-            activeResultUrl = URL.createObjectURL(blob);
+            if (isClosed) return;
+            activeResultUrl = URL.createObjectURL(previewResult.blob);
             result.src = activeResultUrl;
             var resultMeta = modal.querySelector('#drapix-result-meta');
             if (resultMeta) {
@@ -817,18 +885,16 @@
             progressBar.style.width = '0%';
             resultShell.style.display = 'none';
           } finally {
+            controller.abort();
             activeController = null;
             clearInterval(progressTimer);
-            if (isClosed) {
-              return;
-            }
-            setTimeout(function () {
+            if (!isClosed) {
               progress.style.display = 'none';
               progressBar.style.width = '14%';
-            }, 500);
-            runBtn.disabled = false;
-            runBtn.style.opacity = '1';
-            runBtn.style.cursor = 'pointer';
+              runBtn.disabled = false;
+              runBtn.style.opacity = '1';
+              runBtn.style.cursor = 'pointer';
+            }
           }
         });
         });

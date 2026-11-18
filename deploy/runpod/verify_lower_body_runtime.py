@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import importlib.metadata
 import json
+import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -12,23 +12,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-
-EXPECTED_PACKAGES = {
-    "torch": "2.4.0",
-    "torchvision": "0.19.0",
-    "fashn-vton": "1.5.0",
-    "fashn-human-parser": "0.1.1",
-    "onnxruntime-gpu": "1.20.1",
-    "opencv-python": "4.10.0.84",
-}
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+from drapixai_ai.services.lower_body_artifacts import canonical_sha256, verify_lower_body_artifacts
+from drapixai_ai.services.lower_body_runtime import collect_runtime_facts, validate_runtime_facts
 
 
 def main() -> int:
@@ -37,80 +22,63 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--load-model", action="store_true")
     parser.add_argument("--required-gpu-substring", default="A100")
+    parser.add_argument("--release-commit", default=os.getenv("DRAPIXAI_RELEASE_COMMIT", ""))
+    parser.add_argument("--image", default=os.getenv("DRAPIXAI_AI_RELEASE_IMAGE", ""))
     args = parser.parse_args()
     errors: list[str] = []
 
-    import onnxruntime as ort
-    import torch
-
-    packages = {}
-    for name, expected in EXPECTED_PACKAGES.items():
-        try:
-            actual = importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            actual = None
-        packages[name] = {"expected": expected, "actual": actual, "valid": actual == expected}
-        if actual != expected:
-            errors.append(f"PACKAGE_VERSION_MISMATCH:{name}:{actual}/{expected}")
-
-    if not torch.cuda.is_available():
-        errors.append("CUDA_UNAVAILABLE")
-    elif args.required_gpu_substring.lower() not in torch.cuda.get_device_name(0).lower():
-        errors.append(f"UNEXPECTED_GPU:{torch.cuda.get_device_name(0)}")
-    if torch.cuda.is_available() and not torch.cuda.is_bf16_supported():
-        errors.append("BF16_UNSUPPORTED")
-    providers = ort.get_available_providers()
-    if "CUDAExecutionProvider" not in providers:
-        errors.append("ORT_CUDA_PROVIDER_UNAVAILABLE")
-
-    manifest_path = args.weights_dir / "model-manifest.json"
-    manifest = {}
-    if not manifest_path.is_file():
-        errors.append("MODEL_MANIFEST_MISSING")
-    else:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not all(
-            str((manifest.get(section) or {}).get("revision") or "").strip()
-            for section in ("model", "dwpose", "human_parser")
-        ):
-            errors.append("MODEL_REVISION_MISSING")
-        for relative, expected in dict(manifest.get("files") or {}).items():
-            path = args.weights_dir / relative
-            if not path.is_file():
-                errors.append(f"MODEL_FILE_MISSING:{relative}")
-                continue
-            actual_hash = _sha256(path)
-            if actual_hash != str((expected or {}).get("sha256") or ""):
-                errors.append(f"MODEL_HASH_MISMATCH:{relative}")
+    facts: dict[str, object] = {}
+    try:
+        facts = collect_runtime_facts()
+    except Exception:
+        errors.append("GPU_RUNTIME_IMPORT_OR_QUERY_FAILED")
+    errors.extend(validate_runtime_facts(facts, args.required_gpu_substring))
+    if not re.fullmatch(r"[a-f0-9]{40}", args.release_commit):
+        errors.append("RELEASE_COMMIT_REQUIRED")
+    if not re.fullmatch(r"[A-Za-z0-9._:/-]+@sha256:[a-f0-9]{64}", args.image):
+        errors.append("IMMUTABLE_IMAGE_REQUIRED")
+    model_identity = None
+    try:
+        model_identity = verify_lower_body_artifacts(args.weights_dir)
+    except (ValueError, OSError):
+        errors.append("MODEL_ARTIFACT_VERIFICATION_FAILED")
 
     load_report: dict[str, object] = {"requested": args.load_model}
     if args.load_model and not errors:
+        import torch
         from drapixai_ai.engines.fashn_vton import FashnVTONEngine
 
         started = time.perf_counter()
-        engine = FashnVTONEngine()
-        engine.load()
-        torch.cuda.synchronize()
-        load_report.update(
-            {
+        try:
+            engine = FashnVTONEngine(weights_dir=str(args.weights_dir), device="cuda:0")
+            engine.load()
+            torch.cuda.synchronize()
+            pose_model = engine.pipeline.pose_model.pose_estimation
+            providers = {
+                name: getattr(pose_model, name).get_providers()
+                for name in ("session_det", "session_pose")
+            }
+            if any(not value or value[0] != "CUDAExecutionProvider" for value in providers.values()):
+                errors.append("DWPose_CUDA_FALLBACK")
+            load_report.update({
                 "loaded": engine.loaded,
+                "pose_session_providers": providers,
                 "load_ms": int((time.perf_counter() - started) * 1000),
                 "allocated_mb": int(torch.cuda.memory_allocated() / (1024 * 1024)),
                 "reserved_mb": int(torch.cuda.memory_reserved() / (1024 * 1024)),
-            }
-        )
+            })
+        except Exception:
+            errors.append("MODEL_LOAD_FAILED")
 
     report = {
+        "schema_version": 2,
         "valid": not errors,
         "errors": errors,
-        "packages": packages,
-        "cuda_available": torch.cuda.is_available(),
-        "cuda_runtime": torch.version.cuda,
-        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-        "bf16_supported": torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
-        "onnxruntime_providers": providers,
-        "weights_dir": str(args.weights_dir),
-        "model_manifest": manifest,
+        "release_commit": args.release_commit,
+        "image": args.image,
+        "runtime_facts": facts,
+        "runtime_identity_sha256": canonical_sha256(facts),
+        "model_identity": model_identity,
         "model_load": load_report,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from '../lib/password-hash';
 import { applyVerifiedPassword, issueApiKeyForUser, resolveActiveApiKey } from '../lib/api-key-auth';
 import { requireDisposableDatabase } from '../lib/disposable-database';
 import { ensureAdminUser } from '../services/admin-bootstrap';
+import { CURRENT_TERMS, recordAccountTermsAcceptance } from '../lib/account-terms';
 
 // Only the existing guarded P0 fixture calls this. Every user/code/DDL object
 // below belongs to this invocation; no merchant records or external targets.
@@ -16,13 +17,16 @@ export const verifyPasswordSessions = async (prisma: PrismaClient, ownedUsers: n
   const marker = `p0_pw_${crypto.randomBytes(6).toString('hex')}`;
   assert.match(marker, /^p0_pw_[a-f0-9]{12}$/);
   let userId: number | undefined, triggerCreated = false, functionCreated = false;
-  const saved = { email: process.env.DRAPIXAI_ADMIN_EMAIL, password: process.env.DRAPIXAI_ADMIN_PASSWORD };
+  const saved = { email: process.env.DRAPIXAI_ADMIN_EMAIL, password: process.env.DRAPIXAI_ADMIN_PASSWORD, enabled: process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED };
   try {
     const password = 'A1!a' + 'x'.repeat(32);
     const user = await prisma.user.create({ data: {
       email: `${marker}@example.invalid`, passwordHash: await bcrypt.hash(password, 4), emailVerifiedAt: new Date(),
     } });
     userId = user.id; ownedUsers.push(user.id);
+    // Explicit synthetic fixture choice, never inferred production acceptance.
+    await prisma.$transaction(tx => recordAccountTermsAcceptance(tx, user.id,
+      { accepted: true, version: CURRENT_TERMS.version, documentHash: CURRENT_TERMS.documentHash }, 'authenticated_account'));
     const upgradedHash = await hashPassword(password);
     const key = await issueApiKeyForUser(prisma, user.id, { passwordProof: { snapshot: user, upgradedHash } });
     assert.ok(await resolveActiveApiKey(prisma, key));
@@ -115,35 +119,29 @@ export const verifyPasswordSessions = async (prisma: PrismaClient, ownedUsers: n
     assert.ok(await resolveActiveApiKey(prisma, valid), 'Failed key creation must not revoke the prior session');
     console.log('PASS real PostgreSQL key-insert failure rolls back the password replacement and prior-session revocation');
 
-    process.env.DRAPIXAI_ADMIN_EMAIL = current.email;
-    process.env.DRAPIXAI_ADMIN_PASSWORD = password+'New';
+    const bootstrapEmail = `bootstrap-${marker}@example.invalid`;
+    process.env.DRAPIXAI_ADMIN_EMAIL = bootstrapEmail;
+    process.env.DRAPIXAI_ADMIN_PASSWORD = password + 'New';
+    delete process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED;
     await ensureAdminUser(prisma);
-    let operator = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    assert.equal(operator.role, 'system_admin'); assert.equal(operator.authVersion, current.authVersion+1);
-    assert.equal(await prisma.apiKey.count({ where: { userId: user.id, isActive: true } }),0);
-    const session = await issueApiKeyForUser(prisma,user.id);
+    assert.equal(await prisma.user.findUnique({ where: { email: bootstrapEmail } }), null);
+    process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED = '1';
+    await Promise.all([ensureAdminUser(prisma), ensureAdminUser(replica)]);
+    const operator = await prisma.user.findUniqueOrThrow({ where: { email: bootstrapEmail } });
+    ownedUsers.push(operator.id);
+    assert.equal(operator.role, 'system_admin');
+    assert.equal(await prisma.securityAuditLog.count({ where: { action: 'admin.bootstrap.sealed' } }), 1);
+    const rotatedHash = await hashPassword(password + 'Rotated');
+    await prisma.user.update({ where: { id: operator.id }, data: { role: 'brand_admin', passwordHash: rotatedHash, authVersion: { increment: 1 } } });
     await ensureAdminUser(prisma);
-    assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).authVersion,operator.authVersion);
-    assert.ok(await resolveActiveApiKey(prisma,session),'An unchanged bootstrap must not log the operator out');
-    process.env.DRAPIXAI_ADMIN_PASSWORD = '  '+password+'New  ';
-    await prisma.verificationCode.create({data:{userId:user.id,email:operator.email,purpose:'password_reset',codeHash:'synthetic-not-a-code',expiresAt:new Date(Date.now()+600000)}});
+    const afterRestart = await prisma.user.findUniqueOrThrow({ where: { id: operator.id } });
+    assert.equal(afterRestart.role, 'brand_admin');
+    assert.equal(afterRestart.passwordHash, rotatedHash);
+    assert.equal(afterRestart.authVersion, operator.authVersion + 1);
+    await prisma.user.delete({ where: { id: operator.id } });
     await ensureAdminUser(prisma);
-    const rotated = await prisma.user.findUniqueOrThrow({where:{id:user.id}});
-    assert.equal(rotated.authVersion,operator.authVersion+1);
-    assert.equal((await verifyPassword(process.env.DRAPIXAI_ADMIN_PASSWORD,rotated.passwordHash)).matches,true);
-    assert.equal((await verifyPassword(process.env.DRAPIXAI_ADMIN_PASSWORD.trim(),rotated.passwordHash)).matches,false);
-    assert.equal(await resolveActiveApiKey(prisma,session),null);
-    assert.equal(await prisma.verificationCode.count({where:{userId:user.id,consumedAt:null}}),0);
-    console.log('PASS real PostgreSQL bootstrap promotion/rotation revokes credentials, preserves exact whitespace and keeps unchanged sessions');
-
-    operator = await prisma.user.update({where:{id:user.id},data:{passwordHash:await bcrypt.hash(process.env.DRAPIXAI_ADMIN_PASSWORD,4)}});
-    const legacySession = await issueApiKeyForUser(prisma,user.id);
-    await ensureAdminUser(prisma);
-    const reformatted = await prisma.user.findUniqueOrThrow({where:{id:user.id}});
-    assert.ok(reformatted.passwordHash.startsWith('scrypt$v1$'));
-    assert.equal(reformatted.authVersion,operator.authVersion);
-    assert.ok(await resolveActiveApiKey(prisma,legacySession));
-    console.log('PASS real PostgreSQL format-only bootstrap upgrade preserves credential version and existing sessions');
+    assert.equal(await prisma.user.findUnique({ where: { email: bootstrapEmail } }), null);
+    console.log('PASS administrator bootstrap requires opt-in, seals once across replicas, and cannot reverse rotation, demotion or removal');
   } finally {
     if (triggerCreated) await prisma.$executeRawUnsafe(`DROP TRIGGER "${marker}" ON "ApiKey"`);
     if (functionCreated) await prisma.$executeRawUnsafe(`DROP FUNCTION "${marker}"()`);
@@ -151,5 +149,6 @@ export const verifyPasswordSessions = async (prisma: PrismaClient, ownedUsers: n
     await replica.$disconnect();
     if (saved.email === undefined) delete process.env.DRAPIXAI_ADMIN_EMAIL; else process.env.DRAPIXAI_ADMIN_EMAIL = saved.email;
     if (saved.password === undefined) delete process.env.DRAPIXAI_ADMIN_PASSWORD; else process.env.DRAPIXAI_ADMIN_PASSWORD = saved.password;
+    if (saved.enabled === undefined) delete process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED; else process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED = saved.enabled;
   }
 };

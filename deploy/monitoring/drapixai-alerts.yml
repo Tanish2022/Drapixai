@@ -1,4 +1,37 @@
 groups:
+  - name: drapixai-email
+    rules:
+      - alert: DrapixAIEmailSendFailures
+        expr: sum(increase(drapixai_email_send_total{outcome=~"failed|unknown"}[10m])) > 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: DrapixAI transactional email needs investigation
+          description: More than three attempts failed or have uncertain SMTP acceptance. Reconcile before retrying.
+      - alert: DrapixAIEmailComplaint
+        expr: drapixai_email_complaints_recent > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: DrapixAI email complaint received
+          description: Review delivery metadata and suppression using restricted operator access; do not resend automatically.
+      - alert: DrapixAIEmailBounceSpike
+        expr: drapixai_email_failures_recent > 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: DrapixAI email delivery failures increased
+          description: Review provider failures, sender configuration and recipient suppression.
+      - alert: DrapixAIEmailRetentionBacklog
+        expr: drapixai_email_retention_overdue > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: DrapixAI email callback retention needs attention
+          description: Callback metadata exceeded its retention threshold. Check the bounded cleanup job and database access.
   - name: drapixai-security
     rules:
       - alert: DrapixAIAuthenticationFailureSpike
@@ -21,6 +54,14 @@ groups:
 
   - name: drapixai-capacity
     rules:
+      - alert: DrapixAITryOnOutcomeUnconfirmed
+        expr: drapixai_tryon_uncertain_work > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: DrapixAI work requires terminal-state reconciliation
+          description: Capacity remains held after an uncertain AI outcome. Pause affected intake and verify the actual job state before scoped reconciliation.
       - alert: DrapixAITryOnIntakePaused
         expr: drapixai_tryon_intake_enabled == 0
         for: 1m

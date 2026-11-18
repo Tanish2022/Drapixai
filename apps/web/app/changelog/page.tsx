@@ -11,19 +11,16 @@ export const metadata: Metadata = {
 
 const releases = [
   {
-    date: 'July 2026',
-    title: 'Controlled try-on launch foundation',
-    status: 'Current',
+    date: 'October 2026',
+    title: 'Pre-launch preparation',
+    status: 'Preparation',
     items: [
-      'Standard-only shopper generation with direct and SDK quality metadata.',
-      'DrapixAI Ready garment certification and cache-readiness gates.',
-      'Excellent, Review, and Not publishable confidence decisions.',
-      'Automatic rejection for blocking pose, identity, color, structure, and artifact risks.',
-      'Product accuracy reporting for color, print/logo, sleeve, hem, collar, and texture.',
-      'Brand-adaptive SDK UI with download, purchase, feedback, and customer-safe failure states.',
-      'Five-minute developer quickstart and public service-readiness page.',
-      'Shopify authorization, automatic product synchronization, and authenticated lifecycle webhooks.',
-      'Theme App Extension with one-click activation and review-gated garment preparation.',
+      'Merchant onboarding, account terms and review interfaces implemented locally.',
+      'Local tests for Shopify sync recovery, uninstall boundaries and preparation queues.',
+      'Privacy choices and private-by-default search indexing controls.',
+      'Integration documentation and service-readiness interface prepared for testing.',
+      'Target-workstation quality, direct/SDK parity and capacity verification remain pending.',
+      'Live Shopify installation, staging operations, rights clearance and independent assessment remain pending.',
     ],
   },
   {
@@ -45,7 +42,7 @@ export default function ChangelogPage() {
         <div className="mx-auto max-w-[1440px] px-5 py-16 sm:px-8 md:py-24 lg:px-12">
           <p className="text-xs font-bold uppercase text-[#31725b]">Product updates</p>
           <h1 className="mt-5 max-w-3xl font-serif text-5xl leading-[1.02] text-[#101712] sm:text-6xl">What changed, and why it matters.</h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5d6961]">A plain-language record of shipped quality, SDK, onboarding, and platform changes.</p>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5d6961]">Preparation updates and planned work. A local implementation is not a public release or verified production performance.</p>
         </div>
       </section>
 

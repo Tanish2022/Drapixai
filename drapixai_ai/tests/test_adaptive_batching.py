@@ -207,6 +207,7 @@ class AdaptiveBatchingTests(unittest.TestCase):
             self.assertEqual(result.metadata["batch_index"], index)
             self.assertTrue(result.metadata["true_gpu_batch"])
             self.assertEqual(result.quality_score, 0.97)
+            self.assertNotIn("lower_body_person_validation", result.metadata)
 
     def test_worker_serializes_three_independent_results_from_one_batch(self) -> None:
         pipeline = _WorkerBatchPipeline()

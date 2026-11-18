@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import FeedbackMessage, { LoadFailure, useFeedback } from '@/app/components/FeedbackMessage';
+import { getApiErrorMessage, requestJson, userError, WebsiteError, timedFetch as fetch, copyText } from '@/app/lib/user-feedback';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -61,7 +63,7 @@ const dashboardApiPath = (path: string) => '/api/dashboard/proxy/' + path.replac
 
 const applyTheme = (theme: 'dark' | 'light') => {
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* The saved account setting remains available without local storage. */ }
 };
 
 export default function SettingsPage() {
@@ -72,7 +74,8 @@ export default function SettingsPage() {
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
-  const [toast, setToast] = useState('');
+  const { feedback, notify: setToast, dismiss, run: runAction, busy: actionBusy } = useFeedback();
+  const [loadError, setLoadError] = useState('');
   useWorkspaceAnchor(Boolean(profile));
 
   const [companyName, setCompanyName] = useState('');
@@ -99,14 +102,13 @@ export default function SettingsPage() {
       try {
         const sessionResponse = await fetch('/api/dashboard/session', { cache: 'no-store' });
         if (!sessionResponse.ok) {
-          router.replace('/auth/login?next=/settings');
-          return;
+          if (sessionResponse.status === 401) { router.replace('/auth/login?next=/settings'); return; }
+          throw new WebsiteError(getApiErrorMessage(null, 'Account access is temporarily unavailable.', sessionResponse.status));
         }
 
         const sessionPayload = (await sessionResponse.json().catch(() => null)) as { ok?: boolean } | null;
         if (!sessionPayload?.ok) {
-          router.replace('/auth/login?next=/settings');
-          return;
+          throw new Error('INVALID_SESSION_RESPONSE');
         }
 
         if (!active) return;
@@ -118,13 +120,16 @@ export default function SettingsPage() {
           fetch(dashboardApiPath('analytics/api-key/status'), { cache: 'no-store' }),
         ]);
 
-        if (!summaryResponse.ok || !profileResponse.ok) {
-          throw new Error('ACCOUNT_BOOTSTRAP_FAILED');
+        if ([summaryResponse, profileResponse, keyStatusResponse].some(response => response.status === 401)) {
+          router.replace('/auth/login?next=/settings'); return;
         }
+        const failed = [summaryResponse, profileResponse, keyStatusResponse].find(response => !response.ok);
+        if (failed) throw new WebsiteError(getApiErrorMessage(null, 'Account details are temporarily unavailable.', failed.status));
 
         const summaryPayload = (await summaryResponse.json().catch(() => null)) as UsageData | null;
         const profilePayload = (await profileResponse.json().catch(() => null)) as AccountProfile | null;
         const keyStatusPayload = (await keyStatusResponse.json().catch(() => null)) as { exists?: boolean } | null;
+        if (!summaryPayload || typeof summaryPayload.planName !== 'string' || !profilePayload || typeof profilePayload.email !== 'string') throw new Error('INVALID_ACCOUNT_RESPONSE');
         if (!active) return;
 
         setUsage(summaryPayload);
@@ -138,9 +143,9 @@ export default function SettingsPage() {
         setStoreFeedUrl(profilePayload?.catalogFeedUrl || '');
         setVerificationMetaTag(profilePayload?.storeVerificationMetaTag || '');
         applyTheme((profilePayload?.themePreference || 'light') as 'dark' | 'light');
-      } catch {
+      } catch (error) {
         if (active) {
-          router.replace('/auth/login?next=/settings');
+          setLoadError(userError(error, 'We could not load your account settings. Please try again.'));
         }
       } finally {
         if (active) {
@@ -155,17 +160,11 @@ export default function SettingsPage() {
     };
   }, [router]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(''), 2600);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
-
   const cardClass = useMemo(
     () =>
       themePreference === 'light'
-        ? 'border border-black/10 bg-white p-6'
-        : 'border border-white/10 bg-[#151c17] p-6',
+        ? 'border border-black/10 bg-white p-6 text-[#172019]'
+        : 'border border-white/10 bg-[#151c17] p-6 text-[#edf2ed]',
     [themePreference]
   );
 
@@ -177,19 +176,15 @@ export default function SettingsPage() {
     [themePreference]
   );
 
-  const mutedTextClass = themePreference === 'light' ? 'text-[#68736b]' : 'text-[#aab6ac]';
+  const mutedTextClass = themePreference === 'light' ? 'text-[#59665e]' : 'text-[#aab6ac]';
   const sectionTitleClass = themePreference === 'light' ? 'text-[#172019]' : 'text-white';
   const strongTextClass = themePreference === 'light' ? 'text-[#172019]' : 'text-[#edf2ed]';
   const pageClass = themePreference === 'light' ? 'min-h-screen bg-[#f4f6f2] text-[#172019]' : 'min-h-screen bg-[#0f1511] text-[#edf2ed]';
 
-  const handleLogout = () => {
-    fetch('/api/dashboard/session', { method: 'DELETE' })
-      .catch(() => undefined)
-      .finally(() => {
-        signOut({ redirect: false }).catch(() => undefined).finally(() => {
-          router.push('/');
-        });
-      });
+  const handleLogout = async () => {
+    await requestJson('/api/dashboard/session', { method: 'DELETE' });
+    await signOut({ redirect: false });
+    router.push('/');
   };
 
   const handleSaveProfile = async () => {
@@ -207,8 +202,8 @@ export default function SettingsPage() {
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as Partial<AccountProfile> | null;
-    if (!response?.ok) {
-      setToast('Unable to save profile settings right now.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast('Unable to save profile settings right now.', 'error');
       return;
     }
 
@@ -226,11 +221,11 @@ export default function SettingsPage() {
   const handlePasswordChange = async () => {
     if (!apiKey) return;
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setToast('Fill the current password and both new password fields.');
+      setToast('Fill the current password and both new password fields.', 'error');
       return;
     }
     if (newPassword !== confirmPassword) {
-      setToast('New password confirmation does not match.');
+      setToast('New password confirmation does not match.', 'error');
       return;
     }
 
@@ -250,15 +245,17 @@ export default function SettingsPage() {
       debugCurrentEmailOtp?: string;
       debugNewEmailOtp?: string;
     } | null;
-    if (!response?.ok) {
-      setToast(payload?.error || 'Unable to change password.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast(getApiErrorMessage(payload, 'Unable to change your password. Check the current password and new password requirements.', response?.status), 'error');
       return;
     }
 
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
-    setToast('Password updated successfully.');
+    setToast('Password updated. Please sign in again.', 'success');
+    await fetch('/api/dashboard/session', { method: 'DELETE' }).catch(() => null);
+    router.replace('/auth/login?next=/settings');
   };
 
   const handleRotateApiKey = async () => {
@@ -270,7 +267,7 @@ export default function SettingsPage() {
     const payload = (await response?.json().catch(() => null)) as { apiKey?: string } | null;
     const nextApiKey = payload?.apiKey?.trim() || '';
     if (!response?.ok || !nextApiKey) {
-      setToast('Unable to rotate the API key right now.');
+      setToast('Unable to rotate the API key right now.', 'error');
       return;
     }
 
@@ -302,8 +299,8 @@ export default function SettingsPage() {
       catalogSyncSource?: string | null;
       catalogFeedUrl?: string | null;
     } | null;
-    if (!response?.ok) {
-      setToast(payload?.error || 'Unable to save store settings.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast(getApiErrorMessage(payload, 'Unable to save store settings. Check the store domain and feed URL.', response?.status), 'error');
       return;
     }
 
@@ -353,10 +350,11 @@ export default function SettingsPage() {
       storeVerified?: boolean;
       storeVerifiedAt?: string | null;
     } | null;
-    if (!response?.ok) {
-      setToast(payload?.message || payload?.reason || payload?.error || 'Store verification failed.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast(getApiErrorMessage(payload, 'Store verification did not finish. Check the domain and verification tag.', response?.status), 'error');
       return;
     }
+    if (payload.storeVerified !== true) { setToast('Store ownership could not be confirmed. Check the saved domain and verification tag.', 'error'); return; }
 
     setProfile((current) =>
       current ? { ...current, storeVerified: true, storeVerifiedAt: payload?.storeVerifiedAt || new Date().toISOString() } : current
@@ -386,8 +384,8 @@ export default function SettingsPage() {
       syncedCount?: number;
       skippedCount?: number;
     } | null;
-    if (!response?.ok) {
-      setToast(payload?.message || payload?.error || 'Catalog re-sync failed.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast(getApiErrorMessage(payload, 'Catalog sync did not finish. Check the latest product status before retrying.', response?.status), 'error');
       return;
     }
 
@@ -415,7 +413,7 @@ export default function SettingsPage() {
 
   const handleRequestEmailChange = async () => {
     if (!apiKey || !newEmail.trim()) {
-      setToast('Enter the new email address first.');
+      setToast('Enter the new email address first.', 'error');
       return;
     }
 
@@ -432,17 +430,13 @@ export default function SettingsPage() {
       debugCurrentEmailOtp?: string;
       debugNewEmailOtp?: string;
     } | null;
-    if (!response?.ok) {
-      setToast(payload?.error || 'Unable to send verification codes.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast(getApiErrorMessage(payload, 'We could not request verification codes. Please wait and try again.', response?.status), 'error');
       return;
     }
 
     setEmailOtpRequested(true);
-    setToast(
-      payload?.debugCurrentEmailOtp && payload?.debugNewEmailOtp
-        ? `Local dev OTPs: current ${payload.debugCurrentEmailOtp}, new ${payload.debugNewEmailOtp}`
-        : 'We sent OTPs to both the current and new email addresses.'
-    );
+    setToast('Check the current and new email inboxes for their latest verification codes.', 'info');
   };
 
   const handleVerifyEmailChange = async () => {
@@ -461,8 +455,8 @@ export default function SettingsPage() {
     }).catch(() => null);
 
     const payload = (await response?.json().catch(() => null)) as { error?: string; email?: string } | null;
-    if (!response?.ok) {
-      setToast(payload?.error || 'Unable to verify the email change.');
+    if (!response?.ok || !payload || 'error' in payload) {
+      setToast(getApiErrorMessage(payload, 'Email change could not be confirmed. Check both latest verification codes.', response?.status), 'error');
       return;
     }
 
@@ -476,13 +470,14 @@ export default function SettingsPage() {
     setToast('Email address updated successfully.');
   };
 
+  if (loadError) return <LoadFailure title="Account settings are unavailable" message={loadError} />;
   if (isBootstrapping || !profile || !usage) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f4f6f2] px-6 text-[#172019]">
         <div className="max-w-lg border-t border-black/10 py-8 text-center">
           <p className="mb-4 text-xs font-bold uppercase text-[#31725b]">Settings</p>
           <h1 className="mb-4 font-serif text-3xl">Loading your account center</h1>
-          <p className="text-[#68736b]">We&apos;re checking your current session and account data.</p>
+          <p className="text-[#59665e]">We&apos;re checking your current session and account data.</p>
         </div>
       </main>
     );
@@ -491,14 +486,10 @@ export default function SettingsPage() {
   const isQuotaExhausted = usage.quotaRemaining <= 0;
 
   return (
-    <main className={pageClass}>
+    <main className={pageClass} aria-busy={actionBusy}>
       <WorkspaceHeader active="settings" onLogout={handleLogout} />
       <div className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-12">
-        {toast ? (
-          <div className={`${themePreference === 'light' ? 'border-[#9bb6a8] bg-[#eaf0e9] text-[#183f32]' : 'border-[#40624f] bg-[#1b2a20] text-[#cbe0d1]'} mb-6 border px-4 py-3 text-sm`}>
-            {toast}
-          </div>
-        ) : null}
+        <FeedbackMessage feedback={feedback} onDismiss={dismiss} />
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
           <div>
@@ -521,7 +512,7 @@ export default function SettingsPage() {
         <div className={`${cardClass} mb-8`}>
           <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase text-[#31725b]">Fastest setup path</p>
+              <p className={`mb-3 text-xs font-bold uppercase ${themePreference === 'light' ? 'text-[#31725b]' : 'text-[#7fb29a]'}`}>Fastest setup path</p>
               <h2 className={`text-2xl font-semibold ${sectionTitleClass}`}>Keep the first pass lightweight</h2>
               <p className={`mt-3 text-sm ${mutedTextClass}`}>
                 Non-technical founders do not need to finish verification, feeds, and SDK setup on day one. The easiest sequence is: save your store URL here, go back to the dashboard to add a few products and garment files, then return to verification only when the preview looks right.
@@ -576,22 +567,22 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Brand / Company Name</label>
+                <label htmlFor="settings-companyName" className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Brand / Company Name</label>
                 <input
                   type="text"
-                  value={companyName}
+                  id="settings-companyName" value={companyName}
                   onChange={(event) => setCompanyName(event.target.value)}
                   className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="Your brand name"
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Mobile Number (optional)</label>
+                <label htmlFor="settings-mobileNumber" className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Mobile Number (optional)</label>
                 <div className="relative">
                   <Phone className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 ${themePreference === 'light' ? 'text-slate-400' : 'text-gray-500'}`} />
                   <input
                     type="tel"
-                    value={mobileNumber}
+                    id="settings-mobileNumber" value={mobileNumber}
                     onChange={(event) => setMobileNumber(event.target.value)}
                     className={`w-full rounded-md border pl-11 pr-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                     placeholder="+91 98765 43210"
@@ -602,7 +593,7 @@ export default function SettingsPage() {
 
             <button
               type="button"
-              onClick={handleSaveProfile}
+              onClick={() => void runAction(handleSaveProfile)} disabled={actionBusy}
               className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -621,14 +612,15 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
+                aria-pressed={themePreference === 'dark'}
                 onClick={() => {
                   setThemePreference('dark');
                   applyTheme('dark');
                 }}
                 className={`rounded-md border px-4 py-4 text-left transition-colors ${
                   themePreference === 'dark'
-                    ? 'border-[#77a08b] bg-[#e8f0eb]'
-                    : 'border-white/[0.08] bg-black/20'
+                    ? 'border-[#77a08b] bg-[#1b251e]'
+                    : 'border-black/15 bg-white'
                 }`}
               >
                 <MoonStar className="w-5 h-5 text-[#31725b] mb-3" />
@@ -637,6 +629,7 @@ export default function SettingsPage() {
               </button>
               <button
                 type="button"
+                aria-pressed={themePreference === 'light'}
                 onClick={() => {
                   setThemePreference('light');
                   applyTheme('light');
@@ -644,7 +637,7 @@ export default function SettingsPage() {
                 className={`rounded-md border px-4 py-4 text-left transition-colors ${
                   themePreference === 'light'
                     ? 'border-[#77a08b] bg-[#e8f0eb]'
-                    : 'border-white/[0.08] bg-black/20'
+                    : 'border-white/15 bg-[#101712]'
                 }`}
               >
                 <SunMedium className="w-5 h-5 text-amber-400 mb-3" />
@@ -654,7 +647,7 @@ export default function SettingsPage() {
             </div>
             <button
               type="button"
-              onClick={handleSaveProfile}
+              onClick={() => void runAction(handleSaveProfile)} disabled={actionBusy}
               className="mt-6 inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
             >
               Save Theme Preference
@@ -671,21 +664,21 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <input
                 type="password"
-                value={currentPassword}
+                aria-label="Current password" autoComplete="current-password" value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 placeholder="Current password"
               />
               <input
                 type="password"
-                value={newPassword}
+                aria-label="New password" autoComplete="new-password" value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 placeholder="New password"
               />
               <input
                 type="password"
-                value={confirmPassword}
+                aria-label="Confirm new password" autoComplete="new-password" value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 placeholder="Confirm new password"
@@ -693,7 +686,7 @@ export default function SettingsPage() {
             </div>
             <button
               type="button"
-              onClick={handlePasswordChange}
+              onClick={() => void runAction(handlePasswordChange)} disabled={actionBusy}
               className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
             >
               Update Password
@@ -710,7 +703,7 @@ export default function SettingsPage() {
             </p>
             <input
               type="email"
-              value={newEmail}
+              aria-label="New email address" autoComplete="email" value={newEmail}
               onChange={(event) => setNewEmail(event.target.value)}
               className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
               placeholder="New email address"
@@ -718,8 +711,8 @@ export default function SettingsPage() {
             <div className="flex flex-wrap gap-3 mt-4">
               <button
                 type="button"
-                onClick={handleRequestEmailChange}
-                className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                onClick={() => void runAction(handleRequestEmailChange)} disabled={actionBusy}
+                className={`inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors ${strongTextClass}`}
               >
                 Send OTPs
               </button>
@@ -734,7 +727,7 @@ export default function SettingsPage() {
                   type="text"
                   inputMode="numeric"
                   maxLength={6}
-                  value={currentEmailOtp}
+                  aria-label="Code sent to current email" autoComplete="one-time-code" value={currentEmailOtp}
                   onChange={(event) => setCurrentEmailOtp(event.target.value)}
                   className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="OTP sent to current email"
@@ -743,14 +736,14 @@ export default function SettingsPage() {
                   type="text"
                   inputMode="numeric"
                   maxLength={6}
-                  value={newEmailOtp}
+                  aria-label="Code sent to new email" autoComplete="one-time-code" value={newEmailOtp}
                   onChange={(event) => setNewEmailOtp(event.target.value)}
                   className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="OTP sent to new email"
                 />
                 <button
                   type="button"
-                  onClick={handleVerifyEmailChange}
+                  onClick={() => void runAction(handleVerifyEmailChange)} disabled={actionBusy}
                   className="inline-flex items-center justify-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
                 >
                   Verify and Change Email
@@ -777,19 +770,19 @@ export default function SettingsPage() {
             </div>
             <div className={`${panelClass} mt-4 space-y-4`}>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Store URL or domain</label>
+                <label htmlFor="settings-storeDomain" className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Store URL or domain</label>
                 <input
                   type="text"
-                  value={storeDomain}
+                  id="settings-storeDomain" value={storeDomain}
                   onChange={(event) => setStoreDomain(event.target.value)}
                   className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                   placeholder="store.yourbrand.com"
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>How do you want to add products first?</label>
+                <label htmlFor="settings-storeSyncSource" className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>How do you want to add products first?</label>
                 <select
-                  value={storeSyncSource}
+                  id="settings-storeSyncSource" value={storeSyncSource}
                   onChange={(event) => setStoreSyncSource(event.target.value as 'manual' | 'feed_url' | 'shopify' | 'woocommerce')}
                   className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                 >
@@ -801,10 +794,10 @@ export default function SettingsPage() {
               </div>
               {storeSyncSource === 'feed_url' ? (
                 <div>
-                  <label className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Product feed URL</label>
+                  <label htmlFor="settings-storeFeedUrl" className={`block text-sm font-medium mb-2 ${mutedTextClass}`}>Product feed URL</label>
                   <input
                     type="url"
-                    value={storeFeedUrl}
+                    id="settings-storeFeedUrl" value={storeFeedUrl}
                     onChange={(event) => setStoreFeedUrl(event.target.value)}
                     className={`w-full rounded-md border px-4 py-3 ${themePreference === 'light' ? 'border-slate-300 bg-white text-slate-950' : 'border-white/[0.08] bg-black/20 text-white'}`}
                     placeholder="https://yourbrand.com/products-feed.csv"
@@ -817,7 +810,7 @@ export default function SettingsPage() {
                     : 'Manual dashboard import and feed URL import remain available. WooCommerce native installation is not part of the current launch scope.'}
                 </p>
               )}
-              <div className={`${themePreference === 'light' ? 'border-sky-100 bg-sky-50/70' : 'border-[#77a08b] bg-[#e8f0eb]'} rounded-md border p-4`}>
+              <div className={`${themePreference === 'light' ? 'border-sky-100 bg-sky-50/70' : 'border-[#77a08b] bg-[#1b251e]'} rounded-md border p-4`}>
                 <p className={`text-sm font-medium mb-2 ${strongTextClass}`}>Recommended order</p>
                 <ol className={`space-y-2 text-sm list-decimal pl-5 ${mutedTextClass}`}>
                   <li>Save the storefront domain and choose the easiest product import path.</li>
@@ -828,22 +821,22 @@ export default function SettingsPage() {
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={handleSaveStoreConnection}
+                  onClick={() => void runAction(handleSaveStoreConnection)} disabled={actionBusy}
                   className="inline-flex items-center gap-2 rounded-md bg-[#183f32] px-5 py-3 text-sm font-semibold text-white hover:opacity-90"
                 >
                   Save Basics
                 </button>
                 <button
                   type="button"
-                  onClick={handleVerifyStore}
-                  className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                  onClick={() => void runAction(handleVerifyStore)} disabled={actionBusy}
+                  className={`inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors ${strongTextClass}`}
                 >
                   Verify Store
                 </button>
                 {storeSyncSource === 'feed_url' ? (
                   <button
                     type="button"
-                    onClick={handleResyncCatalog}
+                    onClick={() => void runAction(handleResyncCatalog)} disabled={actionBusy}
                     className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
                   >
                     Refresh Product List
@@ -860,7 +853,7 @@ export default function SettingsPage() {
               <div className="flex flex-wrap gap-3 mt-3">
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard.writeText(verificationMetaTag).then(() => setToast('Verification meta tag copied.'))}
+                  onClick={() => runAction(async () => { await copyText(verificationMetaTag); setToast('Verification meta tag copied.', 'success'); })}
                   className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
                   disabled={!verificationMetaTag}
                 >
@@ -891,7 +884,7 @@ export default function SettingsPage() {
             <div className="flex flex-wrap gap-3 mt-4">
               <button
                 type="button"
-                onClick={() => navigator.clipboard.writeText(storefrontApiKey).then(() => setToast('Storefront key copied.'))}
+                onClick={() => runAction(async () => { await copyText(storefrontApiKey); setToast('Storefront key copied.', 'success'); })}
                 disabled={!storefrontApiKey}
                 className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]"
               >
@@ -900,8 +893,8 @@ export default function SettingsPage() {
               </button>
               <button
                 type="button"
-                onClick={handleRotateApiKey}
-                className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors"
+                onClick={() => void runAction(handleRotateApiKey)} disabled={actionBusy}
+                className={`inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors ${strongTextClass}`}
               >
                 <KeyRound className="w-4 h-4" />
                 {storefrontKeyExists ? 'Rotate Key' : 'Create Key'}
@@ -946,12 +939,12 @@ export default function SettingsPage() {
               <Link href="/subscription" className="inline-flex items-center gap-2 rounded-md border border-[color:var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--elevated)]">
                 Open Subscription
               </Link>
-              <Link href="/pricing" className="inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+              <Link href="/pricing" className={`inline-flex items-center gap-2 rounded-md border border-[#77a08b] px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors ${strongTextClass}`}>
                 {isQuotaExhausted ? 'Upgrade Now' : 'Upgrade Plan'}
               </Link>
               {isQuotaExhausted ? (
                 <a
-                  href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade"
+                  href="mailto:support@drapixai.com?subject=DrapixAI%20Quota%20Upgrade"
                   className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm text-rose-100 hover:bg-rose-400/10 transition-colors"
                 >
                   <Mail className="w-4 h-4" />

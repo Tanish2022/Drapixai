@@ -27,10 +27,15 @@ export async function POST(request: Request) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, mfaCode: body?.mfaCode, issueNewKey: true }),
     cache: 'no-store',
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => null);
+  if (!loginResponse) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
+    status: 503, headers: { 'Retry-After': '1' },
   });
 
   if (!loginResponse.ok) {
-    if (loginResponse.status === 503) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
+    if (loginResponse.status === 429) return noStoreJson({ error: 'RATE_LIMITED' }, { status: 429 });
+    if (loginResponse.status >= 500) return noStoreJson({ error: 'Sign-in is temporarily unavailable. Please try again shortly.' }, {
       status: 503, headers: { 'Retry-After': '1' },
     });
     return noStoreJson({ error: 'ADMIN_ACCESS_DENIED' }, { status: 403 });
@@ -46,7 +51,10 @@ export async function POST(request: Request) {
   const verifyResponse = await fetch(`${SERVER_API_BASE_URL}/admin/verify`, {
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: 'no-store',
-  });
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => null);
+
+  if (!verifyResponse || verifyResponse.status >= 500) return noStoreJson({ error: 'Administrator access is temporarily unavailable.' }, { status: 503 });
 
   if (!verifyResponse.ok) {
     return noStoreJson({ error: 'ADMIN_ACCESS_DENIED' }, { status: 403 });
@@ -59,6 +67,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.apiKey}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
     }).catch(() => null);
   }
   cookieStore.set(sessionCookie(ADMIN_SESSION_COOKIE, await createAdminSessionToken(apiKey), ADMIN_SESSION_MAX_AGE_SECONDS));
@@ -78,6 +87,7 @@ export async function DELETE(request: Request) {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.apiKey}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
     }).catch(() => null);
   }
   clearSessionCookies(cookieStore, ADMIN_SESSION_COOKIE, LEGACY_ADMIN_SESSION_COOKIE);

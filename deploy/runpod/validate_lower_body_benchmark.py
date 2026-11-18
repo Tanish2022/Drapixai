@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from drapixai_ai.preprocess.lower_body_regions import LOWER_BODY_CATEGORIES
 from drapixai_ai.quality.lower_body_benchmark import CATEGORY_STAGE, STAGE_ORDER
+from drapixai_ai.quality.lower_body_policy import MINIMUM_CASES_PER_CATEGORY
 
 
 APP_ROOT = Path(os.getenv("DRAPIXAI_APP_ROOT", REPO_ROOT))
@@ -77,13 +78,14 @@ def main() -> int:
         raise FileNotFoundError(f"Missing benchmark manifest: {MANIFEST_PATH}")
     payload = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     targets = payload.get("targets") or {}
-    minimum_cases = int(targets.get("minimum_cases_per_category", 12))
-    target_cases = int(targets.get("target_cases_per_category", 24))
+    minimum_cases = max(MINIMUM_CASES_PER_CATEGORY, int(targets.get("minimum_cases_per_category", MINIMUM_CASES_PER_CATEGORY)))
+    target_cases = max(minimum_cases, int(targets.get("target_cases_per_category", 24)))
     raw_cases = payload.get("cases") or []
 
     errors: list[str] = []
     warnings: list[str] = []
     slugs: set[str] = set()
+    eligible_case_ids: list[dict[str, str]] = []
     eligible_by_category: Counter[str] = Counter()
     diversity: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     last_stage = 0
@@ -106,10 +108,11 @@ def main() -> int:
             errors.append(f"{slug}:STAGE_ORDER_REGRESSION")
         last_stage = max(last_stage, stage_order)
 
-        if not bool(case.get("benchmark_eligible", False)):
+        if case.get("benchmark_eligible") is not True:
             warnings.append(f"{slug}:NOT_BENCHMARK_ELIGIBLE")
             continue
         eligible_by_category[category] += 1
+        eligible_case_ids.append({"slug": slug, "category": category})
 
         attributes = dict(case.get("attributes") or {})
         for name in REQUIRED_ATTRIBUTES:
@@ -154,6 +157,7 @@ def main() -> int:
         "valid": not errors,
         "case_count": len(raw_cases),
         "eligible_case_count": sum(eligible_by_category.values()),
+        "eligible_case_ids": eligible_case_ids,
         "errors": errors,
         "warnings": warnings,
         "categories": category_report,

@@ -56,6 +56,22 @@ def main() -> None:
                 assert cache.get(key) is None
                 assert not stored_path.exists()
                 assert f"garment:{key}" not in redis.values
+
+            unused_local_path = Path(temporary_dir) / "must-not-create"
+            object.__setattr__(settings, "garment_cache_dir", str(unused_local_path))
+            object.__setattr__(settings, "garment_cache_backend", "s3")
+            def failing_s3_client(*args, **kwargs):
+                raise RuntimeError("SYNTHETIC_PROVIDER_DETAILS")
+
+            with patch.dict(sys.modules, {"boto3": types.SimpleNamespace(client=failing_s3_client)}):
+                try:
+                    GarmentCache()
+                except RuntimeError as error:
+                    assert str(error) == "GARMENT_CACHE_S3_INIT_FAILED"
+                    assert error.__suppress_context__
+                else:
+                    raise AssertionError("S3 failure must stop startup")
+                assert not unused_local_path.exists()
     finally:
         object.__setattr__(settings, "garment_cache_dir", original_dir)
         object.__setattr__(settings, "garment_cache_backend", original_backend)

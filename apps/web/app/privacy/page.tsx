@@ -1,19 +1,24 @@
 import type { Metadata } from 'next';
+import { DISCOVERY_PAGES } from '@/app/lib/discovery-pages';
 import LegalPage from '@/app/components/LegalPage';
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy',
-  description: 'How DrapixAI collects, uses, stores, and protects data across the platform.',
-};
+export const metadata: Metadata = DISCOVERY_PAGES['/privacy'];
 
 export default function PrivacyPage() {
   return (
     <LegalPage
       eyebrow="Privacy Policy"
       title="Privacy Policy"
-      updatedLabel="Privacy notice version: 2026-10-18"
+      updatedLabel="Privacy notice version: 2026-10-18 · Business details updated October 19, 2026"
       summary="This policy explains what information DrapixAI collects, how it is used, and the steps taken to protect customer and end-user data across the current upper-body virtual try-on launch scope."
       sections={[
+        {
+          heading: 'Who Operates DrapixAI',
+          body: [
+            'DrapixAI is operated by DRAPIXAI SOFTWARE SOLUTIONS LLP, registered in India. Our business postal address is A-104, Avadh highland, S.P. Ring road, Bhadaj, Ahmedabad, Gujarat, 380060, India.',
+            'Email support@drapixai.com or call +91 63510 79022 for enquiries, privacy requests or grievances. See /contact for the business contact details.',
+          ],
+        },
         {
           heading: 'Information We Collect',
           body: [
@@ -31,8 +36,9 @@ export default function PrivacyPage() {
         {
           heading: 'Shopify Store Data',
           body: [
-            'When a merchant installs the DrapixAI Shopify app, DrapixAI processes the shop domain, store name, primary storefront domain, app installation metadata, product and variant identifiers, product titles and types, and product garment images. The launch app requests read_products only; it does not request Shopify customer, order, payment, or checkout data.',
+            'When a merchant installs the DrapixAI Shopify app, DrapixAI processes the shop domain, store name, primary storefront domain, app installation metadata, product and variant identifiers, product titles and types, and product garment images. The integration is designed to request read_products for catalog access and write_app_proxy for its storefront connection; it does not request Shopify customer, order, payment, or checkout data.',
             'Shopify product data is used only to synchronize the merchant catalog, prepare and review garment caches, map approved products to try-on assets, and operate the storefront try-on block. Storefront API keys are restricted to the merchant verified domain.',
+            'Shopify adds request metadata to signed storefront-proxy requests, which can include a customer identifier for a signed-in shopper. DrapixAI validates the request signature and uses the shop and product identifiers for the widget; it does not store that Shopify customer identifier.',
             'The Shopify integration is optional and requires a merchant installation. On an uninstall notification, access is disabled. On a shop-redact request, Shopify-origin catalog records, garment caches, mappings, stored garment assets and installation data are removed. Storefront credentials are revoked and store-identifying fields are redacted; minimum key references may remain for historical billing, usage or unsettled quota accounting. This is not a promise to erase every financial or security record.',
           ],
         },
@@ -63,8 +69,8 @@ export default function PrivacyPage() {
           heading: 'Your Rights and Contact',
           body: [
             'Depending on your location, you may have rights to access, correct, delete, or restrict certain personal information. You may also have the right to object to certain processing or request a copy of your data.',
-            'For access, correction, deletion, withdrawal or a privacy grievance, contact privacy@drapixai.com with a brief description and an account reference only if needed. We may need proportionate identity or merchant-authority checks; do not send a photo ID or shopper image by default. Financial, security or legal obligations may limit erasure and should be explained in the response.',
-            'For a try-on embedded in a merchant store, contact that merchant as well: it controls its storefront and may hold separate records. Legal operator and business-contact information is published on /contact as it is confirmed. Support requests can be sent to support@drapixai.com.',
+            'For access, correction, deletion, withdrawal or a privacy grievance, contact support@drapixai.com with a brief description and an account reference only if needed. We may need proportionate identity or merchant-authority checks; do not send a photo ID or shopper image by default. Financial, security or legal obligations may limit erasure and should be explained in the response.',
+            'For a try-on embedded in a merchant store, contact that merchant as well: it controls its storefront and may hold separate records. Legal operator and business-contact information is published on /contact. Support requests can be sent to support@drapixai.com.',
           ],
         },
       ]}

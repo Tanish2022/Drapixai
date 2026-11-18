@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { PrismaClient, Prisma, ApiKey, User } from '@prisma/client';
 import { ADMIN_MFA_SCOPE, ADMIN_SESSION_IDLE_TIMEOUT_MS, ADMIN_SESSION_KEY_MAX_AGE_MS } from './admin-mfa';
+import { hasCurrentAccountTerms, TERMS_PENDING_SCOPE } from './account-terms';
 
 const MODERN_API_KEY_PREFIX = 'dpx_';
 const LEGACY_API_KEY_PATTERN = /^[a-f0-9]{32}$/i;
@@ -293,7 +294,7 @@ const resolveStorefrontToken = async (prisma: PrismaClient, credential: string) 
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    return apiKey ? {
+    return apiKey && await hasCurrentAccountTerms(prisma, apiKey.userId) ? {
       apiKey,
       context: {
         channel: 'web' as const,
@@ -341,7 +342,7 @@ const resolveGenericStorefrontToken = async (prisma: PrismaClient, credential: s
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    return apiKey ? {
+    return apiKey && await hasCurrentAccountTerms(prisma, apiKey.userId) ? {
       apiKey,
       context: {
         channel,
@@ -384,7 +385,7 @@ const resolveDashboardPreviewToken = async (prisma: PrismaClient, credential: st
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    if (!apiKey) return null;
+    if (!apiKey || apiKey.scopes.split(',').includes(TERMS_PENDING_SCOPE) || !await hasCurrentAccountTerms(prisma, apiKey.userId)) return null;
     // Preview traffic must neither revive nor extend an operator session.
     if (isAdminSessionKey(apiKey)) {
       const fresh = await prisma.apiKey.findFirst({ where: {
@@ -435,7 +436,7 @@ export const resolvePublicApiToken = async (prisma: PrismaClient, credential: st
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
     });
-    if (!apiKey) return null;
+    if (!apiKey || !await hasCurrentAccountTerms(prisma, apiKey.userId)) return null;
     const keyScopes = new Set(String(apiKey.scopes || '').split(',').filter(Boolean));
     if (scopes.some((scope) => !keyScopes.has(scope))) return null;
     return {
@@ -459,7 +460,10 @@ export const resolvePublicApiToken = async (prisma: PrismaClient, credential: st
 const legacyApiKeyLookupEnabled = () =>
   process.env.NODE_ENV !== 'production' || process.env.DRAPIXAI_ALLOW_LEGACY_API_KEYS === '1';
 
-export const resolveActiveApiKey = async (prisma: PrismaClient, rawApiKey: string | undefined) => {
+export const resolveActiveApiKey = async (
+  prisma: PrismaClient, rawApiKey: string | undefined,
+  options: { allowUnacceptedTerms?: boolean } = {},
+) => {
   const apiKey = String(rawApiKey || '').replace(/^Bearer\s+/i, '').trim();
   if (!apiKey) {
     return null;
@@ -473,6 +477,8 @@ export const resolveActiveApiKey = async (prisma: PrismaClient, rawApiKey: strin
     && !directMatch.revokedAt
     && (!directMatch.expiresAt || directMatch.expiresAt > new Date())
   ) {
+    if (!options.allowUnacceptedTerms && (directMatch.scopes.split(',').includes(TERMS_PENDING_SCOPE)
+      || !await hasCurrentAccountTerms(prisma, directMatch.userId))) return null;
     return recordKeyActivity(prisma, directMatch);
   }
 
@@ -490,11 +496,37 @@ export const resolveActiveApiKey = async (prisma: PrismaClient, rawApiKey: strin
   });
   for (const key of keys) {
     if (await bcrypt.compare(apiKey, key.keyHash)) {
+      if (!options.allowUnacceptedTerms && (key.scopes.split(',').includes(TERMS_PENDING_SCOPE)
+        || !await hasCurrentAccountTerms(prisma, key.userId))) return null;
       return recordKeyActivity(prisma, key);
     }
   }
 
   return null;
+};
+
+// Promote only the already authenticated dashboard credential, in the same
+// transaction as acceptance. Rechecking its snapshot makes revocation win; the
+// browser/OAuth token never receives a replacement API key.
+export const promoteTermsDashboardKey = async (tx: Pick<Prisma.TransactionClient, 'apiKey'>, key: ApiKey) => {
+  if (key.kind !== 'dashboard') throw new Error('DASHBOARD_CREDENTIAL_REQUIRED');
+  const pending = key.scopes.split(',').includes(TERMS_PENDING_SCOPE);
+  const now = new Date();
+  return tx.apiKey.update({
+    where: {
+      id: key.id, userId: key.userId, keyHash: key.keyHash, kind: 'dashboard', scopes: key.scopes,
+      isActive: true, revokedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      ...(isAdminSessionKey(key) ? { AND: [adminSessionFreshness(now)] } : {}),
+    },
+    data: {
+      lastUsedAt: now,
+      ...(pending ? {
+        scopes: ['dashboard', ...(isAdminSessionKey(key) ? [ADMIN_MFA_SCOPE] : [])].join(','),
+        expiresAt: isAdminSessionKey(key) ? key.expiresAt : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+      } : {}),
+    },
+  });
 };
 
 export const resolveSdkApiKey = async (prisma: PrismaClient, rawApiKey: string | undefined) => {

@@ -3,15 +3,17 @@ import crypto from 'crypto';
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './lib/prisma';
 import { createRequestRedis } from './lib/request-redis';
 import authRoutes from './routes/auth';
+import accountTermsRoutes from './routes/account-terms';
 import sdkRoutes from './routes/sdk';
 import analyticsRoutes from './routes/analytics';
 import adminRoutes from './routes/admin';
 import publicRoutes from './routes/public';
 import accountRoutes from './routes/account';
 import shopifyRoutes from './routes/shopify';
+import shopifyEmbeddedRoutes from './routes/shopify-embedded';
 import shopifyStorefrontRoutes from './routes/shopify-storefront';
 import shopifyWebhookRoutes from './routes/shopify-webhooks';
 import v1Routes from './routes/v1';
@@ -21,7 +23,8 @@ import { startTrialNotifications } from './services/trial_notifier';
 import { getStorageSummary } from './lib/storage';
 import { cleanupExpiredUploadFiles, formatLogError } from './lib/security';
 import { ensureAdminUser } from './services/admin-bootstrap';
-import { syncShopifyCatalog } from './services/shopify';
+import { processPendingShopifySyncs } from './services/shopify';
+import { recoverShopifyPreparationJobs } from './services/shopify-preparation-cleanup';
 import { processShopifyCatalogPreparationBatch } from './services/catalog-preparation';
 import { withOperationTimeout } from './lib/operation-timeout';
 import { runTryOnReviewRetention } from './services/review-retention';
@@ -29,11 +32,20 @@ import { createVerifiedStorefrontOriginCache } from './lib/cors-origin-cache';
 import { processPendingWebhookDeliveries } from './services/webhooks';
 import { observeHttpResponse, renderOperationalMetrics } from './lib/operational-metrics';
 import { inputValidationMiddleware } from './lib/input-validation';
-import { assertAiMtlsConfiguration } from './lib/ai-client';
+import { aiFetch, assertAiMtlsConfiguration } from './lib/ai-client';
+import { admissionEpoch, isTryOnAdmissionAcknowledged } from './lib/tryon-concurrency';
 import { assertStripeEnvironment } from './lib/billing';
+import { assertSmtpConfiguration } from './services/emailer';
+import { getEmailDeliveryConfig } from './lib/email-delivery-policy';
+import { mountEmailWebhook } from './routes/email-webhooks';
+import { purgeExpiredEmailEvents } from './services/email-delivery-events';
+import { hasStrictDatabaseTransport } from './lib/database-transport';
+import { withMaintenanceLease } from './lib/maintenance-lease';
+import { getDeliveryRetention, purgeDeliveryMetadata } from './services/delivery-retention';
 
 const app = express();
-const prisma = new PrismaClient();
+const emailDeliveryEnabled = Boolean(getEmailDeliveryConfig());
+const deliveryRetention = getDeliveryRetention();
 const redis = createRequestRedis('API readiness');
 const aiBaseUrl = (process.env.DRAPIXAI_AI_URL || '').trim();
 const shopifyEnabled = process.env.DRAPIXAI_SHOPIFY_ENABLED === '1';
@@ -120,7 +132,7 @@ const requireProductionConfig = () => {
   requireSecret('DRAPIXAI_DASHBOARD_PROXY_TOKEN', 32);
   requireSecret('DRAPIXAI_AI_SERVICE_TOKEN', 32);
   requireSecret('DRAPIXAI_ADMIN_TOKEN', 32);
-  requireSecret('DRAPIXAI_ADMIN_PASSWORD', 12);
+  if (process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED === '1') requireSecret('DRAPIXAI_ADMIN_PASSWORD', 12);
   requireSecret('DRAPIXAI_ADMIN_TOTP_SECRET', 16);
   requireSecret('DRAPIXAI_STOREFRONT_TOKEN_SECRET', 32);
   requireSecret('DRAPIXAI_AUDIT_LOG_SECRET', 32);
@@ -144,10 +156,11 @@ const requireProductionConfig = () => {
     weak.push('DRAPIXAI_SECRETS_PROVIDER must use aws-secrets-manager or mounted-file in production');
   }
   requireExact('DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY', '1');
-  requireExact('DRAPIXAI_STRIPE_BILLING_ENABLED', '1');
   requireExact('DRAPIXAI_STRIPE_LIVE_MODE', apiEnvironment === 'live' ? '1' : '0');
-  requireExact('DRAPIXAI_STRIPE_CURRENCY', 'usd');
-  requireExact('DRAPIXAI_STRIPE_CURRENCY', 'usd');
+  if (apiEnvironment === 'live') requireExact('DRAPIXAI_STRIPE_BILLING_ENABLED', '1');
+  if (apiEnvironment === 'live' || process.env.DRAPIXAI_STRIPE_BILLING_ENABLED === '1') {
+    requireExact('DRAPIXAI_STRIPE_CURRENCY', 'usd');
+  }
   if (secretsProvider === 'aws-secrets-manager' && process.env.DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY !== '1') {
     weak.push('AWS Secrets Manager must be bootstrapped with workload identity');
   }
@@ -173,13 +186,8 @@ const requireProductionConfig = () => {
   }
   requireHttpsUrl('DRAPIXAI_WEB_BASE_URL');
   const databaseUrl = process.env.DATABASE_URL || '';
-  try {
-    const parsedDatabaseUrl = new URL(databaseUrl);
-    if (parsedDatabaseUrl.searchParams.get('sslmode') !== 'verify-full') {
-      weak.push('DATABASE_URL must set sslmode=verify-full');
-    }
-  } catch {
-    weak.push('DATABASE_URL must be a valid PostgreSQL URL');
+  if (!hasStrictDatabaseTransport(databaseUrl)) {
+    weak.push('DATABASE_URL must use PostgreSQL with sslmode=require and sslaccept=strict');
   }
   const storageEndpoint = (process.env.S3_ENDPOINT || '').trim();
   if (storageEndpoint) requireHttpsUrl('S3_ENDPOINT');
@@ -235,7 +243,9 @@ const requireProductionConfig = () => {
 };
 
 requireProductionConfig();
+if (process.env.NODE_ENV === 'production') assertSmtpConfiguration();
 assertAiMtlsConfiguration();
+if (process.env.NODE_ENV === 'production' && process.env.DRAPIXAI_TRYON_INTAKE_ENABLED !== '0') admissionEpoch();
 assertStripeEnvironment();
 
 const localDevOrigins = [
@@ -293,12 +303,22 @@ if (trustProxy) {
   app.set('trust proxy', trustProxy === '1' ? 1 : trustProxy);
 }
 app.use((req, res, next) => {
-  res.on('finish', () => observeHttpResponse(req.method, req.path, res.statusCode));
+  res.on('finish', () => observeHttpResponse(req.method, req.originalUrl.split('?')[0], res.statusCode, req.route?.path));
   next();
 });
 app.use(helmet());
+// Keep signed bytes outside the general JSON parser and browser CORS path.
+mountEmailWebhook(app, prisma);
+if (emailDeliveryEnabled) {
+  cron.schedule('*/15 * * * *', withMaintenanceLease('email-event-retention', () => purgeExpiredEmailEvents(prisma)));
+}
 app.use('/billing/webhooks/stripe', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookRouter);
 if (shopifyEnabled) {
+  // Cleanup/recovery must continue with intake paused or auto-preparation off.
+  cron.schedule('* * * * *', async () => {
+    await recoverShopifyPreparationJobs(prisma).catch(error => console.error('Shopify preparation recovery failed:', formatLogError(error)));
+  });
+  app.use('/shopify', shopifyEmbeddedRoutes);
   app.use('/shopify', shopifyStorefrontRoutes);
   app.use('/shopify/webhooks', express.raw({ type: 'application/json', limit: '2mb' }), shopifyWebhookRoutes);
 }
@@ -329,6 +349,7 @@ app.use('/events', express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(inputValidationMiddleware);
 
+app.use('/auth/terms', accountTermsRoutes);
 app.use('/auth', authRoutes);
 app.use('/v1', v1Routes);
 app.use('/sdk', sdkRoutes);
@@ -358,6 +379,10 @@ app.get('/ready', async (req, res) => {
             prisma.$queryRaw`SELECT 1`,
             prisma.apiKey.findFirst({ select: { kind: true } }),
             prisma.verificationCode.findFirst({ select: { attemptCount: true } }),
+            ...(emailDeliveryEnabled ? [
+              prisma.emailDeliveryEvent.findFirst({ select: { webhookId: true } }),
+              prisma.emailRecipientSuppression.findFirst({ select: { recipientHash: true } }),
+            ] : []),
           ]),
           3000,
           'DATABASE_READY_TIMEOUT',
@@ -369,7 +394,8 @@ app.get('/ready', async (req, res) => {
     })(),
     (async () => {
       try {
-        redisReady = (await redis.run(client => client.ping(), 'REDIS_READY_TIMEOUT')) === 'PONG';
+        redisReady = await redis.run(async client => (await client.ping()) === 'PONG'
+          && (process.env.DRAPIXAI_TRYON_INTAKE_ENABLED === '0' || await isTryOnAdmissionAcknowledged(client)), 'REDIS_READY_TIMEOUT');
       } catch {
         redisReady = false;
       }
@@ -377,7 +403,7 @@ app.get('/ready', async (req, res) => {
     (async () => {
       if (!aiBaseUrl) return;
       try {
-        const response = await fetch(`${aiBaseUrl}/ready`, {
+        const response = await aiFetch(`${aiBaseUrl}/ready`, {
           headers: aiServiceHeaders,
           signal: AbortSignal.timeout(3000),
         });
@@ -466,22 +492,13 @@ app.use((error: Error & { status?: number; statusCode?: number; type?: string },
   res.status(status).json({ error: code });
 });
 
-cron.schedule('0 0 * * *', async () => {
-  const expired = await prisma.user.findMany({
-    where: { trialExpiresAt: { lt: new Date() }, planType: 'trial' }
-  });
-  for (const u of expired) {
-    await prisma.user.update({
-      where: { id: u.id },
-      data: {
-        planType: 'expired',
-        subscriptionStatus: u.subscriptionStatus === 'trialing' ? 'trial_expired' : u.subscriptionStatus,
-      }
-    });
-  }
-});
+cron.schedule('0 0 * * *', withMaintenanceLease('trial-expiry', () => prisma.$executeRaw`
+  UPDATE "User" SET "planType" = 'expired',
+    "subscriptionStatus" = CASE WHEN "subscriptionStatus" = 'trialing' THEN 'trial_expired' ELSE "subscriptionStatus" END
+  WHERE "planType" = 'trial' AND "trialExpiresAt" < ${new Date()}
+`));
 
-cron.schedule('*/15 * * * *', async () => {
+cron.schedule('*/15 * * * *', withMaintenanceLease('tryon-retention', async () => {
   const summary = await runTryOnReviewRetention(prisma, {
     retentionDays: reviewRetentionDays,
     batchSize: reviewRetentionBatchSize,
@@ -492,7 +509,7 @@ cron.schedule('*/15 * * * *', async () => {
   if (summary?.failures.length) {
     console.error('Scheduled try-on review retention completed with failures:', summary.failures.length);
   }
-});
+}));
 
 cron.schedule('*/5 * * * *', () => {
   try {
@@ -508,30 +525,16 @@ cron.schedule('* * * * *', async () => {
   });
 });
 
-cron.schedule('35 2 * * *', async () => {
-  await prisma.apiIdempotencyRecord.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch((error) => {
-    console.error('Scheduled idempotency cleanup failed:', formatLogError(error));
-  });
-});
+cron.schedule('35 2 * * *', withMaintenanceLease('idempotency-retention', () =>
+  prisma.apiIdempotencyRecord.deleteMany({ where: { expiresAt: { lt: new Date() } } })));
+
+if (deliveryRetention.emailDays || deliveryRetention.webhookDays) {
+  cron.schedule('*/15 * * * *', withMaintenanceLease('delivery-retention', () => purgeDeliveryMetadata(prisma, deliveryRetention)));
+}
 
 if (shopifyEnabled) {
   cron.schedule('*/15 * * * *', async () => {
-    const installations = await prisma.shopifyInstallation.findMany({
-      where: {
-        status: 'active',
-        OR: [
-          { lastSyncedAt: null },
-          { lastSyncStatus: { startsWith: 'WEBHOOK_' } },
-        ],
-      },
-      select: { id: true },
-      take: 20,
-    });
-    for (const installation of installations) {
-      await syncShopifyCatalog(prisma, installation.id, 'scheduled').catch((error) => {
-        console.error('Scheduled Shopify sync failed:', formatLogError(error));
-      });
-    }
+    await processPendingShopifySyncs(prisma).catch(error => console.error('Scheduled Shopify sync failed:', formatLogError(error)));
   });
   if (shopifyAutoPrepare) {
     cron.schedule('* * * * *', async () => {

@@ -7,12 +7,14 @@ import MarketingFooter from '@/app/components/MarketingFooter';
 import MarketingNav from '@/app/components/MarketingNav';
 import { DEMO_VIDEO_URL, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
 import { trackEvent } from '@/app/lib/analytics';
+import FeedbackMessage from '@/app/components/FeedbackMessage';
+import { getApiErrorMessage, timedFetch as fetch, type FeedbackTone } from '@/app/lib/user-feedback';
 
 const supportedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const walkthroughSteps = [
   { icon: ImageIcon, title: 'Validate inputs', body: 'JPEG, PNG, or WebP person and garment images are checked before generation.' },
   { icon: ShieldCheck, title: 'Protect quality', body: 'Standard generation keeps the launch quality path consistent for every evaluation.' },
-  { icon: Check, title: 'Review the result', body: 'Download the output or continue to a trial workspace for product certification.' },
+  { icon: Check, title: 'Review the result', body: 'Inspect an available output before considering a controlled store evaluation.' },
 ];
 
 type DemoVideoKind = 'embed' | 'video' | null;
@@ -42,20 +44,32 @@ export default function DemoClient() {
   const [personPreviewUrl, setPersonPreviewUrl] = useState('');
   const [clothPreviewUrl, setClothPreviewUrl] = useState('');
   const [status, setStatus] = useState('');
+  const [feedbackTone, setFeedbackTone] = useState<FeedbackTone>('info');
+  const [available, setAvailable] = useState<boolean | null>(null);
   const [resultUrl, setResultUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
   const [loadVideo, setLoadVideo] = useState(false);
   const demoVideoKind = getDemoVideoKind(DEMO_VIDEO_URL);
+  useEffect(() => {
+    let active = true;
+    fetch('/api/health', { cache: 'no-store' }).then(async response => {
+      const data = await response.json().catch(() => null);
+      if (active) setAvailable(response.ok && data?.services?.api === true && data?.services?.data === true && data?.services?.ai === true);
+    }).catch(() => { if (active) setAvailable(false); });
+    return () => { active = false; };
+  }, []);
 
   const selectImage = (
     file: File | null,
     label: 'person' | 'garment',
     setter: (value: File | null) => void
   ) => {
-    if (file && !supportedImageTypes.has(file.type)) {
+    setResultUrl(current => { if (current) URL.revokeObjectURL(current); return ''; });
+    if (file && (!supportedImageTypes.has(file.type) || file.size > 10 * 1024 * 1024)) {
       setter(null);
-      setStatus(`Use a JPEG, PNG, or WebP ${label} image.`);
+      setFeedbackTone('error');
+      setStatus(`Use a JPEG, PNG, or WebP ${label} image no larger than 10 MiB.`);
       return;
     }
 
@@ -84,6 +98,8 @@ export default function DemoClient() {
   }, [clothImage]);
 
   const runDemo = async () => {
+    if (isSubmitting) return;
+    setFeedbackTone('error');
     if (!personImage || !clothImage) {
       setStatus('Upload both a person image and a garment image.');
       return;
@@ -92,9 +108,11 @@ export default function DemoClient() {
       setStatus('Confirm transient photo processing before running the demo.');
       return;
     }
+    if (!available) { setStatus('The demo service is not available right now. Please check service status and try again later.'); return; }
 
     setIsSubmitting(true);
     setStatus('Generating try-on...');
+    setFeedbackTone('info');
     setResultUrl('');
     trackEvent('cta_click', { metadata: { target: 'demo_run_tryon' } });
 
@@ -108,24 +126,24 @@ export default function DemoClient() {
       const response = await fetch(`${PUBLIC_API_BASE_URL}/demo/tryon`, { method: 'POST', body: form });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        if (response.status === 429) {
-          setStatus('Demo limit reached for this IP. Try again later or create a trial account.');
-          return;
-        }
-        setStatus(data?.message || data?.error || 'Demo try-on failed.');
+        setFeedbackTone('error');
+        setStatus(getApiErrorMessage(data, 'We could not create a preview. Check the photos and try again.', response.status, 'demo'));
         return;
       }
-
+      if (!supportedImageTypes.has((response.headers.get('content-type') || '').split(';')[0])) throw new Error('INVALID_RESULT');
       const blob = await response.blob();
+      if (!blob.size || blob.size > 10 * 1024 * 1024) throw new Error('INVALID_RESULT');
       const nextResultUrl = URL.createObjectURL(blob);
       setResultUrl((currentUrl) => {
         if (currentUrl) URL.revokeObjectURL(currentUrl);
         return nextResultUrl;
       });
       setStatus('Demo try-on complete.');
+      setFeedbackTone('success');
       trackEvent('cta_click', { metadata: { target: 'demo_result_generated' } });
     } catch {
-      setStatus('Demo try-on failed.');
+      setFeedbackTone('error');
+      setStatus('We could not confirm a valid preview. Check your connection and service status before trying again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -135,11 +153,6 @@ export default function DemoClient() {
     if (resultUrl) URL.revokeObjectURL(resultUrl);
   }, [resultUrl]);
 
-  const statusTone = status.toLowerCase().includes('complete')
-    ? 'border-[#93b4a3] bg-[#e8f2ec] text-[#183f32]'
-    : status.toLowerCase().includes('failed') || status.toLowerCase().includes('limit') || status.toLowerCase().includes('upload')
-      ? 'border-[#d6a29c] bg-[#fbefed] text-[#7c2d27]'
-      : 'border-[#b7c4ba] bg-[#f0f3ef] text-[#415047]';
 
   return (
     <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">
@@ -151,7 +164,7 @@ export default function DemoClient() {
             <p className="text-xs font-bold uppercase text-[#31725b]">Public evaluation</p>
             <h1 className="mt-5 font-serif text-5xl leading-[1.02] text-[#101712] sm:text-6xl">Judge the garment, not the claim.</h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-[#5b665e]">
-              Run a small number of real upper-body try-ons before creating a workspace. The public demo follows the same Standard quality path used by the storefront SDK.
+              Evaluate supported upper-body garments when the demo service is available. Results are illustrations for review, not guarantees of appearance, garment sizing or physical fit. Direct and storefront quality parity still requires release verification.
             </p>
             <a href="#live-demo-form" className="mt-8 inline-flex h-12 items-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48]">
               Run a test <ArrowRight className="h-4 w-4" />
@@ -207,19 +220,19 @@ export default function DemoClient() {
         <div className="mx-auto grid max-w-[1440px] lg:grid-cols-2">
           <div className="px-5 py-14 sm:px-8 lg:border-r lg:border-black/10 lg:px-12 lg:py-16">
             <p className="text-xs font-bold uppercase text-[#31725b]">Input</p>
-            <h2 className="mt-4 font-serif text-4xl">Run 2-3 free tests</h2>
-            <p className="mt-4 max-w-xl leading-7 text-[#5d6961]">Use a clear front-facing person and a garment-only product image on a plain background. A model already wearing the garment is rejected because it weakens garment fidelity.</p>
+            <h2 className="mt-4 font-serif text-4xl">Evaluate a supported garment</h2>
+            <p className="mt-4 max-w-xl leading-7 text-[#5d6961]">Use a clear front-facing person and a garment-only product image on a plain background. Use garment-only photos; images of someone wearing the garment may fail preparation checks.</p>
 
             <div className="mt-8 space-y-7">
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">Person image</span>
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectImage(event.target.files?.[0] || null, 'person', setPersonImage)} className="block min-w-0 max-w-full border border-black/15 bg-white p-3 text-sm file:mr-4 file:border-0 file:bg-[#e3e9e3] file:px-4 file:py-2 file:font-semibold" />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectImage(event.target.files?.[0] || null, 'person', setPersonImage)} className="block w-full min-w-0 max-w-full border border-black/15 bg-white p-3 text-sm file:mr-4 file:border-0 file:bg-[#e3e9e3] file:px-4 file:py-2 file:font-semibold" />
                 {personPreviewUrl ? <img src={personPreviewUrl} alt="Person preview" className="mt-3 h-52 w-full border border-black/10 bg-white object-contain" /> : null}
               </label>
 
               <label className="block">
                 <span className="mb-2 block text-sm font-bold">Garment image</span>
-                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectImage(event.target.files?.[0] || null, 'garment', setClothImage)} className="block min-w-0 max-w-full border border-black/15 bg-white p-3 text-sm file:mr-4 file:border-0 file:bg-[#e3e9e3] file:px-4 file:py-2 file:font-semibold" />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectImage(event.target.files?.[0] || null, 'garment', setClothImage)} className="block w-full min-w-0 max-w-full border border-black/15 bg-white p-3 text-sm file:mr-4 file:border-0 file:bg-[#e3e9e3] file:px-4 file:py-2 file:font-semibold" />
                 {clothPreviewUrl ? <img src={clothPreviewUrl} alt="Garment preview" className="mt-3 h-52 w-full border border-black/10 bg-white object-contain" /> : null}
               </label>
 
@@ -236,12 +249,13 @@ export default function DemoClient() {
                 </span>
               </label>
 
-              <button type="button" onClick={runDemo} disabled={isSubmitting || !hasConsent} className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48] disabled:cursor-not-allowed disabled:opacity-50">
+              <p role="status" className="text-sm leading-6 text-[#415047]">{available === null ? 'Checking demo availability…' : available ? 'The service reports ready. Review each result before use.' : 'Demo generation is currently unavailable. You can select files for a local preview; they will not be uploaded until you run an available demo.'}</p>
+              <button type="button" onClick={runDemo} disabled={isSubmitting || !hasConsent || !available} className="inline-flex h-12 w-full items-center justify-center gap-2 bg-[#183f32] px-5 text-sm font-bold text-white hover:bg-[#245a48] disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                 {isSubmitting ? 'Running demo...' : 'Run Free Try-On'}
               </button>
 
-              {status ? <div role="status" className={`border p-4 text-sm ${statusTone}`}>{status}</div> : null}
+              <FeedbackMessage feedback={status ? { message: status, tone: feedbackTone } : null} />
             </div>
           </div>
 
@@ -260,7 +274,7 @@ export default function DemoClient() {
               {resultUrl ? (
                 <a href={resultUrl} download="drapixai-demo-result.png" className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-[#183f32] hover:text-[#31725b]"><Download className="h-4 w-4" /> Download result</a>
               ) : null}
-              <p className="text-sm leading-6 text-[#68736b]">Need production testing? A trial workspace adds garment caching, analytics, product mapping, and storefront installation.</p>
+              <p className="text-sm leading-6 text-[#68736b]">A workspace helps prepare products and review your setup. Generation and storefront access require service availability and approval.</p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link href="/auth/register" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_start_trial' } })} className="inline-flex h-11 items-center bg-[#183f32] px-4 text-sm font-bold text-white hover:bg-[#245a48]">Start free trial</Link>
                 <Link href="/help" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_read_help' } })} className="inline-flex h-11 items-center border border-black/15 px-4 text-sm font-bold hover:bg-[#f1f4f0]">Open help</Link>

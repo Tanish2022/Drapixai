@@ -20,7 +20,11 @@ class UsageLimiter:
             next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
         else:
             next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
-        return int((next_month - now).total_seconds())
+        return max(1, int((next_month - now).total_seconds()))
+
+    def has_capacity(self, user_id: str) -> bool:
+        key = self._month_key(user_id, datetime.now(timezone.utc))
+        return int(self.redis.get(key) or 0) < settings.monthly_basic_limit
 
     def check_and_increment(self, user_id: str) -> bool:
         now = datetime.now(timezone.utc)

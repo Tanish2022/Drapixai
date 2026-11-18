@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import numpy as np
 from PIL import Image
+
+from drapixai_ai.quality.lower_body_policy import (
+    MINIMUM_RESULT_SCORE,
+    is_unit_score,
+    lower_body_blocking_warnings,
+)
 
 from drapixai_ai.preprocess.lower_body_regions import (
     build_lower_body_region_masks,
@@ -28,14 +34,22 @@ class LowerBodyBenchmarkThresholds:
 
 
 LOWER_BODY_BENCHMARK_THRESHOLDS: dict[str, LowerBodyBenchmarkThresholds] = {
-    "jeans": LowerBodyBenchmarkThresholds(0.90, 0.82, 0.84, 0.86, 0.96, 0.62, 0.62, 0.60, 0.62, 0.60, 0.92),
-    "pants": LowerBodyBenchmarkThresholds(0.90, 0.82, 0.82, 0.84, 0.96, 0.62, 0.60, 0.60, 0.62, 0.60, 0.92),
-    "trousers": LowerBodyBenchmarkThresholds(0.91, 0.84, 0.84, 0.86, 0.96, 0.66, 0.62, 0.62, 0.66, 0.62, 0.92),
-    "joggers": LowerBodyBenchmarkThresholds(0.89, 0.82, 0.80, 0.82, 0.96, 0.60, 0.58, 0.58, 0.64, 0.62, 0.94),
-    "shorts": LowerBodyBenchmarkThresholds(0.90, 0.84, 0.82, 0.84, 0.97, 0.62, 0.62, 0.92, 0.66, 0.92, 0.94),
-    "skirt": LowerBodyBenchmarkThresholds(0.90, 0.84, 0.84, 0.86, 0.97, 0.64, 0.00, 0.58, 0.68, 0.92, 0.94),
-    "leggings": LowerBodyBenchmarkThresholds(0.92, 0.86, 0.86, 0.86, 0.97, 0.66, 0.66, 0.64, 0.66, 0.64, 0.94),
+    "jeans": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.82, 0.84, 0.86, 0.96, 0.62, 0.62, 0.60, 0.62, 0.60, 0.92),
+    "pants": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.82, 0.82, 0.84, 0.96, 0.62, 0.60, 0.60, 0.62, 0.60, 0.92),
+    "trousers": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.84, 0.84, 0.86, 0.96, 0.66, 0.62, 0.62, 0.66, 0.62, 0.92),
+    "joggers": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.82, 0.80, 0.82, 0.96, 0.60, 0.58, 0.58, 0.64, 0.62, 0.94),
+    "shorts": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.84, 0.82, 0.84, 0.97, 0.62, 0.62, 0.92, 0.66, 0.92, 0.94),
+    "skirt": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.84, 0.84, 0.86, 0.97, 0.64, 0.00, 0.58, 0.68, 0.92, 0.94),
+    "leggings": LowerBodyBenchmarkThresholds(MINIMUM_RESULT_SCORE, 0.86, 0.86, 0.86, 0.97, 0.66, 0.66, 0.64, 0.66, 0.64, 0.94),
 }
+
+
+def lower_body_metric_failures(category: str, values: dict[str, object]) -> list[str]:
+    thresholds = asdict(LOWER_BODY_BENCHMARK_THRESHOLDS[category])
+    return [
+        name for name, threshold in thresholds.items()
+        if not is_unit_score(values.get(name)) or values[name] < threshold
+    ]
 
 
 STAGE_ORDER = {
@@ -65,11 +79,27 @@ def evaluate_lower_body_benchmark_case(
     quality_score: float,
     metrics: dict[str, float],
     admin_status: str = "pending",
+    warnings: object = (),
 ) -> dict[str, object]:
     normalized = normalize_lower_body_category(category)
     thresholds = LOWER_BODY_BENCHMARK_THRESHOLDS[normalized]
     profile = lower_body_region_profile(normalized)
     masks = build_lower_body_region_masks(candidate, normalized)
+    score_metric_names = {
+        "waistband_alignment", "crotch_artifact_score", "knee_preservation",
+        "hem_alignment", "ankle_preservation", "shoe_preservation",
+        "left_leg_integrity", "right_leg_integrity", "lower_garment_coverage",
+        "edge_quality", "lower_garment_texture_similarity",
+        "lower_garment_color_similarity", "face_preservation",
+        "upper_body_preservation", "background_cast_score",
+    }
+    invalid_metrics = sorted(
+        name for name in score_metric_names & metrics.keys() if not is_unit_score(metrics[name])
+    )
+    metrics = {
+        name: value if name not in invalid_metrics else 0.0
+        for name, value in metrics.items()
+    }
 
     preservation = {
         name: _pixel_preservation(person, candidate, masks[name])
@@ -132,26 +162,30 @@ def evaluate_lower_body_benchmark_case(
         "shoe": thresholds.shoe,
     }
     values = {
-        "overall": float(quality_score),
+        "overall": quality_score if is_unit_score(quality_score) else None,
         "shape": shape_score,
         "texture": texture_score,
         "color": color_score,
         "context": context_score,
         **anatomy,
     }
-    metric_pass = {name: values[name] >= threshold for name, threshold in threshold_map.items()}
-    failed_metrics = [name for name, passed in metric_pass.items() if not passed]
+    failed_metrics = lower_body_metric_failures(normalized, values)
+    metric_pass = {name: name not in failed_metrics for name in threshold_map}
+    blocking_warnings = lower_body_blocking_warnings(warnings, normalized)
+    automated_passed = not failed_metrics and not invalid_metrics and not blocking_warnings
     admin_approved = admin_status.strip().lower() == "approved"
 
     return {
         "category": normalized,
         "stage": CATEGORY_STAGE[normalized],
         "stage_order": STAGE_ORDER[CATEGORY_STAGE[normalized]],
-        "passed_automated": not failed_metrics,
+        "passed_automated": automated_passed,
         "passed_admin": admin_approved,
-        "passed_release_gate": not failed_metrics and admin_approved,
+        "passed_release_gate": automated_passed and admin_approved,
         "admin_status": admin_status,
         "failed_metrics": failed_metrics,
+        "invalid_metrics": invalid_metrics,
+        "blocking_warnings": blocking_warnings,
         "metrics": values,
         "thresholds": threshold_map,
         "metric_pass": metric_pass,

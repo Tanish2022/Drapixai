@@ -10,7 +10,7 @@ type DashboardProxyContext = {
 };
 
 const allowedSdkRoots = new Set(['garments', 'catalog', 'matches', 'result']);
-const allowedShopifyActions = new Set(['link', 'status', 'sync', 'disconnect', 'preparation', 'prepare']);
+const allowedShopifyActions = new Set(['link', 'link-preview', 'status', 'sync', 'disconnect', 'preparation', 'prepare']);
 const allowedBillingActions = new Set(['checkout', 'portal']);
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
 

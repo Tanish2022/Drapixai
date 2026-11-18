@@ -1,0 +1,4 @@
+# Immutable source distributions for the internal lower-body candidate.
+# fashn-vton 1.5.0 is a source version, not an available PyPI package release.
+fashn-vton @ https://codeload.github.com/fashn-AI/fashn-vton-1.5/tar.gz/7c0f10af3f91ad4048fe9729c470a13ef905d25a#sha256=b5b490bdec6d404d8db397f7bb7639d5d4d78f68677e90f9e3bc495d892032f8
+fashn-human-parser @ https://files.pythonhosted.org/packages/91/6b/890c87616a410073debb388b0c5997c92cb7f55bdca4aa370c5938a7e50d/fashn_human_parser-0.1.1-py3-none-any.whl#sha256=3d84a1959148d29f169ed78aa46b9ae8562e7df3f22465cc8f599adc8fdc04b8

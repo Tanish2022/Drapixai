@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { aiFetch } from '../lib/ai-client';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { createRequestRedis } from '../lib/request-redis';
 import { sendGarmentApprovalEmail } from '../services/emailer';
@@ -16,7 +16,6 @@ import { hasPermission } from '../lib/authorization';
 import { ADMIN_MFA_SCOPE } from '../lib/admin-mfa';
 
 const router = Router();
-const prisma = new PrismaClient();
 const ADMIN_EMAIL = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
 const ADMIN_USER_ID = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
 const s3 = createStorageClient();
@@ -83,7 +82,11 @@ const sendStoredImage = async (res: any, storedUrl: string | null | undefined) =
 };
 
 const adminAuth = async (req: any, res: any, next: any) => {
-  const activeKey = await resolveActiveApiKey(prisma, req.headers.authorization);
+  // Identity verification establishes the MFA cookie; operational routes still
+  // require current terms. This lets an operator reach the acceptance screen.
+  const activeKey = await resolveActiveApiKey(prisma, req.headers.authorization, {
+    allowUnacceptedTerms: req.method === 'GET' && req.path === '/verify',
+  });
   if (!activeKey) {
     return res.status(401).json({ error: 'INVALID_API_KEY' });
   }

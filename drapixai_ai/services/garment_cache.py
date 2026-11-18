@@ -25,10 +25,11 @@ class GarmentCache:
 
     def __init__(self) -> None:
         self.base_dir = Path(settings.garment_cache_dir)
-        self.base_dir.mkdir(parents=True, exist_ok=True)
         self.backend = settings.garment_cache_backend.lower()
         self.s3_client = None
-        if self.backend == "s3":
+        if self.backend == "local":
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+        elif self.backend == "s3":
             try:
                 import boto3  # type: ignore
                 self.s3_client = boto3.client(
@@ -38,9 +39,10 @@ class GarmentCache:
                     aws_access_key_id=settings.s3_access_key_id or None,
                     aws_secret_access_key=settings.s3_secret_access_key or None,
                 )
-            except Exception as exc:
-                logger.error("s3_client_init_failed", extra={"error": str(exc)})
-                self.backend = "local"
+            except Exception:
+                raise RuntimeError("GARMENT_CACHE_S3_INIT_FAILED") from None
+        else:
+            raise ValueError("GARMENT_CACHE_BACKEND_INVALID")
 
     @staticmethod
     def compute_hash(image_bytes: bytes) -> str:

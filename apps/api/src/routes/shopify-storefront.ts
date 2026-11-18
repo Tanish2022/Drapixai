@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { issueStorefrontToken } from '../lib/api-key-auth';
 import {
   normalizeOriginHost,
@@ -10,7 +10,6 @@ import { getShopifyStorefrontConfig, getShopifyStorefrontSessionConfig } from '.
 import { resolveConfirmedGarmentForProduct } from '../lib/catalog-matching';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.options('/storefront/config', async (req, res) => {
   const shop = normalizeShopDomain(req.query.shop);

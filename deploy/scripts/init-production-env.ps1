@@ -114,6 +114,7 @@ Write-EnvFile `
         "DRAPIXAI_CORS_ORIGINS" = "https://$Domain,https://www.$Domain"
         "DRAPIXAI_ADMIN_EMAIL" = $AdminEmail
         "DRAPIXAI_ADMIN_PASSWORD" = $adminPassword
+        "DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED" = "1"
         "DRAPIXAI_ADMIN_TOTP_SECRET" = $adminTotpSecret
         "DRAPIXAI_PUBLIC_API_BASE_URL" = "https://$apiDomain"
         "DRAPIXAI_WEB_BASE_URL" = "https://$Domain"

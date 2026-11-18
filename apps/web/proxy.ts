@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from '@/app/lib/admin-session';
-import { DASHBOARD_SESSION_COOKIE, verifyDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
+import { DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { getToken } from 'next-auth/jwt';
+import { readAccountTermsState } from '@/app/lib/account-terms-server';
+import archivedTerms from '../api/src/legal/terms-2026-10-19.json';
+import currentTerms from '../api/src/legal/terms-2026-10-21.json';
+import discoveryPolicy from '@/app/lib/discovery-policy.cjs';
+import { discoveryPage } from '@/app/lib/discovery-pages';
 
 const parseAllowedOrigins = (value: string) => value
   .split(',')
@@ -45,8 +51,11 @@ const buildContentSecurityPolicy = (nonce: string) => {
   ].join('; ');
 };
 
-const withCsp = (response: NextResponse, policy: string) => {
+const withCsp = (response: NextResponse, policy: string, pathname: string) => {
   response.headers.set('Content-Security-Policy', policy);
+  if (!discoveryPolicy.publicIndexingEnabled() || !discoveryPage(pathname)) {
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  }
   return response;
 };
 
@@ -56,29 +65,53 @@ export async function proxy(req: NextRequest) {
   const policy = buildContentSecurityPolicy(nonce);
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-nonce', nonce);
+  // Metadata must use the actual route, never a caller-supplied path or query.
+  requestHeaders.set('x-drapixai-pathname', pathname);
   requestHeaders.set('Content-Security-Policy', policy);
+  // Reject unknown versions before rendering starts. A streamed notFound()
+  // response can otherwise keep HTTP 200 even though its body is an error page.
+  if (pathname.startsWith('/terms/') && ![archivedTerms.version, currentTerms.version].includes(pathname.slice('/terms/'.length).replace(/\/$/, ''))) {
+    return withCsp(new NextResponse('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terms version not found | DrapixAI</title></head><body><main><h1>Terms version not found</h1><p>This terms version is not available.</p><p><a href="/terms">Read the current terms</a></p><p><a href="/contact">Contact support</a></p></main></body></html>', {
+      status: 404,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Robots-Tag': 'noindex, nofollow', 'Cache-Control': 'no-store' },
+    }), policy, pathname);
+  }
   const isProtectedAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  const isProtectedMerchantRoute = ['/onboarding', '/dashboard', '/settings', '/subscription', '/sdk-install', '/shopify/connect']
+    .some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  let accountKey = '';
   if (isProtectedAdminRoute) {
-    const adminSession = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;
-    if (!(await verifyAdminSessionToken(adminSession))) {
+    accountKey = (await readAdminSessionToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value))?.apiKey || '';
+  }
+  if (isProtectedMerchantRoute) {
+    accountKey = (await readDashboardSessionToken(req.cookies.get(DASHBOARD_SESSION_COOKIE)?.value))?.apiKey || '';
+    if (!accountKey) {
+      const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+      accountKey = typeof token?.apiKey === 'string' ? token.apiKey.trim() : '';
+    }
+  }
+  if (isProtectedAdminRoute || isProtectedMerchantRoute) {
+    const terms = accountKey ? await readAccountTermsState(accountKey) : null;
+    if (!accountKey || terms?.status === 401) {
       const url = req.nextUrl.clone();
-      url.pathname = '/admin-access';
-      return withCsp(NextResponse.redirect(url), policy);
+      url.pathname = isProtectedAdminRoute ? '/admin-access' : '/auth/login';
+      url.search = '';
+      url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
+      return withCsp(NextResponse.redirect(url), policy, pathname);
+    }
+    if (!terms?.state) return withCsp(new NextResponse('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Account access temporarily unavailable | DrapixAI</title></head><body><main><h1>Account access is temporarily unavailable</h1><p>We could not check your account right now. This does not mean your password is incorrect.</p><p><a href="">Try loading again</a></p><p><a href="/status">Check service status</a></p><p><a href="/contact">Contact support</a></p></main></body></html>', {
+      status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '5', 'Content-Type': 'text/html; charset=utf-8' },
+    }), policy, pathname);
+    if (!terms.state.accepted) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/auth/terms'; url.search = '';
+      if (isProtectedAdminRoute) url.searchParams.set('scope', 'admin');
+      url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
+      return withCsp(NextResponse.redirect(url), policy, pathname);
     }
   }
 
-  if (pathname.startsWith('/onboarding') || pathname.startsWith('/dashboard') || pathname.startsWith('/settings') || pathname.startsWith('/subscription') || pathname.startsWith('/sdk-install')) {
-    const dashboardSession = req.cookies.get(DASHBOARD_SESSION_COOKIE)?.value;
-    const hasDashboardSession = await verifyDashboardSessionToken(dashboardSession);
-    if (!hasDashboardSession) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/auth/login';
-      url.searchParams.set('next', pathname);
-      return withCsp(NextResponse.redirect(url), policy);
-    }
-  }
-
-  return withCsp(NextResponse.next({ request: { headers: requestHeaders } }), policy);
+  return withCsp(NextResponse.next({ request: { headers: requestHeaders } }), policy, pathname);
 }
 
 export const config = {

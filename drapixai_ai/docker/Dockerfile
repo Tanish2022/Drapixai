@@ -34,7 +34,7 @@ RUN /usr/bin/python3 -m venv --system-site-packages "$VIRTUAL_ENV" \
     && python -m pip install -r /tmp/requirements.txt \
     && python -m pip check
 
-FROM ${DRAPIXAI_AI_BASE_IMAGE}
+FROM ${DRAPIXAI_AI_BASE_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="DrapixAI CatVTON runtime" \
       org.opencontainers.image.description="RTX PRO 6000 Blackwell Standard CatVTON runtime"
@@ -158,3 +158,31 @@ EXPOSE 8080
 USER 10001:10001
 
 CMD ["bash", "/workspace/drapixai/deploy/runpod/start-ai-api.sh"]
+
+# Explicit review target. Pass a named context containing only the two
+# independently digest-checked review wheels. Never use this target to serve.
+FROM runtime AS security-backport-review
+
+ARG ACCELERATE_REVIEW_SHA256
+ARG REMBG_REVIEW_SHA256
+LABEL org.opencontainers.image.title="DrapixAI CPU backport review fixture" \
+      com.drapixai.release.status="review-only"
+
+USER root
+RUN --network=none --mount=type=bind,from=review_wheels,target=/review-wheels <<'SH'
+set -eu
+cd /review-wheels
+accelerate_wheel=accelerate-1.11.0-1drapixai-py3-none-any.whl
+rembg_wheel=rembg-2.0.69-1drapixai-py3-none-any.whl
+printf '%s\n' "$ACCELERATE_REVIEW_SHA256" "$REMBG_REVIEW_SHA256" | grep -Ex '[0-9a-f]{64}' | awk 'END { exit NR != 2 }'
+printf '%s  %s\n' "$ACCELERATE_REVIEW_SHA256" "$accelerate_wheel" "$REMBG_REVIEW_SHA256" "$rembg_wheel" | sha256sum --check --strict
+python -m pip install --no-index --no-deps --force-reinstall "./$accelerate_wheel" "./$rembg_wheel"
+python -m pip check
+SH
+
+USER 10001:10001
+ENTRYPOINT ["python", "-c", "raise SystemExit('Backport review image: use an explicit test entrypoint')"]
+CMD []
+
+# Keep ordinary builds on the existing serving runtime.
+FROM runtime AS standard

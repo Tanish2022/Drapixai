@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, TryOnResult } from '@prisma/client';
 import { getPlanAccessContext, TRIAL_DAYS } from './plans';
 import { getUsagePeriodBounds, incrementUsageInTransaction, lockAccountUsage } from './usage';
 import { runDatabaseTransaction } from './database-transaction';
@@ -96,8 +96,26 @@ export const releaseUndispatchedUsage = async (prisma: PrismaClient, ticket: Quo
   });
 };
 
+// Server-only lifecycle proof, never supplied from request JSON. The caller
+// must establish no transport invocation or an authenticated terminal receipt.
+export const releaseProvenNoResultUsage = async (
+  prisma: PrismaClient, ticket: QuotaTicket,
+  reason: 'transport_not_invoked' | 'ai_not_dispatched' | 'ai_terminal_failure',
+) => {
+  if (ticket.kind !== 'tryon' || !['transport_not_invoked','ai_not_dispatched','ai_terminal_failure'].includes(reason)) throw new Error('QUOTA_RELEASE_PROOF_INVALID');
+  return runDatabaseTransaction(prisma, async transaction => {
+    await lockAccountUsage(transaction, ticket.userId);
+    const reservation = await readTicket(transaction, ticket);
+    if (reservation.status !== 'reserved' || reservation.tryOnResultId != null || reservation.renderId != null) return false;
+    await transaction.usageReservation.update({ where: { id: ticket.id }, data: { status: 'released', settledAt: new Date() } });
+    await auditReservation(transaction, ticket, 'billing.quota_released', { reason });
+    return true;
+  });
+};
+
 export const commitTryOnResultUsage = async (
   prisma: PrismaClient, ticket: QuotaTicket, data: Prisma.TryOnResultUncheckedCreateInput,
+  finalize?: (transaction: Prisma.TransactionClient, result: TryOnResult) => Promise<void>,
 ) => {
   if (ticket.kind !== 'tryon' || data.userId !== ticket.userId || data.apiKeyId !== ticket.apiKeyId
     || data.requestId !== ticket.requestId || !['generated', 'rejected'].includes(data.status || '')
@@ -120,6 +138,7 @@ export const commitTryOnResultUsage = async (
     await auditReservation(transaction, ticket, billable ? 'billing.quota_committed' : 'billing.quota_released', {
       tryOnResultId: result.id, reason: billable ? 'generated' : 'quality_rejected',
     });
+    await finalize?.(transaction, result);
     return result;
   });
 };

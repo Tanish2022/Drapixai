@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { issueApiKeyForUser, issueDashboardPreviewToken, resolveActiveApiKey } from '../lib/api-key-auth';
 import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
@@ -8,7 +8,6 @@ import { getTryOnConfidenceBadge, normalizeWarnings } from '../lib/tryon-quality
 import { getUserDailyUsage, getUserQuotaUsage } from '../lib/usage';
 
 const router = Router();
-const prisma = new PrismaClient();
 const analyticsRateLimit = createRateLimitMiddleware(120, 15 * 60 * 1000);
 
 router.use(analyticsRateLimit);

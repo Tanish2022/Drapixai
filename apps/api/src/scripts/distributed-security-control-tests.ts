@@ -20,7 +20,8 @@ const main = async () => {
   process.env.DRAPIXAI_TENANT_MAX_CONCURRENT_TRYONS = '1';
   process.env.DRAPIXAI_TRYON_SLOT_LEASE_MS = '30000';
 
-  const controlRedis = createClient({ url: redisUrl });
+  const controlRedis = createClient({ url: redisUrl, socket: { connectTimeout: 3000, reconnectStrategy: false } });
+  controlRedis.on('error', () => undefined);
   try {
     await controlRedis.connect();
   } catch {
@@ -30,6 +31,8 @@ const main = async () => {
   if (keys.length > 0) await controlRedis.del(keys);
 
   const concurrency = await import('../lib/tryon-concurrency');
+  process.env.DRAPIXAI_TRYON_ADMISSION_EPOCH = (await import('node:crypto')).randomUUID();
+  await concurrency.acknowledgeTryOnWorkersIdle(controlRedis, await concurrency.redisRunId(controlRedis), 'owned-disposable-fixture');
   const first = await concurrency.acquireTryOnSlot(101);
   assert.equal(first.ok, true);
   const sameTenant = await concurrency.acquireTryOnSlot(101);
@@ -55,6 +58,7 @@ const main = async () => {
   process.env.DRAPIXAI_TRYON_SLOT_LEASE_MS = '25';
   const expiringLease = await concurrency.acquireTryOnSlot(201);
   assert.equal(expiringLease.ok, true);
+  if (expiringLease.ok) concurrency.stopTryOnHeartbeatForTests(expiringLease.lease);
   await new Promise((resolve) => setTimeout(resolve, 80));
   const afterExpiry = await concurrency.acquireTryOnSlot(201);
   assert.equal(afterExpiry.ok, true, 'An expired GPU slot must be reclaimed after a process crash');
@@ -82,8 +86,8 @@ const main = async () => {
   const now = new Date();
   const staleAt = new Date(now.getTime() - 300_000);
   const [claimA, claimB] = await Promise.all([
-    claimWebhookDelivery(mockPrisma, 'delivery-1', now, staleAt),
-    claimWebhookDelivery(mockPrisma, 'delivery-1', now, staleAt),
+    claimWebhookDelivery(mockPrisma, 'delivery-1', 0, now, staleAt),
+    claimWebhookDelivery(mockPrisma, 'delivery-1', 0, now, staleAt),
   ]);
   assert.deepStrictEqual([claimA.count, claimB.count].sort(), [0, 1], 'Only one API replica may claim a webhook delivery');
 

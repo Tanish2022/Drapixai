@@ -3,10 +3,13 @@
  */
 
 import { Router } from 'express';
-import { aiFetch } from '../lib/ai-client';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { aiFetch, aiTransportFailure } from '../lib/ai-client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { createRequestRedis } from '../lib/request-redis';
-import { acquireTryOnSlot, releaseTryOnSlot } from '../lib/tryon-concurrency';
+import { acquireTryOnSlot } from '../lib/tryon-concurrency';
+import { dispatchTryOnWithUsage } from '../lib/tryon-dispatch';
+import { aiRequestSignal } from '../lib/ai-request-signal';
 import { requireTryOnIntake } from '../lib/tryon-intake';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import multer from 'multer';
@@ -46,6 +49,7 @@ import {
   getUploadRoot,
   isAllowedImageFileContent,
   isAllowedImageUpload,
+  detectImageMimeType,
   readLocalUploadFile,
   removeUploadedFile,
   sanitizePathSegment,
@@ -55,10 +59,11 @@ import {
 import { getUserMonthlyUsage, getUserQuotaUsage } from '../lib/usage';
 import {
   QuotaTicket, reserveTryOnUsage, markUsageDispatched, releaseUndispatchedUsage,
-  commitTryOnResultUsage, commitLegacyRenderUsage,
+  releaseProvenNoResultUsage, commitTryOnResultUsage, commitLegacyRenderUsage,
 } from '../lib/quota-reservations';
 import { hasPermission, ownsTenantResource } from '../lib/authorization';
-import { appendSecurityAudit } from '../lib/audit-log';
+import { appendSecurityAudit, appendSecurityAuditInTransaction } from '../lib/audit-log';
+import { completePublicTryOn, PublicTryOnReceipt } from '../lib/public-tryon-completion';
 import { validateMultipartFields } from '../lib/input-validation';
 import {
   SHOPPER_MEDIA_RETENTION,
@@ -67,7 +72,6 @@ import {
 } from '../lib/privacy';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use((_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, private');
@@ -1157,7 +1161,7 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
       const admission = await reserveTryOnUsage(prisma, user.id, apiKey.id, requestId, 'tryon');
       if (!admission.ok) return res.status(admission.reason === 'QUOTA_EXCEEDED' ? 429 : 403).json({ error: admission.reason });
       usageTicket = admission.ticket;
-      const slot = await acquireTryOnSlot(user.id);
+      const slot = await acquireTryOnSlot(user.id, aiRequestSignal(req, res));
       if (!slot.ok) {
         const unavailable = slot.reason === 'CONCURRENCY_CONTROL_UNAVAILABLE';
         res.setHeader('Retry-After', '2');
@@ -1171,19 +1175,23 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
         });
       }
 
-      let aiResponse: Response;
-      try {
-        await markUsageDispatched(prisma, usageTicket);
-        aiResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
+      const publicReceipt: PublicTryOnReceipt | undefined = res.locals.publicTryOnReceipt;
+      const aiResponse = await dispatchTryOnWithUsage(prisma, usageTicket, slot.lease, (reservationId) => {
+        if (publicReceipt) res.locals.publicTryOnOutcomePending = true;
+        return aiFetch(`${AI_URL}/ai/tryon/base64`, {
           method: 'POST',
-          headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+          signal: AbortSignal.any([slot.lease.signal, aiRequestSignal(req, res)]),
+          headers: getAiHeaders({
+            'Content-Type': 'application/json',
+            'X-Request-ID': slot.lease.token,
+            ...(AI_SERVICE_TOKEN ? { 'x-drapixai-quota-reservation': reservationId } : {}),
+          }),
           body: JSON.stringify(payload)
         });
-      } finally {
-        await releaseTryOnSlot(slot.lease);
-      }
+      });
 
       if (!aiResponse.ok) {
+        res.locals.publicTryOnOutcomePending = false;
         const errText = await aiResponse.text();
         const safeError = sanitizeUpstreamError('AI_TRYON_FAILED', errText);
         return res.status(aiResponse.status).json({
@@ -1193,7 +1201,21 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
       }
 
       const buffer = Buffer.from(await aiResponse.arrayBuffer());
-      const contentType = aiResponse.headers.get('content-type') || 'image/png';
+      const contentType = detectImageMimeType(buffer);
+      if (!contentType) {
+        try {
+          if (!await releaseProvenNoResultUsage(prisma, usageTicket, 'ai_terminal_failure')) {
+            throw new Error('QUOTA_RESERVATION_ALREADY_SETTLED');
+          }
+        } catch {
+          throw new Error('TRYON_QUOTA_RECONCILIATION_REQUIRED');
+        }
+        res.locals.publicTryOnOutcomePending = false;
+        return res.status(502).json({
+          error: 'TRY_ON_OUTPUT_MISSING',
+          message: 'The try-on did not produce an image. This request did not use your quota.',
+        });
+      }
       const engine = aiResponse.headers.get('x-drapixai-engine') || '';
       const qualityScore = aiResponse.headers.get('x-drapixai-quality-score') || '';
       const candidateCount = aiResponse.headers.get('x-drapixai-candidate-count') || '';
@@ -1256,22 +1278,23 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
           warnings: storedWarnings,
           status: resultStatus,
           rejectedAt: resultStatus === 'rejected' ? new Date() : undefined,
-      });
-
-      await appendSecurityAudit(prisma, {
-        actorUserId: user.id,
-        actorRole: user.role,
-        action: 'privacy.tryon_media.not_retained',
-        targetType: 'tryon_result',
-        targetId: String(tryOnResult.id),
-        requestId,
-        ip: req.ip,
-        metadata: {
-          personImageStored: false,
-          resultImageStored: false,
-          modelTrainingUse: 'none',
-          garmentAssetStored: Boolean(garmentReviewUrl),
-        },
+      }, async (transaction, result) => {
+        await appendSecurityAuditInTransaction(transaction, {
+          actorUserId: user.id,
+          actorRole: user.role,
+          action: 'privacy.tryon_media.not_retained',
+          targetType: 'tryon_result',
+          targetId: String(result.id),
+          requestId,
+          ip: req.ip,
+          metadata: {
+            personImageStored: false,
+            resultImageStored: false,
+            modelTrainingUse: 'none',
+            garmentAssetStored: Boolean(garmentReviewUrl),
+          },
+        });
+        if (publicReceipt) await completePublicTryOn(transaction, publicReceipt, result);
       });
 
       if (resultStatus === 'rejected') {
@@ -1315,6 +1338,9 @@ router.post('/tryon', authMiddleware, requireTryOnIntake, upload.fields([
     }
   } catch (error) {
     console.error('Try-on error:', formatLogError(error));
+    const failure = aiTransportFailure(error) || (res.locals.publicTryOnOutcomePending
+      ? aiTransportFailure(new Error('AI_WORK_OUTCOME_UNCONFIRMED')) : undefined);
+    if (failure) return res.status(failure.status).json(failure.body);
     res.status(500).json({ error: 'Try-on failed' });
   }
 });

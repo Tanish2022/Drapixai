@@ -240,6 +240,14 @@ esac
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertFalse(self.trace.exists(), "Stale evidence reached later certification checks")
 
+    def test_cpu_only_mode_cannot_reach_certification_checks(self):
+        with self.certification.open("a", encoding="utf-8") as stream:
+            stream.write("DRAPIXAI_SECURITY_TEST_MODE=cpu\n")
+        result = self.certify()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn("CPU-only security checks are partial", result.stderr)
+        self.assertFalse(self.trace.exists(), "CPU-only mode reached certification commands")
+
     def test_wrong_digest_and_failure_mixture_rejected_before_later_checks(self):
         for content in (render(evidence(image=OTHER_IMAGE)), render() + "FAIL: SECRET_SENTINEL\n"):
             with self.subTest(content=content[:150]):

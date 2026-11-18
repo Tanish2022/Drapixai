@@ -86,6 +86,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   letter-spacing: 0;
   scroll-margin-top: 6rem;
+  overflow-wrap: anywhere;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -121,6 +122,11 @@ progress.onboarding-progress::-moz-progress-bar {
 
 /* Keep keyboard focus visible even on controls with an outline utility. */
 :focus-visible {
-  outline: 3px solid #2b745a;
+  outline: 3px solid #183f32;
   outline-offset: 3px;
+  box-shadow: 0 0 0 6px #ffffff;
+}
+
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; box-shadow: none; }
 }

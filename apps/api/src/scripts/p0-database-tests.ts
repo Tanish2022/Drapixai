@@ -9,6 +9,7 @@ import { verifySecurityAuditChain } from '../lib/audit-log';
 import { runTryOnReviewRetention } from '../services/review-retention';
 import { verifyAdminSessions } from './admin-session-database-tests';
 import { verifyPasswordSessions } from './password-session-database-tests';
+import { verifyOperationalSafety } from './operational-safety-database-tests';
 
 const prisma = new PrismaClient();
 
@@ -38,8 +39,9 @@ async function main() {
       } });
       userIds.push(user.id);
     }
-    await verifyAdminSessions(prisma, userIds);
     await verifyPasswordSessions(prisma, userIds);
+    await verifyAdminSessions(prisma, userIds);
+    await verifyOperationalSafety(prisma);
     const cases = [
       { domain: 'verified.example.invalid', userId: userIds[0], kind: 'manual', active: true, allowed: true },
       { domain: 'revoked.example.invalid', userId: userIds[0], kind: 'manual', active: false, allowed: false },
@@ -122,7 +124,9 @@ async function main() {
     if (userIds.length) {
       await prisma.tryOnResult.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.apiKey.deleteMany({ where: { userId: { in: userIds } } });
-      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      // Do not disable immutable-assent triggers for fixture cleanup. The
+      // caller owns this disposable database and must destroy it afterwards.
+      await prisma.user.deleteMany({ where: { id: { in: userIds }, termsAcceptances: { none: {} } } });
     }
     if (previousUploadRoot === undefined) delete process.env.DRAPIXAI_UPLOAD_DIR;
     else process.env.DRAPIXAI_UPLOAD_DIR = previousUploadRoot;

@@ -1,9 +1,10 @@
 import MarketingFooter from '@/app/components/MarketingFooter';
 import MarketingNav from '@/app/components/MarketingNav';
+import type { ReactNode } from 'react';
 
 type LegalSection = {
   heading: string;
-  body: string[];
+  body: ReactNode[];
 };
 
 type LegalPageProps = {
@@ -19,10 +20,10 @@ export default function LegalPage({
   title,
   summary,
   sections,
-  updatedLabel = 'Notice revision: October 18, 2026',
+  updatedLabel = 'Notice revision: October 19, 2026',
 }: LegalPageProps) {
   return (
-    <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#fbfcf9] text-[#172019]">
       <MarketingNav />
       <section className="border-b border-black/10">
         <div className="mx-auto grid max-w-[1440px] gap-10 px-5 py-16 sm:px-8 md:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-12">
@@ -55,7 +56,7 @@ export default function LegalPage({
                 <div>
                   <h2 className="text-2xl font-semibold">{section.heading}</h2>
                   <div className="mt-5 space-y-5">
-                    {section.body.map((paragraph) => <p key={paragraph} className="max-w-3xl leading-8 text-[#5d6961]">{paragraph}</p>)}
+                    {section.body.map((paragraph, paragraphIndex) => <p key={`${section.heading}-${paragraphIndex}`} className="max-w-3xl leading-8 text-[#5d6961]">{paragraph}</p>)}
                   </div>
                 </div>
               </div>

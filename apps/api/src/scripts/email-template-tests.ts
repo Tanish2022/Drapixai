@@ -12,6 +12,10 @@ const templates = [
   buildWelcomeEmail('Example <Brand>'),
   buildGarmentDecisionEmail('SKU-<1042>', 'rejected', '<script>alert(1)</script>'),
   buildTrialReminderEmail(3),
+  buildOtpEmail('111222', 'email_change_current'),
+  buildOtpEmail('333444', 'email_change_new'),
+  buildGarmentDecisionEmail('SKU-1043', 'approved'),
+  buildTrialReminderEmail(1),
 ];
 
 for (const template of templates) {

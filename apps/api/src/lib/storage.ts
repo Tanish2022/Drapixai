@@ -1,11 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import { addAbortSignal, Readable } from 'stream';
 import { GetObjectCommand, PutObjectCommandInput, S3Client } from '@aws-sdk/client-s3';
 
 const region = process.env.AWS_REGION || 'us-east-1';
 const endpoint = (process.env.S3_ENDPOINT || '').trim();
 const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || '').trim();
 const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+const sessionToken = (process.env.AWS_SESSION_TOKEN || '').trim();
 const hasStaticCredentials = accessKeyId.length > 0 && secretAccessKey.length > 0;
 const isCustomEndpoint = endpoint.length > 0;
 const serverSideEncryption = (
@@ -42,6 +44,7 @@ export function createStorageClient() {
           credentials: {
             accessKeyId,
             secretAccessKey,
+            ...(sessionToken ? { sessionToken } : {}),
           },
         }
       : {}),
@@ -64,22 +67,53 @@ export function getStorageSummary() {
   };
 }
 
+const MAX_REPLAY_BYTES = 16 * 1024 * 1024;
+const isReplayKey = (key: string) => /^(session|outputs|tryon-review)\/.+/.test(key)
+  && !/[\x00-\x1f\x7f\\]/.test(key)
+  && !key.split('/').some(part => ['', '.', '..'].includes(part));
+
+const readReplayStream = async (body: Readable, signal: AbortSignal, length?: number) => {
+  if (length !== undefined && (length <= 0 || length > MAX_REPLAY_BYTES)) {
+    body.destroy();
+    return null;
+  }
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of addAbortSignal(signal, body)) {
+    size += chunk.length;
+    if (size > MAX_REPLAY_BYTES) return null;
+    chunks.push(Buffer.from(chunk));
+  }
+  return size > 0 && (length === undefined || size === length) ? Buffer.concat(chunks, size) : null;
+};
+
 export const readStoredObject = async (storedUrl: string | null | undefined): Promise<Buffer | null> => {
   if (!storedUrl) return null;
-  if (storedUrl.startsWith('local:')) {
-    if (!STORAGE_LOCAL_FALLBACK_ALLOWED) return null;
-    const root = path.resolve(process.env.DRAPIXAI_UPLOAD_DIR || 'uploads');
-    const target = path.resolve(storedUrl.slice('local:'.length));
-    const relative = path.relative(root, target);
-    if (relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(target)) return null;
-    return fs.readFileSync(target);
+  const signal = AbortSignal.timeout(5000);
+  try {
+    if (storedUrl.startsWith('local:') && STORAGE_LOCAL_FALLBACK_ALLOWED) {
+      const root = await fs.promises.realpath(process.env.DRAPIXAI_UPLOAD_DIR || 'uploads');
+      const target = await fs.promises.realpath(storedUrl.slice('local:'.length));
+      const relative = path.relative(root, target);
+      if (path.isAbsolute(relative) || !isReplayKey(relative.split(path.sep).join('/'))) return null;
+      const info = await fs.promises.stat(target);
+      if (!info.isFile() || info.size <= 0 || info.size > MAX_REPLAY_BYTES) return null;
+      signal.throwIfAborted();
+      return await readReplayStream(fs.createReadStream(target), signal, info.size);
+    }
+    const prefix = `s3://${STORAGE_BUCKET}/`;
+    if (!storedUrl.startsWith(prefix)) return null;
+    const key = storedUrl.slice(prefix.length);
+    if (!isReplayKey(key)) return null;
+    const client = createStorageClient();
+    try {
+      const response = await client.send(new GetObjectCommand({ Bucket: STORAGE_BUCKET, Key: key }), { abortSignal: signal });
+      if (!(response.Body instanceof Readable)) return null;
+      return await readReplayStream(response.Body, signal, response.ContentLength);
+    } finally {
+      client.destroy();
+    }
+  } catch {
+    return null;
   }
-  if (!storedUrl.startsWith('s3://')) return null;
-  const [bucket, ...keyParts] = storedUrl.slice('s3://'.length).split('/');
-  const key = keyParts.join('/');
-  if (!bucket || !key) return null;
-  const response: any = await createStorageClient().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const chunks: Buffer[] = [];
-  for await (const chunk of response.Body) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks);
 };

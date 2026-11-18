@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import asyncio
+import math
 import os
 import secrets
 import time
 from pathlib import Path
 
 from drapixai_ai.configs.settings import settings
+from drapixai_ai.services.logger import get_logger
 
 
 _REFERENCE_PREFIX = "spool:"
+_LOGGER = get_logger("drapixai_ai.transient_spool")
 
 
 def _spool_root() -> Path:
@@ -84,3 +88,16 @@ def cleanup_expired_transients(max_age_seconds: int | None = None) -> int:
         except FileNotFoundError:
             continue
     return removed
+
+
+async def run_transient_cleanup_loop(interval_seconds: float = 60) -> None:
+    """Expire orphaned spool files even when no new request or job arrives."""
+    if not math.isfinite(interval_seconds) or not 0 < interval_seconds <= 60:
+        raise ValueError("INVALID_TRANSIENT_CLEANUP_INTERVAL")
+    while True:
+        try:
+            await asyncio.to_thread(cleanup_expired_transients)
+        except Exception as exc:
+            # Filesystem messages can contain private paths or media identifiers.
+            _LOGGER.error("transient_spool_cleanup_failed", extra={"error_type": type(exc).__name__})
+        await asyncio.sleep(interval_seconds)

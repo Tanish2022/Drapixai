@@ -170,7 +170,6 @@ case "$profile" in
       DRAPIXAI_AI_SERVICE_TOKEN
       DRAPIXAI_CORS_ORIGINS
       DRAPIXAI_ADMIN_TOKEN
-      DRAPIXAI_ADMIN_PASSWORD
       DRAPIXAI_ADMIN_TOTP_SECRET
       DRAPIXAI_STOREFRONT_TOKEN_SECRET
       DRAPIXAI_AUDIT_LOG_SECRET
@@ -273,7 +272,9 @@ if [[ "$profile" == "api" ]]; then
   require_digest_pinned_release_image DRAPIXAI_WEB_RELEASE_IMAGE
   require_min_length DRAPIXAI_AI_SERVICE_TOKEN 32
   require_min_length DRAPIXAI_ADMIN_TOKEN 32
-  require_min_length DRAPIXAI_ADMIN_PASSWORD 12
+  if [[ "${DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED:-0}" == "1" ]]; then
+    require_min_length DRAPIXAI_ADMIN_PASSWORD 12
+  fi
   require_min_length DRAPIXAI_ADMIN_TOTP_SECRET 16
   require_min_length DRAPIXAI_STOREFRONT_TOKEN_SECRET 32
   require_min_length DRAPIXAI_AUDIT_LOG_SECRET 32
@@ -304,10 +305,24 @@ if [[ "$profile" == "api" ]]; then
   fi
   require_equals DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION "aws:kms"
   require_var DRAPIXAI_S3_KMS_KEY_ID
-  if [[ "$DATABASE_URL" != *"sslmode=verify-full"* ]]; then
-    echo "DATABASE_URL must set sslmode=verify-full" >&2
-    exit 1
-  fi
+  # Read the existing exported value in-process: never put the URL in argv.
+  python3 - <<'PY'
+import os
+from urllib.parse import urlsplit, parse_qsl
+try:
+    target = urlsplit(os.environ.get('DATABASE_URL', ''))
+    pairs = parse_qsl(target.query, keep_blank_values=True)
+    options = dict(pairs)
+    valid = (target.scheme in ('postgres', 'postgresql') and target.hostname
+             and target.username and target.password and len(target.path) > 1
+             and not target.fragment and 'host' not in options
+             and len(pairs) == len(options) and options.get('sslmode') == 'require'
+             and options.get('sslaccept') == 'strict')
+except (TypeError, ValueError):
+    valid = False
+if not valid:
+    raise SystemExit('DATABASE_URL must use PostgreSQL with sslmode=require and sslaccept=strict')
+PY
   if [[ "$REDIS_URL" != rediss://* ]]; then
     echo "REDIS_URL must use rediss:// in production" >&2
     exit 1

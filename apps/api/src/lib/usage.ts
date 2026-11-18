@@ -14,6 +14,7 @@ type UsagePeriodUser = {
   createdAt: Date;
   planType?: string | null;
   subscriptionProvider?: string | null;
+  subscriptionCurrentPeriodStartsAt?: Date | null;
   subscriptionCurrentPeriodEndsAt?: Date | null;
   trialExpiresAt?: Date | null;
 };
@@ -48,7 +49,7 @@ export const getUsagePeriodBounds = (user: UsagePeriodUser, at = new Date()) => 
     && ['starter', 'growth', 'pro'].includes(plan)
   ) {
     return {
-      periodStart: subtractUtcMonth(user.subscriptionCurrentPeriodEndsAt),
+      periodStart: user.subscriptionCurrentPeriodStartsAt || subtractUtcMonth(user.subscriptionCurrentPeriodEndsAt),
       periodEnd: user.subscriptionCurrentPeriodEndsAt,
       source: 'subscription' as const,
     };
@@ -67,6 +68,7 @@ export const getUserUsagePeriod = async (prisma: PrismaClient, userId: number, a
       createdAt: true,
       planType: true,
       subscriptionProvider: true,
+      subscriptionCurrentPeriodStartsAt: true,
       subscriptionCurrentPeriodEndsAt: true,
       trialExpiresAt: true,
     },
@@ -139,6 +141,7 @@ export const incrementApiKeyUsage = async (
             createdAt: true,
             planType: true,
             subscriptionProvider: true,
+            subscriptionCurrentPeriodStartsAt: true,
             subscriptionCurrentPeriodEndsAt: true,
             trialExpiresAt: true,
           },

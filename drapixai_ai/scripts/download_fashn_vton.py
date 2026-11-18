@@ -7,9 +7,11 @@ from pathlib import Path
 
 from huggingface_hub import hf_hub_download, snapshot_download
 
-MODEL_REVISION = "7720683168567eb5a2a4c67f15116c6e29c83ded"
-DWPOSE_REVISION = "548b5df25b84d9f4aac0611dfa1c2a7a12f15571"
-HUMAN_PARSER_REVISION = "1f80c34dbab321c5730dda5c3fea279fd3e97498"
+from drapixai_ai.services.lower_body_artifacts import EXPECTED_MODEL_REVISIONS, REQUIRED_MODEL_FILES
+
+MODEL_REVISION = EXPECTED_MODEL_REVISIONS["model"][1]
+DWPOSE_REVISION = EXPECTED_MODEL_REVISIONS["dwpose"][1]
+HUMAN_PARSER_REVISION = EXPECTED_MODEL_REVISIONS["human_parser"][1]
 
 
 def _sha256(path: Path) -> str:
@@ -42,16 +44,14 @@ def main() -> None:
             revision=args.dwpose_revision,
             local_dir=args.weights_dir / "dwpose",
         )
-    human_parser_snapshot = snapshot_download(
+    snapshot_download(
         repo_id="fashn-ai/fashn-human-parser",
         revision=args.human_parser_revision,
+        local_dir=args.weights_dir / "human_parser",
+        allow_patterns=["config.json", "model.safetensors"],
     )
 
-    required = (
-        args.weights_dir / "model.safetensors",
-        args.weights_dir / "dwpose" / "yolox_l.onnx",
-        args.weights_dir / "dwpose" / "dw-ll_ucoco_384.onnx",
-    )
+    required = tuple(args.weights_dir / relative for relative in REQUIRED_MODEL_FILES)
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError(f"FASHN_WEIGHT_DOWNLOAD_INCOMPLETE:{','.join(missing)}")
@@ -67,7 +67,7 @@ def main() -> None:
         "human_parser": {
             "repo_id": "fashn-ai/fashn-human-parser",
             "revision": args.human_parser_revision,
-            "cached_snapshot": human_parser_snapshot,
+            "local_directory": "human_parser",
         },
         "files": {
             str(path.relative_to(args.weights_dir)).replace("\\", "/"): {

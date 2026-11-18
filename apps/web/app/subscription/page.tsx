@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { CreditCard, ExternalLink, Gauge, Loader2, ShieldCheck, Store, UserCircle2 } from 'lucide-react';
 import { useThemePreference } from '@/app/lib/theme-client';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
+import { LoadFailure } from '@/app/components/FeedbackMessage';
+import { requestJson, userError, WebsiteError } from '@/app/lib/user-feedback';
 
 type UsageData = {
   planType: string;
@@ -30,6 +32,7 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const themePreference = useThemePreference();
   const [usage, setUsage] = useState<UsageData | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [billingAction, setBillingAction] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingNotice, setBillingNotice] = useState<'success' | 'canceled' | null>(null);
@@ -38,17 +41,15 @@ export default function SubscriptionPage() {
     let active = true;
 
     const bootstrap = async () => {
-      const sessionResponse = await fetch('/api/dashboard/session', { cache: 'no-store' }).catch(() => null);
-      if (!sessionResponse?.ok) {
-        router.push('/auth/login');
-        return;
-      }
-
-      const summaryResponse = await fetch('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' }).catch(() => null);
-
-      const summaryPayload = (await summaryResponse?.json().catch(() => null)) as UsageData | null;
-      if (active) {
-        setUsage(summaryPayload);
+      try {
+        await requestJson('/api/dashboard/session', { cache: 'no-store' });
+        const summary = await requestJson<UsageData>('/api/dashboard/proxy/analytics/summary', { cache: 'no-store' });
+        if (typeof summary.planName !== 'string' || typeof summary.quotaRemaining !== 'number') throw new Error('INVALID_SUMMARY');
+        if (active) setUsage(summary);
+      } catch (error) {
+        if (!active) return;
+        if (error instanceof WebsiteError && error.status === 401) router.replace('/auth/login?next=/subscription');
+        else setLoadError(userError(error, 'We could not load subscription details. Please try again.'));
       }
     };
 
@@ -67,8 +68,8 @@ export default function SubscriptionPage() {
   const cardClass = useMemo(
     () =>
       themePreference === 'light'
-        ? 'border border-black/10 bg-white p-6'
-        : 'border border-white/10 bg-[#151c17] p-6',
+        ? 'border border-black/10 bg-white p-6 text-[#172019]'
+        : 'border border-white/10 bg-[#151c17] p-6 text-[#edf2ed]',
     [themePreference]
   );
   const panelClass = useMemo(
@@ -87,16 +88,13 @@ export default function SubscriptionPage() {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (action === 'checkout') headers['Idempotency-Key'] = crypto.randomUUID();
-      const response = await fetch(`/api/dashboard/proxy/billing/${action}`, {
+      const payload = await requestJson(`/api/dashboard/proxy/billing/${action}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(plan ? { plan } : {}),
         cache: 'no-store',
-      });
-      const payload = await response.json().catch(() => null) as { url?: unknown; error?: unknown } | null;
-      if (!response.ok || typeof payload?.url !== 'string') {
-        throw new Error(typeof payload?.error === 'string' ? payload.error : 'BILLING_REQUEST_FAILED');
-      }
+      }, { fallback: 'Billing could not be opened. Check your subscription before trying again.' });
+      if (typeof payload.url !== 'string') throw new Error('INVALID_BILLING_RESPONSE');
       const hostedUrl = new URL(payload.url);
       const allowedHost = action === 'checkout' ? 'checkout.stripe.com' : 'billing.stripe.com';
       if (hostedUrl.protocol !== 'https:' || hostedUrl.hostname !== allowedHost) {
@@ -104,11 +102,12 @@ export default function SubscriptionPage() {
       }
       window.location.assign(hostedUrl.toString());
     } catch (error) {
-      setBillingError(error instanceof Error ? error.message : 'BILLING_REQUEST_FAILED');
+      setBillingError(userError(error, 'We could not verify the billing destination. Contact support before trying again.'));
       setBillingAction(null);
     }
   };
 
+  if (loadError) return <LoadFailure title="Subscription details are unavailable" message={loadError} />;
   if (!usage) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f4f6f2] px-6 text-[#172019]">
@@ -143,17 +142,17 @@ export default function SubscriptionPage() {
 
         {billingNotice === 'success' ? (
           <div className={`mb-8 border p-5 ${themePreference === 'light' ? 'border-emerald-200 bg-emerald-50 text-emerald-950' : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100'}`}>
-            Payment received. Your plan will update after the signed billing webhook confirms the subscription.
+            Checkout returned. Your plan will update after billing verification confirms the subscription.
           </div>
         ) : billingNotice === 'canceled' ? (
           <div className={`mb-8 border p-5 ${themePreference === 'light' ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-amber-400/30 bg-amber-500/10 text-amber-100'}`}>
-            Checkout was canceled. No plan change was applied.
+            Checkout was closed. Check the subscription details below and refresh if you completed a payment.
           </div>
         ) : null}
 
         {billingError ? (
           <div role="alert" className={`mb-8 border p-5 ${themePreference === 'light' ? 'border-rose-200 bg-rose-50 text-rose-950' : 'border-rose-400/30 bg-rose-500/10 text-rose-100'}`}>
-            Billing could not be opened safely. Please retry or contact support with code {billingError}.
+            {billingError}
           </div>
         ) : null}
 
@@ -168,7 +167,7 @@ export default function SubscriptionPage() {
               <Link href="/pricing" className={`inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-rose-500 text-white hover:bg-rose-400'} transition-colors`}>
                 Upgrade plan
               </Link>
-              <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'border-rose-200 text-rose-800 hover:bg-rose-100' : 'border-rose-300/30 text-rose-100 hover:bg-white/[0.05]'} transition-colors`}>
+              <a href="mailto:support@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className={`inline-flex items-center justify-center rounded-md border px-4 py-2 text-sm font-medium ${themePreference === 'light' ? 'border-rose-200 text-rose-800 hover:bg-rose-100' : 'border-rose-300/30 text-rose-100 hover:bg-white/[0.05]'} transition-colors`}>
                 Contact sales
               </a>
             </div>
@@ -285,7 +284,7 @@ export default function SubscriptionPage() {
                 <ExternalLink className="w-4 h-4" />
               </Link>
               {isQuotaExhausted ? (
-                <a href="mailto:sales@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
+                <a href="mailto:support@drapixai.com?subject=DrapixAI%20Quota%20Upgrade" className="inline-flex items-center gap-2 rounded-md border border-rose-400/30 px-4 py-2 text-sm hover:bg-white/[0.05] transition-colors">
                   Contact Sales
                 </a>
               ) : null}

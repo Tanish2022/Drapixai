@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import secrets
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -16,9 +18,15 @@ def token(bytes_count: int = 48) -> str:
 
 
 def write_private(path: Path, value: str) -> None:
-    path.write_text(value, encoding="utf-8", newline="\n")
-    if os.name != "nt":
-        path.chmod(0o600)
+    # mkstemp creates a private inode before any value is written. Replacing the
+    # destination never follows a pre-existing symlink or modifies its target.
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
+            output.write(value)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -80,7 +88,7 @@ def main() -> int:
         "DRAPIXAI_AI_SERVICE_TOKEN": ai_service_token,
         "DRAPIXAI_ADMIN_TOKEN": token(48),
         "DRAPIXAI_ADMIN_PASSWORD": token(32),
-        "DRAPIXAI_ADMIN_TOTP_SECRET": secrets.token_hex(20),
+        "DRAPIXAI_ADMIN_TOTP_SECRET": base64.b32encode(secrets.token_bytes(20)).decode("ascii"),
         "DRAPIXAI_STOREFRONT_TOKEN_SECRET": token(64),
         "DRAPIXAI_AUDIT_LOG_SECRET": token(64),
         "DRAPIXAI_WEBHOOK_ENCRYPTION_KEY": token(32),

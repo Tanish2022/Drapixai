@@ -30,6 +30,14 @@ from drapixai_ai.services.ai_ingress import normalize_request_id, read_limited_c
 from drapixai_ai.services.logger import get_logger
 from drapixai_ai.services.lower_body_validator import validate_lower_body_person
 from drapixai_ai.services.tryon_service import TryOnService
+from drapixai_ai.services.admission_protocol import (
+    TRYON_PATHS,
+    AdmissionProtocolMiddleware,
+    TryOnLimitExceeded,
+    TryOnPreDispatchFailure,
+    TryOnTerminalFailure,
+)
+from drapixai_ai.services.transient_spool import run_transient_cleanup_loop
 from drapixai_ai.services.upper_body_validator import is_upper_body
 
 app = FastAPI(title="DrapixAI", version="1.0.0")
@@ -37,6 +45,7 @@ service = TryOnService()
 garment_cache = GarmentCache()
 logger = get_logger("drapixai_ai.api")
 cache_purge_task: asyncio.Task | None = None
+spool_cleanup_task: asyncio.Task | None = None
 
 _UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
 
@@ -68,6 +77,24 @@ async def stop_garment_cache_purge() -> None:
         except asyncio.CancelledError:
             pass
         cache_purge_task = None
+
+
+@app.on_event("startup")
+async def start_transient_spool_cleanup() -> None:
+    global spool_cleanup_task
+    spool_cleanup_task = asyncio.create_task(run_transient_cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def stop_transient_spool_cleanup() -> None:
+    global spool_cleanup_task
+    if spool_cleanup_task:
+        spool_cleanup_task.cancel()
+        try:
+            await spool_cleanup_task
+        except asyncio.CancelledError:
+            pass
+        spool_cleanup_task = None
 
 
 @app.exception_handler(RequestValidationError)
@@ -290,7 +317,7 @@ def _tryon_profile_type(garment_type: str, garment_category: Optional[str]) -> s
     return f"lower:{category}" if category else "lower"
 
 
-def _validate_person_for_garment_type(person_bytes: bytes, garment_type: str) -> None:
+async def _validate_person_for_garment_type(person_bytes: bytes, garment_type: str) -> None:
     if garment_type == "upper":
         if settings.enforce_upper_body:
             ok, reason = is_upper_body(person_bytes)
@@ -298,8 +325,10 @@ def _validate_person_for_garment_type(person_bytes: bytes, garment_type: str) ->
                 raise HTTPException(status_code=400, detail=f"UPPER_BODY_ONLY:{reason}")
         return
 
-    result = validate_lower_body_person(person_bytes)
+    result = await asyncio.to_thread(validate_lower_body_person, person_bytes)
     if not result.ok:
+        if result.reason == "LOWER_BODY_POSE_UNAVAILABLE":
+            raise HTTPException(status_code=503, detail="LOWER_BODY_POSE_UNAVAILABLE")
         raise HTTPException(status_code=400, detail=f"LOWER_BODY_INVALID:{result.reason}")
 
 
@@ -367,6 +396,26 @@ async def request_logger(request, call_next):
                 content={"detail": "AI_SERVICE_TOKEN_REQUIRED"},
                 headers={"x-request-id": request_id},
             )
+    if request.url.path in TRYON_PATHS:
+        reservation_id = request.headers.get("x-drapixai-quota-reservation")
+        if reservation_id is not None:
+            # Only the authenticated API can attest that it reserved a plan unit.
+            if not settings.ai_service_token:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "AI_SERVICE_TOKEN_REQUIRED"},
+                    headers={"x-request-id": request_id},
+                )
+            try:
+                if len(reservation_id) != 36 or str(uuid.UUID(reservation_id)) != reservation_id:
+                    raise ValueError
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "AI_QUOTA_RESERVATION_INVALID"},
+                    headers={"x-request-id": request_id},
+                )
+            request.state.subscription_quota_reserved = True
     start = time.time()
     response = await call_next(request)
     duration_ms = int((time.time() - start) * 1000)
@@ -387,13 +436,18 @@ async def request_logger(request, call_next):
     return response
 
 
+# Register after request_logger so this receipt also wraps its pre-enqueue
+# auth/body refusals. Server errors without a receipt remain uncertain.
+app.add_middleware(AdmissionProtocolMiddleware)
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
 
 
 @app.get("/ready")
-async def ready(x_drapixai_service_token: Optional[str] = Header(default=None)) -> Response:
+def ready(x_drapixai_service_token: Optional[str] = Header(default=None)) -> Response:
     include_details = not _is_production() or (
         bool(settings.ai_service_token)
         and hmac.compare_digest(x_drapixai_service_token or "", settings.ai_service_token)
@@ -445,27 +499,43 @@ async def tryon(
 
     normalized_garment_type = _normalize_garment_type(garment_type)
     profile_garment_type = _tryon_profile_type(normalized_garment_type, garment_category)
-    _validate_person_for_garment_type(person_bytes, normalized_garment_type)
+    await _validate_person_for_garment_type(person_bytes, normalized_garment_type)
 
+    # Mark before enqueue: a lost enqueue acknowledgement may still mean work
+    # exists. Only the typed limiter refusal is known not to have dispatched.
+    request.state.admission_work_state = "uncertain"
     try:
-        job = service.enqueue_tryon(
+        job = await asyncio.to_thread(
+            service.enqueue_tryon,
             user_id=user_id,
             person_bytes=person_bytes,
             cloth_bytes=cloth_bytes,
             quality=quality_mode,
             request_id=getattr(request.state, "request_id", None),
             garment_type=profile_garment_type,
+            subscription_quota_reserved=getattr(request.state, "subscription_quota_reserved", False),
         )
-    except PermissionError:
+    except TryOnLimitExceeded:
+        request.state.admission_work_state = "not-dispatched"
         raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
+    except TryOnPreDispatchFailure as exc:
+        request.state.admission_work_state = "not-dispatched"
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     try:
         result = await asyncio.to_thread(service.wait_for_result, job)
     except TimeoutError:
         raise HTTPException(status_code=504, detail="TRY_ON_TIMEOUT")
+    except TryOnLimitExceeded:
+        request.state.admission_work_state = "terminal"
+        raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
+    except TryOnTerminalFailure:
+        request.state.admission_work_state = "terminal"
+        raise HTTPException(status_code=500, detail="TRY_ON_FAILED")
     except RuntimeError:
         raise HTTPException(status_code=500, detail="TRY_ON_FAILED")
 
+    request.state.admission_work_state = "terminal"
     logger.info(
         "tryon_result_metadata",
         extra={
@@ -549,7 +619,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
     if len(person_bytes) > settings.request_max_bytes:
         raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
     _validate_image_bytes(person_bytes, "person_image")
-    _validate_person_for_garment_type(person_bytes, normalized_garment_type)
+    await _validate_person_for_garment_type(person_bytes, normalized_garment_type)
 
     cloth_bytes = b""
     garment_source = "direct_upload"
@@ -568,25 +638,39 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
             raise HTTPException(status_code=413, detail="IMAGE_TOO_LARGE")
         _validate_image_bytes(cloth_bytes, "cloth_image")
 
+    request.state.admission_work_state = "uncertain"
     try:
-        job = service.enqueue_tryon(
+        job = await asyncio.to_thread(
+            service.enqueue_tryon,
             user_id=payload.user_id,
             person_bytes=person_bytes,
             cloth_bytes=cloth_bytes,
             quality=quality_mode,
             request_id=getattr(request.state, "request_id", None),
             garment_type=profile_garment_type,
+            subscription_quota_reserved=getattr(request.state, "subscription_quota_reserved", False),
         )
-    except PermissionError:
+    except TryOnLimitExceeded:
+        request.state.admission_work_state = "not-dispatched"
         raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
+    except TryOnPreDispatchFailure as exc:
+        request.state.admission_work_state = "not-dispatched"
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     try:
         result = await asyncio.to_thread(service.wait_for_result, job)
     except TimeoutError:
         raise HTTPException(status_code=504, detail="TRY_ON_TIMEOUT")
+    except TryOnLimitExceeded:
+        request.state.admission_work_state = "terminal"
+        raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
+    except TryOnTerminalFailure:
+        request.state.admission_work_state = "terminal"
+        raise HTTPException(status_code=500, detail="TRY_ON_FAILED")
     except RuntimeError:
         raise HTTPException(status_code=500, detail="TRY_ON_FAILED")
 
+    request.state.admission_work_state = "terminal"
     logger.info(
         "tryon_result_metadata",
         extra={

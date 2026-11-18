@@ -1,6 +1,7 @@
 node_modules/
 .next/
 .next-review/
+.next-shopify-verification/
 .next-compliance-audit/
 .next-browser-session-audit/
 .venv/

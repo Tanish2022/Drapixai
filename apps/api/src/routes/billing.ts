@@ -1,15 +1,16 @@
 import crypto from 'crypto';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { Request, Response, Router } from 'express';
 import Stripe from 'stripe';
-import { appendSecurityAudit } from '../lib/audit-log';
+import { appendSecurityAudit, appendSecurityAuditInTransaction } from '../lib/audit-log';
+import { DatabaseLockBusy, runDatabaseTransaction } from '../lib/database-transaction';
 import { resolveActiveApiKey } from '../lib/api-key-auth';
 import {
   BILLING_CHECKOUT_TTL_MS,
   BILLING_EVENT_CLAIM_TIMEOUT_MS,
   getBillingRedirectUrls,
   getBillingStatePriority,
-  getPlanForStripePrice,
   getStripeClient,
   getStripeInvoiceSubscriptionId,
   getStripePriceId,
@@ -26,8 +27,8 @@ import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
 import { normalizeSelectedPlan, type PublicPlanKey } from '../lib/plans';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { formatLogError } from '../lib/security';
+import { lockAccountUsage } from '../lib/usage';
 
-const prisma = new PrismaClient();
 const router = Router();
 export const stripeWebhookRouter = Router();
 
@@ -65,31 +66,49 @@ router.use(createRateLimitMiddleware(
   (req: BillingRequest) => `billing:${req.billingApiKey?.userId || 'unknown'}:${req.path}`,
 ));
 
-const recoverCheckoutAttempt = async (userId: number, keyHash: string, plan: PublicPlanKey) => {
-  const existing = await prisma.billingCheckoutAttempt.findUnique({
+const lockBillingAccount = async (db: Prisma.TransactionClient, userId: number) => {
+  const [lock] = await db.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(1730349238, ${userId}::integer) AS acquired`;
+  if (!lock?.acquired) throw new DatabaseLockBusy();
+};
+
+const claimCheckout = (userId: number, keyHash: string, plan: PublicPlanKey) => runDatabaseTransaction(prisma, async db => {
+  await lockBillingAccount(db, userId);
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) return { action: 'missing' as const };
+  if (user.subscriptionProvider === 'stripe' && user.subscriptionId
+    && !['canceled', 'incomplete_expired'].includes(String(user.subscriptionStatus || '').toLowerCase())) {
+    return { action: 'subscribed' as const };
+  }
+
+  const now = Date.now();
+  const existing = await db.billingCheckoutAttempt.findUnique({
     where: { userId_idempotencyKeyHash: { userId, idempotencyKeyHash: keyHash } },
   });
-  if (!existing) return { action: 'retry' as const, attempt: null };
-  if (existing.plan !== plan) return { action: 'conflict' as const, attempt: existing };
-  if (existing.providerSessionId) return { action: 'retrieve' as const, attempt: existing };
-  if (existing.status === 'creating' && existing.updatedAt > new Date(Date.now() - 60_000)) {
-    return { action: 'processing' as const, attempt: existing };
-  }
-  const reclaimed = await prisma.billingCheckoutAttempt.updateMany({
-    where: {
-      id: existing.id,
-      providerSessionId: null,
-      updatedAt: existing.updatedAt,
-    },
-    data: {
-      status: 'creating',
-      expiresAt: new Date(Date.now() + BILLING_CHECKOUT_TTL_MS),
-    },
+  if (existing && existing.plan !== plan) return { action: 'conflict' as const };
+  const competing = await db.billingCheckoutAttempt.findFirst({
+    where: { userId, idempotencyKeyHash: { not: keyHash }, status: { in: ['creating', 'created', 'failed'] } },
+    orderBy: { createdAt: 'asc' },
   });
-  return reclaimed.count === 1
-    ? { action: 'retry' as const, attempt: existing }
-    : { action: 'processing' as const, attempt: existing };
-};
+  if (competing) {
+    if (competing.providerSessionId && competing.status === 'created'
+      && (competing.plan === plan || competing.expiresAt.getTime() <= now)) {
+      return { action: 'retrieve' as const, sessionId: competing.providerSessionId, samePlan: competing.plan === plan };
+    }
+    return { action: 'processing' as const };
+  }
+
+  if (existing?.providerSessionId) return { action: 'retrieve' as const, sessionId: existing.providerSessionId, samePlan: true };
+  if (existing) {
+    if (now - existing.createdAt.getTime() >= 23 * 60 * 60 * 1000) return { action: 'reconcile' as const };
+    if (existing.status === 'creating' && existing.updatedAt > new Date(now - 60_000)) return { action: 'processing' as const };
+    await db.billingCheckoutAttempt.update({ where: { id: existing.id }, data: { status: 'creating' } });
+  } else {
+    await db.billingCheckoutAttempt.create({
+      data: { userId, idempotencyKeyHash: keyHash, plan, expiresAt: new Date(now + BILLING_CHECKOUT_TTL_MS) },
+    });
+  }
+  return { action: 'create' as const, user };
+});
 
 router.post('/checkout', async (req: BillingRequest, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -102,61 +121,29 @@ router.post('/checkout', async (req: BillingRequest, res) => {
   const keyHash = hashBillingIdempotencyKey(idempotencyKey);
   const auditRequestId = requestId(req);
 
-  let shouldCreate = false;
-  try {
-    await prisma.billingCheckoutAttempt.create({
-      data: {
-        userId: apiKey.userId,
-        idempotencyKeyHash: keyHash,
-        plan,
-        expiresAt: new Date(Date.now() + BILLING_CHECKOUT_TTL_MS),
-      },
-    });
-    shouldCreate = true;
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+  const claim = await claimCheckout(apiKey.userId, keyHash, plan);
+  if (claim.action === 'missing') return res.status(404).json({ error: 'ACCOUNT_NOT_FOUND' });
+  if (claim.action === 'subscribed') return res.status(409).json({ error: 'USE_BILLING_PORTAL_FOR_EXISTING_SUBSCRIPTION' });
+  if (claim.action === 'conflict') return res.status(409).json({ error: 'IDEMPOTENCY_KEY_REUSED_FOR_DIFFERENT_PLAN' });
+  if (claim.action === 'reconcile') return res.status(409).json({ error: 'BILLING_CHECKOUT_RECONCILIATION_REQUIRED' });
+  if (claim.action === 'processing') {
+    return res.status(409).json({ error: 'BILLING_CHECKOUT_IN_PROGRESS', message: 'Resume the original checkout or contact support.' });
   }
 
-  if (!shouldCreate) {
-    const recovered = await recoverCheckoutAttempt(apiKey.userId, keyHash, plan);
-    if (recovered.action === 'conflict') {
-      return res.status(409).json({ error: 'IDEMPOTENCY_KEY_REUSED_FOR_DIFFERENT_PLAN' });
-    }
-    if (recovered.action === 'processing') {
-      res.setHeader('Retry-After', '2');
-      return res.status(409).json({ error: 'BILLING_CHECKOUT_IN_PROGRESS' });
-    }
-    if (recovered.action === 'retrieve' && recovered.attempt?.providerSessionId) {
-      const session = await getStripeClient().checkout.sessions.retrieve(recovered.attempt.providerSessionId);
-      if (!session.url || session.status === 'complete' || session.status === 'expired') {
-        return res.status(409).json({ error: 'BILLING_CHECKOUT_ALREADY_FINALIZED' });
+  try {
+    if (claim.action === 'retrieve') {
+      const session = await getStripeClient().checkout.sessions.retrieve(claim.sessionId);
+      if (session.id !== claim.sessionId) throw new Error('STRIPE_CHECKOUT_SESSION_MISMATCH');
+      if (session.status === 'expired') {
+        await prisma.billingCheckoutAttempt.updateMany({
+          where: { userId: apiKey.userId, providerSessionId: claim.sessionId, status: 'created' }, data: { status: 'expired' },
+        });
       }
+      if (!session.url || session.status !== 'open') return res.status(409).json({ error: 'BILLING_CHECKOUT_ALREADY_FINALIZED' });
+      if (!claim.samePlan) return res.status(409).json({ error: 'BILLING_CHECKOUT_IN_PROGRESS' });
       return res.json({ url: session.url, reused: true });
     }
-  }
-
-  try {
-    const user = await prisma.user.findUnique({ where: { id: apiKey.userId } });
-    if (!user) return res.status(404).json({ error: 'ACCOUNT_NOT_FOUND' });
-    const reusableSubscriptionStatuses = new Set([
-      'active',
-      'trialing',
-      'past_due',
-      'unpaid',
-      'paused',
-      'incomplete',
-    ]);
-    if (
-      user.subscriptionProvider === 'stripe'
-      && user.subscriptionId
-      && reusableSubscriptionStatuses.has(String(user.subscriptionStatus || '').toLowerCase())
-    ) {
-      await prisma.billingCheckoutAttempt.updateMany({
-        where: { userId: user.id, idempotencyKeyHash: keyHash, providerSessionId: null },
-        data: { status: 'blocked_existing_subscription' },
-      });
-      return res.status(409).json({ error: 'USE_BILLING_PORTAL_FOR_EXISTING_SUBSCRIPTION' });
-    }
+    const { user } = claim;
     const urls = getBillingRedirectUrls();
     const session = await getStripeClient().checkout.sessions.create({
       mode: 'subscription',
@@ -244,31 +231,51 @@ router.post('/portal', async (req: BillingRequest, res) => {
   }
 });
 
-type ClaimResult = 'claimed' | 'processed' | 'busy';
+type ClaimResult = { status: 'claimed'; attemptCount: number } | { status: 'processed' } | { status: 'busy' };
 
-const claimWebhookEvent = async (event: Stripe.Event): Promise<ClaimResult> => {
+const billingEventDigest = (event: Stripe.Event) => {
+  // Bind signed business data and its stable envelope. Stripe's delivery counter
+  // may change on retries, and object property ordering has no business meaning.
+  const canonical = JSON.stringify({
+    id: event.id, type: event.type, created: event.created, livemode: event.livemode,
+    account: event.account, context: event.context, apiVersion: event.api_version, data: event.data,
+  }, (_key, value) => value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]]))
+    : value);
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+};
+
+const claimWebhookEvent = async (event: Stripe.Event, payloadDigest: string): Promise<ClaimResult> => {
   const providerCreatedAt = event.created > 0 ? new Date(event.created * 1000) : null;
   try {
-    await prisma.billingWebhookEvent.create({
+    const created = await prisma.billingWebhookEvent.create({
       data: {
         id: event.id,
         type: event.type,
         livemode: event.livemode,
+        payloadDigest,
         providerCreatedAt,
       },
     });
-    return 'claimed';
+    return { status: 'claimed', attemptCount: created.attemptCount };
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
   }
 
   const existing = await prisma.billingWebhookEvent.findUnique({ where: { id: event.id } });
-  if (existing?.status === 'processed') return 'processed';
-  if (!existing) return 'busy';
+  if (!existing) return { status: 'busy' };
+  if (existing.type !== event.type || existing.livemode !== event.livemode
+    || existing.providerCreatedAt?.getTime() !== providerCreatedAt?.getTime()
+    || (existing.payloadDigest !== null && existing.payloadDigest !== payloadDigest)) {
+    throw new Error('BILLING_EVENT_IDENTITY_CONFLICT');
+  }
+  if (existing.status === 'processed') return { status: 'processed' };
   const staleBefore = new Date(Date.now() - BILLING_EVENT_CLAIM_TIMEOUT_MS);
   const reclaimed = await prisma.billingWebhookEvent.updateMany({
     where: {
       id: event.id,
+      attemptCount: existing.attemptCount,
+      payloadDigest: existing.payloadDigest,
       OR: [
         { status: 'failed' },
         { status: 'processing', updatedAt: { lt: staleBefore } },
@@ -277,34 +284,46 @@ const claimWebhookEvent = async (event: Stripe.Event): Promise<ClaimResult> => {
     data: {
       status: 'processing',
       errorCode: null,
+      payloadDigest,
       attemptCount: { increment: 1 },
     },
   });
-  return reclaimed.count === 1 ? 'claimed' : 'busy';
+  return reclaimed.count === 1
+    ? { status: 'claimed', attemptCount: existing.attemptCount + 1 }
+    : { status: 'busy' };
 };
 
 const resolveWebhookUser = async (input: {
   metadataUserId?: number | null;
   customerId?: string | null;
   subscriptionId?: string | null;
-}) => {
+}, db: Prisma.TransactionClient = prisma) => {
   if (input.metadataUserId) {
-    const byId = await prisma.user.findUnique({ where: { id: input.metadataUserId } });
+    const byId = await db.user.findUnique({ where: { id: input.metadataUserId } });
     if (byId) return byId;
   }
   if (input.subscriptionId) {
-    const bySubscription = await prisma.user.findFirst({ where: { subscriptionId: input.subscriptionId } });
+    const bySubscription = await db.user.findFirst({ where: { subscriptionId: input.subscriptionId } });
     if (bySubscription) return bySubscription;
   }
   if (input.customerId) {
-    return prisma.user.findFirst({ where: { subscriptionCustomerId: input.customerId } });
+    return db.user.findFirst({ where: { subscriptionCustomerId: input.customerId } });
   }
   return null;
 };
 
-const applySubscriptionEvent = async (event: Stripe.Event) => {
+// All webhook writes use one transaction. Serialize per-account linkage checks
+// and re-read after the try-lock so concurrent events cannot use stale bindings.
+const resolveLockedWebhookUser = async (db: Prisma.TransactionClient, input: Parameters<typeof resolveWebhookUser>[0]) => {
+  const candidate = await resolveWebhookUser(input, db);
+  if (!candidate) return null;
+  await lockBillingAccount(db, candidate.id);
+  return db.user.findUnique({ where: { id: candidate.id } });
+};
+
+const applySubscriptionEvent = async (event: Stripe.Event, db: Prisma.TransactionClient) => {
   const snapshot = getStripeSubscriptionSnapshot(event.data.object);
-  const user = await resolveWebhookUser(snapshot);
+  const user = await resolveLockedWebhookUser(db, snapshot);
   if (!user) throw new Error('BILLING_USER_NOT_FOUND');
   if (!snapshot.subscriptionId || !snapshot.customerId) throw new Error('BILLING_SUBSCRIPTION_INVALID');
   if (!snapshot.plan) throw new Error('BILLING_PRICE_NOT_CONFIGURED');
@@ -319,10 +338,17 @@ const applySubscriptionEvent = async (event: Stripe.Event) => {
     throw new Error('BILLING_SUBSCRIPTION_MISMATCH');
   }
   const active = snapshot.status === 'active' || snapshot.status === 'trialing';
+  if (active && !snapshot.currentPeriodEndsAt) throw new Error('BILLING_PERIOD_INVALID');
+  if (snapshot.currentPeriodStartsAt && (!snapshot.currentPeriodEndsAt || snapshot.currentPeriodStartsAt >= snapshot.currentPeriodEndsAt)) {
+    throw new Error('BILLING_PERIOD_INVALID');
+  }
+  await lockAccountUsage(db, user.id);
+  const samePeriod = user.subscriptionProvider === 'stripe' && user.subscriptionId === snapshot.subscriptionId
+    && user.subscriptionCurrentPeriodEndsAt?.getTime() === snapshot.currentPeriodEndsAt?.getTime();
   const terminal = snapshot.status === 'canceled' || snapshot.status === 'incomplete_expired';
   const eventCreatedAt = new Date(event.created * 1000);
   const eventPriority = getBillingStatePriority(snapshot.status);
-  const updated = await prisma.user.updateMany({
+  const updated = await db.user.updateMany({
     where: {
       id: user.id,
       OR: [
@@ -341,6 +367,9 @@ const applySubscriptionEvent = async (event: Stripe.Event) => {
       subscriptionProvider: 'stripe',
       subscriptionCustomerId: snapshot.customerId,
       subscriptionId: snapshot.subscriptionId,
+      // Existing quota and holds use the start as part of their key. Keep the
+      // current window stable, then adopt the provider start on renewal.
+      subscriptionCurrentPeriodStartsAt: samePeriod ? user.subscriptionCurrentPeriodStartsAt : snapshot.currentPeriodStartsAt,
       subscriptionCurrentPeriodEndsAt: snapshot.currentPeriodEndsAt,
       subscriptionEventCreatedAt: eventCreatedAt,
       subscriptionEventPriority: eventPriority,
@@ -354,23 +383,29 @@ const applySubscriptionEvent = async (event: Stripe.Event) => {
   };
 };
 
-const applyCheckoutCompleted = async (event: Stripe.Event) => {
+const applyCheckoutCompleted = async (event: Stripe.Event, db: Prisma.TransactionClient) => {
   const session = event.data.object as Stripe.Checkout.Session;
   const metadataUserId = Number(session.metadata?.drapixai_user_id || session.client_reference_id);
   const customerId = stripeObjectId(session.customer);
   const subscriptionId = stripeObjectId(session.subscription);
   const plan = normalizeSelectedPlan(session.metadata?.plan);
-  const user = await resolveWebhookUser({
+  const user = await resolveLockedWebhookUser(db, {
     metadataUserId: Number.isSafeInteger(metadataUserId) && metadataUserId > 0 ? metadataUserId : null,
     customerId,
     subscriptionId,
   });
   if (!user || !customerId || !subscriptionId || !plan) throw new Error('BILLING_CHECKOUT_LINK_INVALID');
+  const attempt = await db.billingCheckoutAttempt.findUnique({ where: { providerSessionId: session.id } });
+  if (attempt && (attempt.userId !== user.id || attempt.plan !== plan)) throw new Error('BILLING_CHECKOUT_LINK_INVALID');
   if (user.subscriptionCustomerId && user.subscriptionCustomerId !== customerId) {
     throw new Error('BILLING_CUSTOMER_MISMATCH');
   }
+  if (user.subscriptionId && user.subscriptionId !== subscriptionId
+    && !['canceled', 'incomplete_expired'].includes(String(user.subscriptionStatus || '').toLowerCase())) {
+    throw new Error('BILLING_SUBSCRIPTION_MISMATCH');
+  }
   const eventCreatedAt = new Date(event.created * 1000);
-  const updated = await prisma.user.updateMany({
+  const updated = await db.user.updateMany({
     where: {
       id: user.id,
       OR: [
@@ -386,8 +421,8 @@ const applyCheckoutCompleted = async (event: Stripe.Event) => {
       subscriptionId,
     },
   });
-  await prisma.billingCheckoutAttempt.updateMany({
-    where: { providerSessionId: session.id },
+  await db.billingCheckoutAttempt.updateMany({
+    where: { providerSessionId: session.id, userId: user.id },
     data: { status: 'completed' },
   });
   return {
@@ -397,14 +432,14 @@ const applyCheckoutCompleted = async (event: Stripe.Event) => {
   };
 };
 
-const applyInvoiceEvent = async (event: Stripe.Event, paid: boolean) => {
+const applyInvoiceEvent = async (event: Stripe.Event, paid: boolean, db: Prisma.TransactionClient, current: Stripe.Subscription | undefined) => {
   const invoice = event.data.object as Stripe.Invoice;
   const subscriptionId = getStripeInvoiceSubscriptionId(invoice);
   if (!subscriptionId) {
     return { userId: null, plan: null, status: 'ignored_non_subscription_invoice' };
   }
   const customerId = stripeObjectId(invoice.customer);
-  const user = await resolveWebhookUser({ customerId, subscriptionId });
+  const user = await resolveLockedWebhookUser(db, { customerId, subscriptionId });
   if (!user) throw new Error('BILLING_USER_NOT_FOUND');
   if (user.subscriptionId && user.subscriptionId !== subscriptionId) {
     throw new Error('BILLING_SUBSCRIPTION_MISMATCH');
@@ -412,51 +447,37 @@ const applyInvoiceEvent = async (event: Stripe.Event, paid: boolean) => {
   if (customerId && user.subscriptionCustomerId && user.subscriptionCustomerId !== customerId) {
     throw new Error('BILLING_CUSTOMER_MISMATCH');
   }
-  const linePriceIds = (invoice.lines?.data || [])
-    .map((line) => stripeObjectId((line as any).pricing?.price_details?.price) || stripeObjectId((line as any).price))
-    .filter((value): value is string => Boolean(value));
-  const plan = linePriceIds.map(getPlanForStripePrice).find(Boolean) || normalizeSelectedPlan(user.subscriptionPlan);
-  if (!plan) throw new Error('BILLING_PRICE_NOT_CONFIGURED');
-  const eventCreatedAt = new Date(event.created * 1000);
-  const nextStatus = paid ? 'active' : 'past_due';
-  const eventPriority = getBillingStatePriority(nextStatus);
-  const updated = await prisma.user.updateMany({
-    where: {
-      id: user.id,
-      OR: [
-        { subscriptionEventCreatedAt: null },
-        { subscriptionEventCreatedAt: { lt: eventCreatedAt } },
-        {
-          subscriptionEventCreatedAt: eventCreatedAt,
-          subscriptionEventPriority: { lte: eventPriority },
-        },
-      ],
-    },
-    data: {
-      selectedPlan: plan,
-      subscriptionPlan: plan,
-      subscriptionStatus: paid ? 'active' : 'past_due',
-      subscriptionProvider: 'stripe',
-      subscriptionCustomerId: customerId || user.subscriptionCustomerId,
-      subscriptionId: subscriptionId || user.subscriptionId,
-      subscriptionEventCreatedAt: eventCreatedAt,
-      subscriptionEventPriority: eventPriority,
-      planType: paid ? plan : user.planType,
-    },
-  });
-  return {
-    userId: user.id,
-    plan,
-    status: updated.count === 1 ? nextStatus : 'ignored_stale',
-  };
+  if (!customerId || !invoice.id || (paid && invoice.status !== 'paid')) {
+    throw new Error('BILLING_INVOICE_INVALID');
+  }
+  // An invoice payment is not the current subscription state: an older invoice
+  // can be paid after cancellation or after a newer invoice has failed.
+  if (!current || current.id !== subscriptionId || stripeObjectId(current.customer) !== customerId
+    || current.livemode !== isStripeLiveMode()) throw new Error('BILLING_SUBSCRIPTION_MISMATCH');
+  if (stripeObjectId(current.latest_invoice) !== invoice.id) {
+    return { userId: user.id, plan: null, status: 'ignored_historical_invoice' };
+  }
+  return applySubscriptionEvent({ ...event, data: { object: current } } as Stripe.Event, db);
 };
 
-const processWebhookEvent = async (event: Stripe.Event) => {
-  if (event.type === 'checkout.session.completed') return applyCheckoutCompleted(event);
-  if (event.type.startsWith('customer.subscription.')) return applySubscriptionEvent(event);
-  if (event.type === 'invoice.paid') return applyInvoiceEvent(event, true);
-  if (event.type === 'invoice.payment_failed') return applyInvoiceEvent(event, false);
+const processWebhookEvent = async (event: Stripe.Event, db: Prisma.TransactionClient, current: Stripe.Subscription | undefined) => {
+  if (event.type === 'checkout.session.completed') return applyCheckoutCompleted(event, db);
+  if (event.type.startsWith('customer.subscription.')) return applySubscriptionEvent(event, db);
+  if (event.type === 'invoice.paid') return applyInvoiceEvent(event, true, db, current);
+  if (event.type === 'invoice.payment_failed') return applyInvoiceEvent(event, false, db, current);
   return { userId: null, plan: null, status: 'ignored' };
+};
+
+// Provider I/O is outside the database transaction; it never holds SQL locks.
+const prepareInvoiceSubscription = async (event: Stripe.Event) => {
+  if (!['invoice.paid', 'invoice.payment_failed'].includes(event.type)) return undefined;
+  const invoice = event.data.object as Stripe.Invoice;
+  const subscriptionId = getStripeInvoiceSubscriptionId(invoice);
+  if (!subscriptionId) return undefined;
+  if (!invoice.id || !stripeObjectId(invoice.customer) || (event.type === 'invoice.paid' && invoice.status !== 'paid')) {
+    throw new Error('BILLING_INVOICE_INVALID');
+  }
+  return getStripeClient().subscriptions.retrieve(subscriptionId);
 };
 
 stripeWebhookRouter.post('/', async (req, res) => {
@@ -473,30 +494,51 @@ stripeWebhookRouter.post('/', async (req, res) => {
     return res.status(400).json({ error: 'STRIPE_MODE_MISMATCH' });
   }
 
-  const claim = await claimWebhookEvent(event);
-  if (claim === 'processed') return res.json({ received: true, duplicate: true });
-  if (claim === 'busy') {
+  let claim: ClaimResult;
+  let payloadDigest: string;
+  try { payloadDigest = billingEventDigest(event); }
+  catch { return res.status(400).json({ error: 'STRIPE_EVENT_INVALID' }); }
+  try { claim = await claimWebhookEvent(event, payloadDigest); }
+  catch (error) {
+    if (error instanceof Error && error.message === 'BILLING_EVENT_IDENTITY_CONFLICT') {
+      return res.status(409).json({ error: 'BILLING_EVENT_IDENTITY_CONFLICT' });
+    }
+    throw error;
+  }
+  if (claim.status === 'processed') return res.json({ received: true, duplicate: true });
+  if (claim.status === 'busy') {
     res.setHeader('Retry-After', '5');
     return res.status(409).json({ error: 'STRIPE_EVENT_PROCESSING' });
   }
+  const attemptCount = claim.attemptCount;
 
   try {
-    const result = await processWebhookEvent(event);
-    await appendSecurityAudit(prisma, {
-      actorUserId: result.userId,
-      actorRole: 'billing_provider',
-      action: `billing.webhook.${event.type}`,
-      targetType: 'billing_event',
-      targetId: event.id,
-      metadata: {
-        plan: result.plan,
-        status: result.status,
-        livemode: event.livemode,
-      },
-    });
-    await prisma.billingWebhookEvent.update({
-      where: { id: event.id },
-      data: { status: 'processed', processedAt: new Date(), errorCode: null },
+    const current = await prepareInvoiceSubscription(event);
+    await runDatabaseTransaction(prisma, async db => {
+      // This conditional write also locks the receipt row until commit. A
+      // reclaimed old worker may neither apply state nor complete/fail its heir.
+      const owned = await db.billingWebhookEvent.updateMany({
+        where: { id: event.id, status: 'processing', attemptCount }, data: { errorCode: null },
+      });
+      if (owned.count !== 1) throw new Error('BILLING_EVENT_CLAIM_LOST');
+      const result = await processWebhookEvent(event, db, current);
+      await appendSecurityAuditInTransaction(db, {
+        actorUserId: result.userId,
+        actorRole: 'billing_provider',
+        action: `billing.webhook.${event.type}`,
+        targetType: 'billing_event',
+        targetId: event.id,
+        metadata: {
+          plan: result.plan,
+          status: result.status,
+          livemode: event.livemode,
+        },
+      });
+      const completed = await db.billingWebhookEvent.updateMany({
+        where: { id: event.id, status: 'processing', attemptCount },
+        data: { status: 'processed', processedAt: new Date(), errorCode: null },
+      });
+      if (completed.count !== 1) throw new Error('BILLING_EVENT_CLAIM_LOST');
     });
     return res.json({ received: true });
   } catch (error) {
@@ -504,7 +546,7 @@ stripeWebhookRouter.post('/', async (req, res) => {
       ? error.message
       : 'BILLING_EVENT_PROCESSING_FAILED';
     await prisma.billingWebhookEvent.updateMany({
-      where: { id: event.id, status: 'processing' },
+      where: { id: event.id, status: 'processing', attemptCount },
       data: { status: 'failed', errorCode },
     }).catch(() => undefined);
     console.error('Stripe webhook processing failed:', formatLogError(error));

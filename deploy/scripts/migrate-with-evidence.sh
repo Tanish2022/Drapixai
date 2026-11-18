@@ -29,14 +29,24 @@ if [[ "$environment" == "production" && "${DRAPIXAI_MIGRATION_APPROVAL:-}" != "I
   echo "Production requires DRAPIXAI_MIGRATION_APPROVAL=I_APPROVE_PRODUCTION_MIGRATION." >&2
   exit 2
 fi
-for command in pg_dump pg_restore psql sha256sum git npm; do
+for command in pg_dump pg_restore psql sha256sum git npm node cmp env mktemp chmod stat id uname; do
   command -v "$command" >/dev/null || {
     echo "Missing required command: $command" >&2
     exit 2
   }
 done
 
-actual_database="$(psql --dbname="$DATABASE_URL" --tuples-only --no-align --command "SELECT current_database();" | tr -d "[:space:]")"
+expected_ref="${DRAPIXAI_EXPECTED_GIT_REF:-}"
+[[ "$expected_ref" =~ ^[a-f0-9]{40}$ ]] || { echo "An exact DRAPIXAI_EXPECTED_GIT_REF is required." >&2; exit 2; }
+release_commit="$(git -C "$repo_root" rev-parse HEAD)"
+[[ "$release_commit" == "$expected_ref" && -z "$(git -C "$repo_root" status --porcelain)" ]] || {
+  echo "Migrations require the exact clean approved release checkout." >&2
+  exit 1
+}
+
+source "$repo_root/deploy/scripts/private-libpq.sh"
+drapixai_prepare_libpq
+actual_database="$(drapixai_private_pg psql --tuples-only --no-align --command "SELECT current_database();" | tr -d "[:space:]")"
 if [[ "$actual_database" != "$expected_database" ]]; then
   echo "Connected database does not match DRAPIXAI_EXPECTED_DATABASE_NAME." >&2
   exit 1
@@ -51,20 +61,37 @@ mkdir -p "$run_dir" "$backup_dir"
 chmod 700 "$run_dir" "$backup_dir"
 
 echo "Creating verified PostgreSQL backup for $environment."
-pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl --file="$backup_path"
-pg_restore --list "$backup_path" > "$run_dir/backup-contents.txt"
+drapixai_private_pg pg_dump --format=custom --no-owner --no-acl --file="$backup_path"
+drapixai_private_pg pg_restore --list "$backup_path" > "$run_dir/backup-contents.txt"
 sha256sum "$backup_path" > "$run_dir/backup.sha256"
 
+node "$repo_root/deploy/scripts/verify-migration-history.mjs" > "$run_dir/history-before.json"
+status_before=0
 (
   cd "$repo_root"
   npm --prefix apps/api exec prisma migrate status -- --schema apps/api/prisma/schema.prisma
-) > "$run_dir/status-before.txt" 2>&1
+) > "$run_dir/status-before.txt" 2>&1 || status_before=$?
+[[ "$status_before" -eq 0 || "$status_before" -eq 1 ]] || { echo "Migration status command failed." >&2; exit 1; }
+# Prisma uses exit 1 for pending migrations and several unsafe/error states.
+# Re-query the actual ledger and source hashes instead of parsing CLI prose or
+# treating every exit 1 as permission to migrate.
+node "$repo_root/deploy/scripts/verify-migration-history.mjs" > "$run_dir/history-recheck.json"
+cmp -s "$run_dir/history-before.json" "$run_dir/history-recheck.json" || { echo "Migration source/history changed during preflight." >&2; exit 1; }
+if [[ "$status_before" -ne 0 ]]; then
+  node -e 'const h=require(process.argv[1]);if(!(h.pendingCount>0))process.exit(1)' "$run_dir/history-recheck.json" || {
+    echo "Nonzero migration status without verified pending migrations." >&2
+    exit 1
+  }
+fi
 
 echo "Applying committed Prisma migrations."
 (
   cd "$repo_root"
   npm --prefix apps/api run prisma:migrate:deploy
 ) > "$run_dir/migrate-deploy.txt" 2>&1
+
+node "$repo_root/deploy/scripts/verify-migration-history.mjs" > "$run_dir/history-after.json"
+node -e 'const h=require(process.argv[1]);if(h.pendingCount!==0)process.exit(1)' "$run_dir/history-after.json"
 
 (
   cd "$repo_root"
@@ -83,6 +110,8 @@ cat > "$run_dir/evidence.json" <<EOF
   "backup_path": "$backup_path",
   "backup_sha256": "$backup_sha",
   "backup_catalog_verified": true,
+  "history_checksum_verified": true,
+  "status_before_exit_code": $status_before,
   "migration_command": "prisma migrate deploy",
   "migration_status": "PASS",
   "rollback_script": "deploy/scripts/restore-postgres-backup.sh"

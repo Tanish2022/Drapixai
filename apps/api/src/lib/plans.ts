@@ -182,6 +182,12 @@ export const getPlanAccessContext = (input: PlanAccessInput): PlanAccessContext 
     blockedReason = 'SUBSCRIPTION_INACTIVE';
   }
 
+  if (active && input.subscriptionProvider === 'stripe'
+    && (!['active', 'trialing'].includes(subscriptionStatus) || !subscriptionPeriodEndsAt)) {
+    active = false;
+    blockedReason = 'SUBSCRIPTION_INACTIVE';
+  }
+
   if (
     active
     && input.subscriptionProvider === 'stripe'

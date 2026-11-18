@@ -59,13 +59,15 @@ const decryptWebhookSecret = (encrypted: string) => {
 export const reencryptWebhookSecret = (encrypted: string) => encryptWebhookSecret(decryptWebhookSecret(encrypted));
 
 export const queueWebhookEvent = async (
-  prisma: PrismaClient,
+  transaction: Prisma.TransactionClient,
   userId: number,
+  eventId: string,
   eventType: string,
   data: Record<string, unknown>,
 ) => {
-  const endpoints = await prisma.webhookEndpoint.findMany({ where: { userId, isActive: true } });
-  const eventId = `evt_${crypto.randomUUID()}`;
+  const endpoints = await transaction.webhookEndpoint.findMany({
+    where: { userId, isActive: true }, select: { id: true, events: true },
+  });
   const payload = {
     id: eventId,
     type: eventType,
@@ -76,7 +78,7 @@ export const queueWebhookEvent = async (
   const matching = endpoints.filter((endpoint) =>
     endpoint.events.split(',').some((event) => event === eventType || event === '*'));
   if (matching.length === 0) return eventId;
-  await prisma.webhookDelivery.createMany({
+  await transaction.webhookDelivery.createMany({
     data: matching.map((endpoint) => ({
       endpointId: endpoint.id,
       eventId,
@@ -91,20 +93,24 @@ export const queueWebhookEvent = async (
 export const claimWebhookDelivery = async (
   prisma: PrismaClient,
   deliveryId: string,
+  previousAttemptCount: number,
   now: Date,
   staleClaimAt: Date,
 ) => prisma.webhookDelivery.updateMany({
   where: {
     id: deliveryId,
+    attemptCount: previousAttemptCount,
     OR: [
       { status: { in: ['pending', 'retrying'] }, nextAttemptAt: { lte: now } },
       { status: 'processing', updatedAt: { lte: staleClaimAt } },
     ],
   },
-  data: { status: 'processing' },
+  data: previousAttemptCount >= MAX_ATTEMPTS
+    ? { status: 'failed', errorCode: 'WEBHOOK_ATTEMPTS_EXHAUSTED' }
+    : { status: 'processing', attemptCount: { increment: 1 } },
 });
 
-export const processPendingWebhookDeliveries = async (prisma: PrismaClient, limit = 20) => {
+export const processPendingWebhookDeliveries = async (prisma: PrismaClient, limit = 20, postWebhook = safePostJson) => {
   const now = new Date();
   const staleClaimAt = new Date(now.getTime() - CLAIM_TIMEOUT_MS);
   const deliveries = await prisma.webhookDelivery.findMany({
@@ -120,20 +126,22 @@ export const processPendingWebhookDeliveries = async (prisma: PrismaClient, limi
   });
 
   for (const delivery of deliveries) {
-    const claim = await claimWebhookDelivery(prisma, delivery.id, now, staleClaimAt);
-    if (claim.count !== 1) continue;
+    const claim = await claimWebhookDelivery(prisma, delivery.id, delivery.attemptCount, now, staleClaimAt);
+    if (claim.count !== 1 || delivery.attemptCount >= MAX_ATTEMPTS) continue;
+    const attemptCount = delivery.attemptCount + 1;
+    const owned = { id: delivery.id, status: 'processing', attemptCount };
 
     if (!delivery.endpoint.isActive) {
-      await prisma.webhookDelivery.update({ where: { id: delivery.id }, data: { status: 'disabled' } });
+      await prisma.webhookDelivery.updateMany({ where: owned, data: { status: 'disabled' } });
       continue;
     }
-    const attemptCount = delivery.attemptCount + 1;
+    let responseCode: number;
     try {
       const body = JSON.stringify(delivery.payload);
       const timestamp = Math.floor(Date.now() / 1000).toString();
       const secret = decryptWebhookSecret(delivery.endpoint.encryptedSecret);
       const signature = signWebhookPayload(secret, timestamp, delivery.eventId, body);
-      const response = await safePostJson(delivery.endpoint.url, body, {
+      const response = await postWebhook(delivery.endpoint.url, body, {
         'DrapixAI-Event-Id': delivery.eventId,
         'DrapixAI-Event-Type': delivery.eventType,
         'DrapixAI-Timestamp': timestamp,
@@ -142,26 +150,27 @@ export const processPendingWebhookDeliveries = async (prisma: PrismaClient, limi
       if (response.status < 200 || response.status >= 300) {
         throw Object.assign(new Error('WEBHOOK_NON_2XX'), { responseCode: response.status });
       }
-      await prisma.webhookDelivery.update({
-        where: { id: delivery.id },
-        data: { status: 'delivered', attemptCount, responseCode: response.status, deliveredAt: new Date(), errorCode: null },
-      });
+      responseCode = response.status;
     } catch (error: any) {
       observeWebhookFailure();
       const exhausted = attemptCount >= MAX_ATTEMPTS;
       const delay = RETRY_DELAYS_MS[Math.min(attemptCount - 1, RETRY_DELAYS_MS.length - 1)];
-      await prisma.webhookDelivery.update({
-        where: { id: delivery.id },
+      await prisma.webhookDelivery.updateMany({
+        where: owned,
         data: {
           status: exhausted ? 'failed' : 'retrying',
-          attemptCount,
           responseCode: Number(error?.responseCode) || null,
-          errorCode: String(error?.message || 'WEBHOOK_DELIVERY_FAILED').slice(0, 120),
+          errorCode: /^[A-Z0-9_]{3,64}$/.test(error?.message || '') ? error.message : 'WEBHOOK_DELIVERY_FAILED',
           nextAttemptAt: new Date(Date.now() + delay),
         },
       });
       console.error('Webhook delivery error:', formatLogError(error));
+      continue;
     }
+    await prisma.webhookDelivery.updateMany({
+      where: owned,
+      data: { status: 'delivered', responseCode, deliveredAt: new Date(), errorCode: null },
+    });
   }
   return deliveries.length;
 };

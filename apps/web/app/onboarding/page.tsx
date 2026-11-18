@@ -7,7 +7,9 @@ import { ArrowRight, Check, RefreshCw, ShieldCheck } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 import WorkspaceHeader from '@/app/components/WorkspaceHeader';
 import { SHOPIFY_APP_INSTALL_URL } from '@/app/lib/public-env';
-import { getMerchantSetup, setupErrorMessage, type SetupGarment, type SetupSummary } from '@/app/lib/merchant-onboarding';
+import { getMerchantSetup, type SetupGarment, type SetupSummary } from '@/app/lib/merchant-onboarding';
+import FeedbackMessage from '@/app/components/FeedbackMessage';
+import { requestJson, userError, WebsiteError, type FeedbackTone } from '@/app/lib/user-feedback';
 
 type Product = { productId: string; productName?: string | null; garmentType?: string | null };
 const field = 'mt-2 w-full border border-black/20 bg-white p-3 text-[#172019]';
@@ -22,6 +24,7 @@ export default function MerchantOnboarding() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState<FeedbackTone>('info');
   const [loadError, setLoadError] = useState('');
   const [productId, setProductId] = useState('');
   const [productName, setProductName] = useState('');
@@ -32,14 +35,11 @@ export default function MerchantOnboarding() {
   const [selectedProduct, setSelectedProduct] = useState('');
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
-    const response = await fetch(`/api/dashboard/proxy/${path}`, { ...init, cache: 'no-store' });
-    if (response.status === 401) {
-      router.replace('/auth/login?next=/onboarding');
-      throw new Error('Please sign in again to continue setup.');
+    try { return await requestJson(`/api/dashboard/proxy/${path}`, { ...init, cache: 'no-store' }, { timeoutMs: init?.body instanceof FormData ? 120000 : 15000, fallback: 'Check your product details and photo, then try again.' }); }
+    catch (error) {
+      if (error instanceof WebsiteError && error.status === 401) router.replace('/auth/login?next=/onboarding');
+      throw error;
     }
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(setupErrorMessage(data?.error));
-    return data;
   }, [router]);
 
   const refresh = useCallback(async () => {
@@ -53,7 +53,7 @@ export default function MerchantOnboarding() {
       setGarments(assets.items);
       setProducts(catalog.items);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Unable to load setup. Please try again.');
+      setLoadError(userError(error, 'Unable to load setup. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -65,6 +65,7 @@ export default function MerchantOnboarding() {
     event.preventDefault();
     if (busy || !file) return;
     setBusy(true);
+    setMessageTone('info');
     setMessage('Saving your product and checking its photo. This can take a little while.');
     try {
       // The existing upsert lets a merchant retry preparation without importing a CSV again.
@@ -82,9 +83,11 @@ export default function MerchantOnboarding() {
       const garment = await request('sdk/garments', { method: 'POST', body: form });
       setSelectedGarment(garment.garmentId);
       setSelectedProduct(productId.trim());
+      setMessageTone('success');
       setMessage('Product saved. Review and confirm the product/photo pair below when preparation is ready.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to add this product. Please try again.');
+      setMessageTone('error');
+      setMessage(userError(error, 'This step did not finish. Product details may already be saved; refresh progress before retrying the photo.'));
     } finally {
       await refresh();
       setBusy(false);
@@ -99,10 +102,12 @@ export default function MerchantOnboarding() {
       await request(`sdk/matches/${encodeURIComponent(selectedGarment)}/confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ productId: selectedProduct }),
       });
-      setMessage('Product and photo confirmed. You can now try it privately.');
+      setMessageTone('success');
+      setMessage('Product and photo confirmed. A private try-on also requires available service and plan allowance.');
       await refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to confirm this product.');
+      setMessageTone('error');
+      setMessage(userError(error, 'We could not confirm this product. Refresh its status before trying again.'));
     } finally { setBusy(false); }
   };
 
@@ -115,7 +120,7 @@ export default function MerchantOnboarding() {
   return (
     <div className="min-h-screen bg-[#f4f6f2] text-[#172019]">
       <WorkspaceHeader active="onboarding" onLogout={async () => {
-        await fetch('/api/dashboard/session', { method: 'DELETE' });
+        await requestJson('/api/dashboard/session', { method: 'DELETE' });
         await signOut({ redirect: false });
         router.push('/');
       }} />
@@ -135,7 +140,7 @@ export default function MerchantOnboarding() {
         </ol>
         {loading ? <p role="status">Loading your saved progress…</p> : null}
         {loadError ? <div role="alert" className="mb-6 border border-[#d6a29c] bg-[#fbefed] p-5"><p>{loadError}</p><button onClick={() => void refresh()} disabled={busy} className={`${secondary} mt-3`}>Try loading again</button></div> : null}
-        {message ? <p role="status" className="mb-6 border border-[#9bb6a8] bg-[#eaf0e9] p-4 text-sm leading-6">{message}</p> : null}
+        <FeedbackMessage feedback={message ? { message, tone: messageTone } : null} />
         {setup && summary && !loadError ? <>
           {setup.stage === 0 ? <section className="border border-black/10 bg-white p-5 sm:p-8">
             <h2 className="font-serif text-3xl">Start with one shirt or top.</h2>

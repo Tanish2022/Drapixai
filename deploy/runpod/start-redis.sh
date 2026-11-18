@@ -9,25 +9,15 @@ if [[ -z "${DRAPIXAI_REDIS_PASSWORD:-}" ]]; then
   echo "DRAPIXAI_REDIS_PASSWORD is required." >&2
   exit 1
 fi
-export REDISCLI_AUTH="$DRAPIXAI_REDIS_PASSWORD"
-
-if redis-cli ping >/dev/null 2>&1; then
+if sh "$APP_ROOT/deploy/scripts/private-redis.sh" health; then
   exit 0
 fi
 
-mkdir -p "$REDIS_RUNTIME_DIR"
-redis-server \
-  --daemonize yes \
-  --bind 127.0.0.1 \
-  --protected-mode yes \
-  --save "" \
-  --appendonly no \
-  --requirepass "$DRAPIXAI_REDIS_PASSWORD" \
-  --dir "$REDIS_RUNTIME_DIR" \
-  --dbfilename dump.rdb
+export DRAPIXAI_REDIS_RUNTIME_DIR="$REDIS_RUNTIME_DIR"
+sh "$APP_ROOT/deploy/scripts/private-redis.sh" daemon
 
 for _ in {1..30}; do
-  if redis-cli ping >/dev/null 2>&1; then
+  if sh "$APP_ROOT/deploy/scripts/private-redis.sh" health; then
     exit 0
   fi
   sleep 1

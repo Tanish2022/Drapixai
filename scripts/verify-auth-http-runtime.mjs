@@ -84,7 +84,7 @@ try {
     ...keys.flatMap(key=>['-e',key]),'-e','SMTP_HOST=','-e','DRAPIXAI_ADMIN_EMAIL=','-e','DRAPIXAI_ADMIN_TOTP_SECRET=',api.Id,'dist/scripts/auth-http-database-tests.js'],{env:fixtureEnv});
   assert.equal(result.status,0,redact(result.error?.message || result.stderr || result.stdout || 'HTTP fixture failed'));
   const lines=result.stdout.trim().split('\n');
-  const body=JSON.parse(lines.at(-1)); assert.equal(body.passed,true); assert.equal(body.checks.length,6);
+  const body=JSON.parse(lines.at(-1)); assert.equal(body.passed,true); assert.equal(body.checks.length,9);
   report.checks=body.checks; report.output=redact(result.stdout.trim()); report.outputSha256=sha(Buffer.from(report.output));
   report.passed=true;
 } catch(error) {report.failure=redact(error.message);process.exitCode=1;}

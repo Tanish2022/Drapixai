@@ -3,6 +3,16 @@ declare module 'nodemailer' {
     host?: string;
     port?: number;
     secure?: boolean;
+    requireTLS?: boolean;
+    tls?: { rejectUnauthorized?: boolean; minVersion?: 'TLSv1.2' | 'TLSv1.3' };
+    connectionTimeout?: number;
+    greetingTimeout?: number;
+    socketTimeout?: number;
+    dnsTimeout?: number;
+    logger?: false;
+    debug?: boolean;
+    disableFileAccess?: boolean;
+    disableUrlAccess?: boolean;
     auth?: {
       user?: string;
       pass?: string;
@@ -21,6 +31,8 @@ declare module 'nodemailer' {
 
   interface Transporter {
     sendMail(options: SendMailOptions): Promise<unknown>;
+    verify(): Promise<unknown>;
+    close(): void;
   }
 
   function createTransport(options: TransportOptions): Transporter;

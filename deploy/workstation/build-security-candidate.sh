@@ -4,7 +4,6 @@ umask 077
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 requirements="drapixai_ai/requirements.rtx-pro-6000.security-candidate.txt"
-dockerfile="drapixai_ai/docker/Dockerfile"
 
 for command in docker git python3; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -38,8 +37,11 @@ case "$output_dir/" in
   *) echo "Candidate evidence must remain under runtime/security-candidate." >&2; exit 2 ;;
 esac
 
+python3 "$repo_root/deploy/security/render_ai_candidate.py" --output-dir "$output_dir"
+dockerfile="$output_dir/Dockerfile"
+
 docker build \
-  --file "$repo_root/$dockerfile" \
+  --file "$dockerfile" \
   --build-arg "DRAPIXAI_AI_REQUIREMENTS_FILE=$requirements" \
   --label "org.opencontainers.image.revision=$commit" \
   --label "ai.drapix.runtime-channel=rtx-security-candidate" \

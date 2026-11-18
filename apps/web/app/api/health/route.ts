@@ -26,9 +26,9 @@ export async function GET() {
     const ai = payload?.checks?.ai;
     // A dependency-level 503 still proves the API is reachable and reporting its
     // own fault domain. Data and AI readiness are represented separately below.
-    apiReady = payload?.status === 'ready' || payload?.status === 'not_ready';
-    dataReady = (database === true || (typeof database === 'object' && database?.ready === true)) && payload?.checks?.redis === true;
-    aiReady = ai === true || (typeof ai === 'object' && ai?.status === 'ready');
+    apiReady = (response.ok && payload?.status === 'ready') || (response.status === 503 && payload?.status === 'not_ready');
+    dataReady = apiReady && (database === true || (typeof database === 'object' && database?.ready === true)) && payload?.checks?.redis === true;
+    aiReady = apiReady && (ai === true || (typeof ai === 'object' && ai?.status === 'ready'));
   } catch {
     apiReady = false;
   }

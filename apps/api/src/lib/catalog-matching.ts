@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { CatalogSyncInputItem, detectCatalogCategory, isSupportedUpperBodyItem, normalizeCatalogItem } from './catalog-feed';
 
@@ -37,7 +37,7 @@ export const buildGarmentAssetId = (rawLabel: string) => {
   return `${base}-${crypto.randomBytes(6).toString('hex')}`;
 };
 
-const listActualGarments = async (prisma: PrismaClient, userId: number) =>
+const listActualGarments = async (prisma: Prisma.TransactionClient, userId: number) =>
   prisma.garment.findMany({
     where: {
       userId,
@@ -103,7 +103,7 @@ const scoreMatch = (
   };
 };
 
-export const recomputeGarmentMatchesForUser = async (prisma: PrismaClient, userId: number) => {
+export const recomputeGarmentMatchesForUser = async (prisma: Prisma.TransactionClient, userId: number) => {
   const [garments, products, existingMatches] = await Promise.all([
     listActualGarments(prisma, userId),
     prisma.catalogProduct.findMany({ where: { userId, status: { not: 'archived' } }, orderBy: { updatedAt: 'desc' } }),
@@ -161,10 +161,11 @@ export const recomputeGarmentMatchesForUser = async (prisma: PrismaClient, userI
 };
 
 export const upsertCatalogProductsForUser = async (
-  prisma: PrismaClient,
+  prisma: Prisma.TransactionClient,
   userId: number,
   sourceItems: CatalogSyncInputItem[],
-  source = 'manual'
+  source = 'manual',
+  recompute = true,
 ) => {
   const normalizedItems = sourceItems
     .map((item) => normalizeCatalogItem(item))
@@ -173,6 +174,7 @@ export const upsertCatalogProductsForUser = async (
   const uniqueItems = Array.from(new Map(normalizedItems.map((item) => [item.productId, item])).values());
   const discovered: Array<{ productId: string; status: string; category?: string }> = [];
   const skipped: Array<{ productId: string; reason: string }> = [];
+  const snapshotRows: Prisma.Sql[] = [];
 
   for (const item of uniqueItems) {
     const detectedCategory = detectCatalogCategory(item);
@@ -189,6 +191,14 @@ export const upsertCatalogProductsForUser = async (
       continue;
     }
     const garmentType = detectedCategory.supportLevel === 'future_lower_beta' ? 'lower' : 'upper';
+
+    // Shopify commits a complete snapshot in one short transaction. Batch its
+    // parameterized writes instead of one database round trip per catalog row.
+    if (!recompute) {
+      snapshotRows.push(Prisma.sql`(${userId}, ${item.productId}, ${item.parentProductId}, ${item.isVariant}, ${item.productName}, ${detectedCategory.label}, ${garmentType}, ${item.imageUrl}, ${source}, 'discovered', CURRENT_TIMESTAMP)`);
+      discovered.push({productId: item.productId, status: 'discovered', category: detectedCategory.label});
+      continue;
+    }
 
     const record = await prisma.catalogProduct.upsert({
       where: { userId_productId: { userId, productId: item.productId } },
@@ -219,7 +229,16 @@ export const upsertCatalogProductsForUser = async (
     discovered.push({ productId: record.productId, status: record.status, category: detectedCategory.label });
   }
 
-  await recomputeGarmentMatchesForUser(prisma, userId);
+  for (let start = 0; start < snapshotRows.length; start += 200) {
+    await prisma.$executeRaw(Prisma.sql`INSERT INTO "CatalogProduct"
+      ("userId", "productId", "parentProductId", "isVariant", "productName", "category", "garmentType", "imageUrl", "source", "status", "updatedAt")
+      VALUES ${Prisma.join(snapshotRows.slice(start, start + 200))}
+      ON CONFLICT ("userId", "productId") DO UPDATE SET "parentProductId" = EXCLUDED."parentProductId",
+        "isVariant" = EXCLUDED."isVariant", "productName" = EXCLUDED."productName", "category" = EXCLUDED."category",
+        "garmentType" = EXCLUDED."garmentType", "imageUrl" = EXCLUDED."imageUrl", "source" = EXCLUDED."source",
+        "status" = EXCLUDED."status", "updatedAt" = EXCLUDED."updatedAt"`);
+  }
+  if (recompute) await recomputeGarmentMatchesForUser(prisma, userId);
   return { discovered, skipped };
 };
 

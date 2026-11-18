@@ -1,0 +1,37 @@
+rule_files:
+  - drapixai-alerts.yml
+
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: drapixai_tryon_uncertain_work
+        values: '0 1 1 0'
+      - series: drapixai_tryon_intake_enabled
+        values: '1 0 0 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DrapixAITryOnOutcomeUnconfirmed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: DrapixAITryOnOutcomeUnconfirmed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: DrapixAI work requires terminal-state reconciliation
+              description: Capacity remains held after an uncertain AI outcome. Pause affected intake and verify the actual job state before scoped reconciliation.
+      - eval_time: 3m
+        alertname: DrapixAITryOnOutcomeUnconfirmed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: DrapixAITryOnIntakePaused
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: DrapixAI try-on intake is paused
+              description: New shopper try-ons are being rejected. Confirm this is an approved maintenance or incident action.
+      - eval_time: 3m
+        alertname: DrapixAITryOnIntakePaused
+        exp_alerts: []

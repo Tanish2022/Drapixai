@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { createRateLimitMiddleware } from '../lib/rate-limit';
 import { resolveActiveApiKey, applyVerifiedPassword } from '../lib/api-key-auth';
 import { requireDashboardProxy } from '../lib/dashboard-proxy-auth';
@@ -14,7 +14,6 @@ import { hashPassword, verifyPassword, isPasswordHashBusy } from '../lib/passwor
 import { hasPermission } from '../lib/authorization';
 
 const router = Router();
-const prisma = new PrismaClient();
 const accountRateLimit = createRateLimitMiddleware(20, 15 * 60 * 1000);
 
 const generateVerificationToken = () => `drapix_${crypto.randomBytes(18).toString('base64url')}`;
@@ -212,10 +211,14 @@ router.post('/email/request-change', async (req, res) => {
     }),
   ]);
 
-  await Promise.all([
+  const deliveries = await Promise.all([
     sendOtpEmail(resolved.user.email, currentEmailCode.code, 'email_change_current', resolved.user.id),
     sendOtpEmail(normalizedNewEmail, newEmailCode.code, 'email_change_new', resolved.user.id),
   ]);
+  if (deliveries.some(delivery => !delivery.sent
+    && !(delivery.skipped && process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST))) {
+    return res.status(503).json({ error: 'EMAIL_DELIVERY_UNAVAILABLE' });
+  }
 
   return res.json({
     ok: true,

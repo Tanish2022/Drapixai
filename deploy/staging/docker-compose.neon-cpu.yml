@@ -1,0 +1,14 @@
+# Use after docker-compose.edge.yml for the private Neon-backed CPU stage.
+# Apply the reviewed staging migration workflow separately before starting it.
+services:
+  postgres: !reset null
+  api:
+    depends_on: !override
+      redis:
+        condition: service_healthy
+    environment:
+      DRAPIXAI_TRYON_INTAKE_ENABLED: "0"
+      DRAPIXAI_STRIPE_BILLING_ENABLED: "0"
+
+volumes:
+  staging_postgres: !reset null
