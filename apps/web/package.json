@@ -7,13 +7,13 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",
-    "next": "16.4.3",
+    "next": "16.4.5",
     "next-auth": "4.24.15",
     "react": "^18",
     "react-dom": "^18"
