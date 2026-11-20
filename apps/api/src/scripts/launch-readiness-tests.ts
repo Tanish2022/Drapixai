@@ -215,7 +215,7 @@ const marketingNav = read('apps/web/app/components/MarketingNav.tsx');
 const marketingFooter = read('apps/web/app/components/MarketingFooter.tsx');
 const supportAssistant = read('apps/web/app/components/SupportAssistant.tsx');
 const globalStyles = read('apps/web/app/globals.css');
-const tailwindConfig = read('apps/web/tailwind.config.ts');
+const tailwindConfig = read('apps/web/tailwind.config.cjs');
 const notFoundPage = read('apps/web/app/not-found.tsx');
 const loadingPage = read('apps/web/app/loading.tsx');
 const errorPage = read('apps/web/app/error.tsx');
@@ -486,7 +486,7 @@ assertIncludes(launchGates, 'ai-ingress-security', 'Launch gates must execute AI
 assertIncludes(launchGates, 'node-runtime', 'Launch gates must reject unsupported Node.js runtimes.');
 assertIncludes(launchGates, 'tracked-secret-scan', 'Launch gates must scan tracked source for recognizable private credentials.');
 assertIncludes(launchGates, 'shell-line-endings', 'Launch gates must reject shell scripts that are unsafe to execute on Linux.');
-assertIncludes(shellLineEndingVerifier, "['ls-files', '-z', '--', '*.sh']", 'Shell line-ending validation must inspect the tracked shell-script set.');
+assertIncludes(shellLineEndingVerifier, "['ls-files', '-z', '--', '*.sh', 'apps/api/prisma/migrations/*/migration.sql']", 'Line-ending validation must inspect tracked shell scripts and Prisma migrations.');
 assertIncludes(shellLineEndingVerifier, 'contents.includes(0x0d)', 'Shell line-ending validation must reject carriage-return bytes.');
 assertIncludes(launchGates, 'public-api-contracts', 'Launch gates must execute the public API security and billing contract tests.');
 assertIncludes(trackedSecretVerifier, 'TRACKED_SECRET_DETECTED', 'Tracked-secret verifier must fail without echoing a detected credential.');

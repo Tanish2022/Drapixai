@@ -42,7 +42,7 @@ echo │       ├── next.config.js
 echo │       ├── package-lock.json
 echo │       ├── package.json
 echo │       ├── postcss.config.js
-echo │       ├── tailwind.config.ts
+echo │       ├── tailwind.config.cjs
 echo │       ├── tsconfig.json
 echo │       ├── app/
 echo │       │   ├── globals.css

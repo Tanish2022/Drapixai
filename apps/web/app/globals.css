@@ -1,5 +1,5 @@
 @import "tailwindcss" source(none);
-@config "../tailwind.config.ts";
+@config "../tailwind.config.cjs";
 @source "./**/*.{js,ts,jsx,tsx,mdx}";
 
 /* Preserve the v3 visual scale while replacing its vulnerable build tooling. */
