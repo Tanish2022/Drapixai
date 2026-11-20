@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-const tracked = spawnSync('git', ['ls-files', '-z', '--', '*.sh'], {
+const tracked = spawnSync('git', ['ls-files', '-z', '--', '*.sh', 'apps/api/prisma/migrations/*/migration.sql'], {
   cwd: root,
   encoding: 'buffer',
   windowsHide: true,
 });
 
 if (tracked.status !== 0 || tracked.error) {
-  throw new Error('TRACKED_SHELL_FILE_LIST_UNAVAILABLE');
+  throw new Error('TRACKED_RELEASE_FILE_LIST_UNAVAILABLE');
 }
 
 const files = tracked.stdout
@@ -25,9 +25,9 @@ for (const relative of files) {
 }
 
 if (invalid.length > 0) {
-  console.error('Tracked shell scripts must contain LF line endings only:');
+  console.error('Shell scripts and checksum-bound Prisma migrations must use LF:');
   for (const file of invalid) console.error(`- ${file}`);
   process.exitCode = 1;
 } else {
-  console.log(`Shell line-ending validation passed for ${files.length} tracked scripts.`);
+  console.log(`Release line-ending validation passed for ${files.length} tracked scripts and migrations.`);
 }
