@@ -1,5 +1,6 @@
 'use client';
 
+import { trialDetailsUrl } from '@/app/lib/trial-offer';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Check, Download, ImageIcon, Loader2, Play, ShieldCheck, Video } from 'lucide-react';
@@ -276,7 +277,7 @@ export default function DemoClient() {
               ) : null}
               <p className="text-sm leading-6 text-[#68736b]">A workspace helps prepare products and review your setup. Generation and storefront access require service availability and approval.</p>
               <div className="mt-5 flex flex-wrap gap-3">
-                <Link href="/auth/register" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_start_trial' } })} className="inline-flex h-11 items-center bg-[#183f32] px-4 text-sm font-bold text-white hover:bg-[#245a48]">Start free trial</Link>
+                <Link href={trialDetailsUrl} onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_start_trial' } })} className="inline-flex h-11 items-center bg-[#183f32] px-4 text-sm font-bold text-white hover:bg-[#245a48]">View trial details</Link>
                 <Link href="/help" onClick={() => trackEvent('cta_click', { metadata: { target: 'demo_read_help' } })} className="inline-flex h-11 items-center border border-black/15 px-4 text-sm font-bold hover:bg-[#f1f4f0]">Open help</Link>
               </div>
             </div>

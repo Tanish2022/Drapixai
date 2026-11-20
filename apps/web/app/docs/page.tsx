@@ -48,9 +48,9 @@ const steps = [
 ];
 
 const apiPlans = [
-  { name: 'Starter', price: '$49', quota: '1,000', effective: '$0.0490 / result' },
-  { name: 'Growth', price: '$199', quota: '7,500', effective: '$0.0265 / result' },
-  { name: 'Pro', price: '$499', quota: '25,000', effective: '$0.0200 / result' },
+  { name: 'Starter', quota: '1,000' },
+  { name: 'Growth', quota: '7,500' },
+  { name: 'Pro', quota: '25,000' },
 ];
 
 export default function DocsPage() {
@@ -151,9 +151,7 @@ export default function DocsPage() {
               {apiPlans.map((plan) => (
                 <div key={plan.name} className="border-b border-black/10 py-7 last:border-b-0 sm:border-b-0 sm:px-7">
                   <p className="text-sm font-bold text-[#31725b]">{plan.name}</p>
-                  <p className="mt-4 font-serif text-4xl">{plan.price}<span className="ml-1 font-sans text-xs text-[#5d6961]">/ month</span></p>
                   <p className="mt-5 font-semibold">{plan.quota} successful try-ons</p>
-                  <p className="mt-1 text-sm text-[#5d6961]">{plan.effective}</p>
                 </div>
               ))}
             </div>

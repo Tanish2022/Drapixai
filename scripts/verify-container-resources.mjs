@@ -18,7 +18,7 @@ const sources = [
   'deploy/docker-compose.edge.yml', 'deploy/docker-compose.ai.yml',
   'deploy/staging/docker-compose.edge.yml', 'deploy/staging/docker-compose.ai.yml',
   'deploy/staging/docker-compose.neon-cpu.yml', 'deploy/release/standard-catvton-rc1.env',
-  'deploy/scripts/private-redis.sh',
+  'deploy/scripts/private-redis.sh', 'deploy/staging/docker-compose.workstation-cache.yml',
 ];
 const env = Object.fromEntries(['SystemRoot', 'WINDIR', 'PATH', 'PATHEXT', 'TEMP', 'TMP', 'USERPROFILE',
   'LOCALAPPDATA', 'APPDATA', 'ProgramFiles', 'ProgramData', 'ComSpec', 'DOCKER_CONFIG']
@@ -27,6 +27,7 @@ Object.assign(env, {
   DRAPIXAI_REDIS_PASSWORD: 'synthetic-resource-fixture-password',
   DRAPIXAI_INTERNAL_TLS_SECRETS_DIR: mirror,
   DRAPIXAI_TRYON_INTAKE_ENABLED: '0',
+  DRAPIXAI_STAGING_S3_BUCKET: 'synthetic-private-staging',
   ...Object.fromEntries(['API_RELEASE', 'WEB_RELEASE', 'AI_RELEASE', 'POSTGRES', 'REDIS']
     .map(role => [`DRAPIXAI_${role}_IMAGE`, `fixture.invalid/${role.toLowerCase()}@sha256:${'a'.repeat(64)}`])),
 });
@@ -54,51 +55,7 @@ const get = port => new Promise((resolve, reject) => {
   req.on('error', reject);
 });
 const limits = { cpus: 0.5, memory: 128 * 1024 * 1024, pids: 64 };
-try {
-  for (const source of sources) {
-    const bytes = fs.readFileSync(path.join(root, source));
-    report.sourceSha256[source] = crypto.createHash('sha256').update(bytes).digest('hex');
-    const target = path.join(mirror, source);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, bytes);
-  }
-  // Mirror only reviewed source and empty env files. Compose never reads operator secrets.
-  for (const environment of ['production', 'staging']) for (const service of ['api', 'web', 'ai']) {
-    const target = path.join(mirror, `deploy/env/${service}.${environment}.env`);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, '');
-  }
-  const render = (...files) => JSON.parse(docker(['compose', '--env-file', emptyEnv,
-    ...files.flatMap(file => ['-f', path.join(mirror, file)]), 'config', '--no-env-resolution', '--format', 'json']));
-  const documents = sources.slice(0, 4).map(file => [file, render(file)]);
-  let cpuTotal = 0, memoryTotal = 0;
-  for (const [file, config] of documents) {
-    let cpus = 0, memory = 0;
-    for (const [name, service] of Object.entries(config.services)) {
-      assert.ok(Number(service.cpus) > 0 && Number(service.cpus) <= 12, `${file}/${name} CPU cap`);
-      assert.ok(Number(service.mem_limit) >= 1024 ** 3 && Number(service.mem_limit) <= 96 * 1024 ** 3, `${file}/${name} RAM cap`);
-      assert.equal(service.memswap_limit, service.mem_limit, `${file}/${name} swap disabled`);
-      assert.ok(service.pids_limit >= 128 && service.pids_limit <= 1024, `${file}/${name} process cap`);
-      assert.ok(service.oom_kill_disable !== true);
-      if (name === 'redis') {
-        const redisBytes = Number(service.environment.DRAPIXAI_REDIS_MAXMEMORY_MB) * 1024 ** 2;
-        assert.ok(redisBytes > 0 && redisBytes <= service.mem_limit * 0.75, 'Redis overhead headroom');
-      }
-      cpus += Number(service.cpus);
-      memory += Number(service.mem_limit);
-    }
-    report.budgets[file] = { cpus, memoryGiB: memory / 1024 ** 3 };
-    cpuTotal += cpus; memoryTotal += memory;
-  }
-  assert.equal(cpuTotal, 33.5);
-  assert.equal(memoryTotal / 1024 ** 3, 212);
-  const cpuStage = render(sources[2], sources[4]);
-  assert.deepEqual(Object.keys(cpuStage.services).sort(), ['api', 'redis', 'web']);
-  assert.ok(Object.values(cpuStage.services).every(service => service.mem_limit && service.cpus && service.pids_limit));
-  assert.equal(cpuStage.services.api.environment.DRAPIXAI_TRYON_INTAKE_ENABLED, '0');
-  pass('All production/staging services and the Neon CPU override retain CPU, RAM, swap and process limits');
-  pass('Combined one-replica ceilings total 33.5 CPU equivalents and 212 GiB, with Redis overhead headroom');
-
+async function verifyRuntime() {
   const imageRef = 'node:22-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f';
   const image = JSON.parse(docker(['image', 'inspect', imageRef]))[0];
   report.probeImageRef = imageRef;
@@ -141,6 +98,95 @@ try {
   assert.equal(killed.State.OOMKilled, true);
   assert.equal(await get(port), 200);
   pass('An allocation above the isolated 128 MiB cap is OOM-killed while the neighboring web fixture remains healthy');
+}
+
+try {
+  for (const source of sources) {
+    const bytes = fs.readFileSync(path.join(root, source));
+    report.sourceSha256[source] = crypto.createHash('sha256').update(bytes).digest('hex');
+    const target = path.join(mirror, source);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, bytes);
+  }
+  // Use only tracked examples in the isolated render, never operator env files.
+  for (const environment of ['production', 'staging']) for (const service of ['api', 'web', 'ai']) {
+    const target = path.join(mirror, `deploy/env/${service}.${environment}.env`);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(path.join(root, `deploy/env/${service}.${environment}.example`), target);
+  }
+  const render = (...files) => JSON.parse(docker(['compose', '--env-file', emptyEnv,
+    ...files.flatMap(file => ['-f', path.join(mirror, file)]), 'config', '--format', 'json']));
+  const documents = sources.slice(0, 4).map(file => [file, render(file)]);
+  let cpuTotal = 0, memoryTotal = 0;
+  for (const [file, config] of documents) {
+    let cpus = 0, memory = 0;
+    for (const [name, service] of Object.entries(config.services)) {
+      assert.ok(Number(service.cpus) > 0 && Number(service.cpus) <= 12, `${file}/${name} CPU cap`);
+      assert.ok(Number(service.mem_limit) >= 1024 ** 3 && Number(service.mem_limit) <= 96 * 1024 ** 3, `${file}/${name} RAM cap`);
+      assert.equal(service.memswap_limit, service.mem_limit, `${file}/${name} swap disabled`);
+      assert.ok(service.pids_limit >= 128 && service.pids_limit <= 1024, `${file}/${name} process cap`);
+      assert.ok(service.oom_kill_disable !== true);
+      if (name === 'redis') {
+        const redisBytes = Number(service.environment.DRAPIXAI_REDIS_MAXMEMORY_MB) * 1024 ** 2;
+        assert.ok(redisBytes > 0 && redisBytes <= service.mem_limit * 0.75, 'Redis overhead headroom');
+      }
+      cpus += Number(service.cpus);
+      memory += Number(service.mem_limit);
+    }
+    report.budgets[file] = { cpus, memoryGiB: memory / 1024 ** 3 };
+    cpuTotal += cpus; memoryTotal += memory;
+  }
+  assert.equal(cpuTotal, 33.5);
+  assert.equal(memoryTotal / 1024 ** 3, 212);
+  const cpuStage = render(sources[2], sources[4]);
+  assert.deepEqual(Object.keys(cpuStage.services).sort(), ['api', 'redis', 'web']);
+  assert.ok(Object.values(cpuStage.services).every(service => service.mem_limit && service.cpus && service.pids_limit));
+  assert.equal(cpuStage.services.api.environment.DRAPIXAI_TRYON_INTAKE_ENABLED, '0');
+  const apiEnv = cpuStage.services.api.environment;
+  assert.equal(apiEnv.DRAPIXAI_DISABLE_STAGING_MAIL, '1');
+  assert.equal(apiEnv.SMTP_HOST, '');
+  assert.equal(apiEnv.DRAPIXAI_STRIPE_BILLING_ENABLED, '0');
+  assert.equal(apiEnv.DRAPIXAI_STRIPE_LIVE_MODE, '0');
+  assert.equal(apiEnv.DRAPIXAI_REQUIRE_NEON_STAGING, '1');
+  assert.equal(apiEnv.S3_BUCKET, env.DRAPIXAI_STAGING_S3_BUCKET);
+  assert.equal(apiEnv.DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK, '0');
+  assert.equal(apiEnv.DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION, 'AES256');
+  assert.equal(cpuStage.services.web.environment.DRAPIXAI_API_URL, 'http://api:8000');
+  assert.equal(cpuStage.services.web.environment.DRAPIXAI_PUBLIC_INDEXING, '0');
+  const cpuServices = Object.values(cpuStage.services);
+  report.budgets['private-cpu-first-start'] = {
+    cpus: cpuServices.reduce((sum, service) => sum + Number(service.cpus), 0),
+    memoryGiB: cpuServices.reduce((sum, service) => sum + Number(service.mem_limit), 0) / 1024 ** 3,
+  };
+  assert.deepEqual(report.budgets['private-cpu-first-start'], { cpus: 2.25, memoryGiB: 7 });
+  for (const name of ['web', 'api']) {
+    assert.deepEqual(cpuStage.services[name].ports.map(port => port.host_ip), ['127.0.0.1']);
+  }
+  assert.ok(!cpuStage.services.redis.ports);
+  assert.equal(cpuStage.networks.data.internal, true);
+  const gpuStage = render(sources[3], 'deploy/staging/docker-compose.workstation-cache.yml');
+  for (const name of ['ai-api', 'ai-worker']) {
+    const service = gpuStage.services[name];
+    for (const [directory, target] of Object.entries({
+      models: '/workspace/drapixai/models', runtime: '/workspace/drapixai/runtime', huggingface: '/workspace/.cache/huggingface',
+    })) {
+      const mount = service.volumes.find(entry => entry.target === target);
+      assert.equal(mount.type, 'bind');
+      assert.equal(mount.source, '/data/drapixai/staging/' + directory);
+      assert.ok(!mount.bind.create_host_path);
+      assert.equal(Boolean(mount.read_only), directory === 'models');
+    }
+    assert.equal(service.environment.DRAPIXAI_TRANSIENT_SPOOL_DIR, '/dev/shm/drapixai-tryon-spool');
+  }
+  pass('First-start gates, private ports, staging storage and workstation GPU cache mounts verified');
+  pass('All production/staging services and the Neon CPU override retain CPU, RAM, swap and process limits');
+  pass('Combined one-replica ceilings total 33.5 CPU equivalents and 212 GiB, with Redis overhead headroom');
+
+  if (process.argv.includes('--compose-only')) {
+    report.scope = 'Rendered Compose templates only; no containers or provider connections';
+  } else {
+    await verifyRuntime();
+  }
   report.passed = true;
 } catch (error) {
   report.failure = error.message;

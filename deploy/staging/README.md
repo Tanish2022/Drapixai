@@ -13,7 +13,10 @@ before starting staging alongside production.
 For the initial CPU stage, layer `docker-compose.neon-cpu.yml` after
 `docker-compose.edge.yml` using Docker Compose 2.24.4 or later. The override
 removes local PostgreSQL and its volume, keeps Redis on the private network, and
-forces try-on intake and Stripe billing off. API and web remain on loopback.
+forces try-on intake, Stripe billing (including live mode), Shopify preparation
+and real email delivery off. The API skips SMTP before opening a connection,
+including when a stale mail credential is present. Signup flows requiring an
+emailed code cannot complete during this first start. API and web remain on loopback.
 Use the private access path on the workstation for this stage. The full API
 `/ready` check still requires the private AI service. Record CPU component
 health separately while AI is absent.
@@ -35,6 +38,59 @@ docker compose --env-file deploy/staging/.images.env \
 Expect only `redis`, `api`, and `web`. Confirm the merged configuration and
 approved artifact digests before starting anything. The local PostgreSQL
 procedure below applies to the standalone edge topology.
+
+### Workstation first-start settings
+
+| Service | Host access | CPU ceiling | Memory ceiling |
+| --- | --- | ---: | ---: |
+| Web | 127.0.0.1:13000 | 1 | 2 GiB |
+| API | 127.0.0.1:18000 | 1 | 4 GiB |
+| Redis | Internal Docker network only | 0.25 | 1 GiB |
+
+1. In the private images env set `DRAPIXAI_STAGING_S3_BUCKET` to the approved
+   CPU-staging bucket from the provisioning record in Mumbai. Supply a Linux
+   workload identity restricted to that bucket and its approved prefixes.
+   Provision the mounted API secret with the pooled Neon runtime URL, isolated
+   Redis URL and application secrets. The CPU bootstrap validates the staging
+   endpoint, database, runtime login and TLS settings before importing Prisma.
+   Omit SMTP credentials, Stripe keys and static AWS keys from this secret.
+   The standalone local-Postgres secret generator below targets a different topology.
+   The API still needs its private AI client certificate, key and CA for startup.
+2. Build the staging web image with `NEXT_PUBLIC_API_BASE_URL` and
+   `NEXT_PUBLIC_WEB_BASE_URL` build arguments pointing at your private HTTPS
+   origins. Set matching values in the web runtime env and API CORS configuration.
+   Server-side web calls use `http://api:8000` on the Compose network. Supply
+   staging-only NextAuth and dashboard/admin session secrets, plus matching
+   dashboard proxy and auth sync tokens in the private web env. Route browser
+   traffic through private HTTPS over the authorized SSH/VPN access path.
+   Leave public DNS ingress, router port forwarding and public tunnels off.
+3. Run `node scripts/verify-container-resources.mjs --compose-only` on the
+   candidate. This checks both merged profiles using synthetic inputs. Use the
+   service-list command above on the workstation with its private inputs. After
+   supervised startup, verify the loopback listeners, actual container limits,
+   private TLS access, API `/health`, Redis health and staging DB role. Full
+   `/ready` includes AI dependency checks.
+
+### Workstation cache placement
+
+The CPU first start uses bounded tmpfs for Next.js cache (128 MiB), API upload
+scratch (256 MiB) and Redis scratch (256 MiB). The API uses managed staging S3
+for durable objects. No GPU service or SSD cache is needed for that start.
+
+For the later GPU stage, layer `docker-compose.workstation-cache.yml` **after**
+`docker-compose.ai.yml` in a separate Compose invocation. Both AI containers see
+the same mounts. The source directories must already exist on the mounted data SSD.
+
+| Host source | Container target | Access |
+| --- | --- | --- |
+| /data/drapixai/staging/models | /workspace/drapixai/models | Read-only |
+| /data/drapixai/staging/runtime | /workspace/drapixai/runtime | Read/write, includes garments and torch cache |
+| /data/drapixai/staging/huggingface | /workspace/.cache/huggingface | Read/write |
+
+Before provisioning these directories or starting GPU containers, verify
+`findmnt --mountpoint /data -o SOURCE,FSTYPE,UUID` matches the data SSD.
+Configure the supervised GPU startup to require that mount across reboot.
+Shopper input spool stays at `/dev/shm/drapixai-tryon-spool`.
 
 ## Public path
 

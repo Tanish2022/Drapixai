@@ -7,6 +7,12 @@ export const EMAIL_EVENT_TYPES = new Set([
 export const EMAIL_WEBHOOK_BODY_LIMIT = 64 * 1024;
 export const EMAIL_EVENT_RETENTION_DAYS = 30;
 
+export const stagingMailDisabled = () => {
+  if (process.env.DRAPIXAI_DISABLE_STAGING_MAIL !== '1') return false;
+  if (process.env.DRAPIXAI_API_ENVIRONMENT !== 'sandbox') throw new Error('MAIL_DISABLE_REQUIRES_SANDBOX');
+  return true;
+};
+
 export class EmailEventError extends Error {
   constructor(public readonly code: string, public readonly status = 400) { super(code); }
 }

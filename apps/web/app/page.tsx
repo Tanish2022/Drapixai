@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
+import { trialAvailability, trialDetailsUrl, trialPrice } from '@/app/lib/trial-offer';
 import BrandLogo from '@/app/components/BrandLogo';
 import MarketingFooter from '@/app/components/MarketingFooter';
 import { getSdkScriptUrl } from '@/app/lib/public-env';
@@ -37,6 +39,19 @@ const supportedDetails = [
   'Dark and white garments',
   'Low-contrast fabrics',
 ];
+
+function PhonePhotoLegend({ labels }: { labels: string[] }) {
+  return (
+    <ol className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 min-[560px]:hidden">
+      {labels.map((label, index) => (
+        <li key={label} className="flex items-baseline gap-1.5">
+          <span className="font-mono font-bold text-[#31725b]">{String(index + 1).padStart(2, '0')}</span>
+          {label}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
@@ -163,7 +178,7 @@ export default function Home() {
             ) : (
               <>
                 <Link href="/auth/login" className="px-3 py-2 text-sm font-semibold text-[#344038]">Sign in</Link>
-                <Link href="/auth/register" className="inline-flex h-11 items-center bg-[#183f32] px-5 text-sm font-semibold text-white hover:bg-[#245a48]">Start free trial</Link>
+                <Link href={trialDetailsUrl} className="inline-flex h-11 items-center bg-[#183f32] px-5 text-sm font-semibold text-white hover:bg-[#245a48]">View trial details</Link>
               </>
             )}
           </div>
@@ -181,8 +196,8 @@ export default function Home() {
               ].map(([href, label]) => (
                 <Link key={href} href={href} className="border-b border-black/5 px-2 py-3 text-base font-medium" onClick={() => setMobileOpen(false)}>{label}</Link>
               ))}
-              <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="mt-3 inline-flex h-12 items-center justify-center bg-[#183f32] px-5 font-semibold text-white" onClick={() => setMobileOpen(false)}>
-                {showDashboardCta ? 'Open dashboard' : 'Start free trial'}
+              <Link href={showDashboardCta ? '/dashboard' : trialDetailsUrl} className="mt-3 inline-flex h-12 items-center justify-center bg-[#183f32] px-5 font-semibold text-white" onClick={() => setMobileOpen(false)}>
+                {showDashboardCta ? 'Open dashboard' : 'View trial details'}
               </Link>
             </div>
           </nav>
@@ -191,7 +206,7 @@ export default function Home() {
 
       <main>
         <section className="relative overflow-hidden border-b border-black/10 bg-[#f2f4f1]">
-          <div className="relative mx-auto grid max-w-[1440px] items-center gap-12 px-5 pb-32 pt-16 sm:px-8 md:min-h-[620px] md:grid-cols-[1.2fr_0.8fr] md:pb-28 lg:px-12">
+          <div className="relative mx-auto grid max-w-[1440px] items-center gap-10 px-5 pb-32 pt-16 sm:px-8 md:min-h-[680px] md:grid-cols-[1.05fr_0.95fr] md:pb-28 lg:px-12">
             <div className="max-w-[760px]">
               <p className="mb-5 flex items-center gap-3 text-xs font-bold uppercase text-[#2b654f]">
                 <span className="h-px w-10 bg-[#2b654f]" />
@@ -204,8 +219,8 @@ export default function Home() {
                 Offer shoppers an AI-generated preview of an upper-body garment. Start with one product, compare the details and review the result before publishing.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="inline-flex h-14 items-center justify-center gap-2 bg-[#183f32] px-7 py-4 font-semibold text-white hover:bg-[#245a48]">
-                  {showDashboardCta ? 'Continue setup' : 'Start with one product'}
+                <Link href={showDashboardCta ? '/dashboard' : trialDetailsUrl} className="inline-flex h-14 items-center justify-center gap-2 bg-[#183f32] px-7 py-4 font-semibold text-white hover:bg-[#245a48]">
+                  {showDashboardCta ? 'Continue setup' : 'View the 10-day trial'}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link href="/demo" className="inline-flex h-14 items-center justify-center border border-black/20 bg-white/75 px-7 py-4 font-semibold text-[#172019] hover:bg-white">
@@ -219,11 +234,40 @@ export default function Home() {
               </div>
 
             </div>
-            <div className="border-l border-black/15 py-4 pl-7 sm:pl-10">
-              <p className="font-serif text-3xl leading-tight text-[#183f32] sm:text-4xl">&ldquo;Real clothes should still look real.&rdquo;</p>
-              <p className="mt-5 text-xs font-bold uppercase text-[#2b654f]">The DrapixAI product principle</p>
-              <p className="mt-7 max-w-md leading-7 text-[#59645c]">Every approved result must preserve the product a brand actually sells, not merely generate a convincing replacement.</p>
-            </div>
+            <figure className="mx-auto w-full max-w-[583px]">
+              <div className="relative overflow-hidden border border-black/10 bg-[#dde3de]">
+                <Image src="/hero-female-tryon-v2.png" alt="Woman wearing a teal blouse in an illustrative virtual try-on sample" width={583} height={777} sizes="(max-width: 768px) 100vw, (max-width: 1200px) 48vw, 42vw" className="h-auto w-full" priority />
+                <div className="absolute left-3 top-3 border border-black/10 bg-white/95 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[#183f32] shadow-sm backdrop-blur-sm sm:left-4 sm:top-4 sm:text-[11px]">SKU SH-2071 · sample</div>
+                {[
+                  ['01', 'left-[59%] top-[11%]'],
+                  ['02', 'left-[49%] top-[18%]'],
+                  ['03', 'left-[59%] top-[29%]'],
+                  ['04', 'left-[38%] top-[40%]'],
+                  ['05', 'left-[48%] top-[35%]'],
+                  ['06', 'left-[54%] top-[48%]'],
+                ].map(([number, position]) => (
+                  <span key={number} aria-hidden="true" className={`absolute ${position} flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white bg-[#183f32] text-[10px] font-bold text-white shadow-md sm:h-8 sm:w-8`}>{number}</span>
+                ))}
+                <div className="absolute left-2 top-[21%] hidden w-[28%] flex-col gap-3 min-[560px]:flex">
+                  {[
+                    ['01', 'Face + pose'], ['02', 'Collar'], ['04', 'Sleeve length'],
+                  ].map(([number, label]) => <div key={number} className="flex w-full items-center gap-2 whitespace-nowrap border border-black/10 bg-white/90 px-2 py-2 text-[10px] font-semibold text-[#344038] shadow-sm backdrop-blur-sm"><span className="font-mono font-bold text-[#31725b]">{number}</span>{label}</div>)}
+                </div>
+                <div className="absolute right-2 top-[34%] hidden w-[28%] flex-col gap-3 min-[560px]:flex">
+                  {[
+                    ['03', 'Teal tone'], ['05', 'Fabric detail'], ['06', 'Curved hem'],
+                  ].map(([number, label]) => <div key={number} className="flex w-full items-center gap-2 whitespace-nowrap border border-black/10 bg-white/90 px-2 py-2 text-[10px] font-semibold text-[#344038] shadow-sm backdrop-blur-sm"><span className="font-mono font-bold text-[#31725b]">{number}</span>{label}</div>)}
+                </div>
+                <div className="absolute bottom-3 right-3 inline-flex items-center gap-2 border border-white/80 bg-[#183f32]/95 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm sm:bottom-4 sm:right-4 sm:px-4 sm:text-xs">
+                  <BadgeCheck aria-hidden="true" className="h-4 w-4" /> DrapixAI Ready
+                </div>
+              </div>
+              <figcaption className="border border-t-0 border-black/10 bg-white px-4 py-3 text-xs font-semibold text-[#344038]">
+                <span className="block text-[10px] font-bold uppercase tracking-wide text-[#2b654f]">Illustrative SKU review · readiness badge is a sample UI</span>
+                <PhonePhotoLegend labels={['Face + pose', 'Collar', 'Teal tone', 'Sleeve length', 'Fabric detail', 'Curved hem']} />
+                <span className="mt-1 hidden min-[560px]:block font-normal">Face and pose · collar · teal tone · sleeve length · fabric detail · curved hem</span>
+              </figcaption>
+            </figure>
           </div>
           <div className="absolute inset-x-0 bottom-0 border-t border-black/10 bg-[rgba(247,248,245,0.96)] backdrop-blur-md">
             <div className="mx-auto grid max-w-[1440px] grid-cols-3 divide-x divide-black/10 px-5 sm:px-8 lg:px-12">
@@ -264,8 +308,8 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="border-b border-black/10 bg-[#eef2ec] py-16 lg:py-24" aria-labelledby="product-review-heading">
-          <div className="mx-auto grid max-w-[1440px] gap-10 px-5 sm:px-8 lg:grid-cols-2 lg:px-12">
+        <section className="border-b border-black/10 bg-[#eef2ec] py-16 lg:py-20" aria-labelledby="product-review-heading">
+          <div className="mx-auto grid max-w-[1440px] gap-10 px-5 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-12">
             <div>
               <p className="text-xs font-bold uppercase text-[#2b654f]">Product review</p>
               <h2 id="product-review-heading" className="mt-5 font-serif text-4xl leading-tight">Review the garment before publishing.</h2>
@@ -274,7 +318,7 @@ export default function Home() {
             </div>
             <ul className="divide-y divide-black/10 border-y border-black/10">
               {['Color and fabric texture', 'Print, logo and embroidery', 'Sleeves, collar and hem', 'Face, pose and background'].map((label) => (
-                <li key={label} className="flex items-center gap-3 py-5 font-semibold"><ScanLine aria-hidden="true" className="h-5 w-5 shrink-0 text-[#21634e]" />{label}</li>
+                <li key={label} className="flex items-center gap-3 py-4 font-semibold"><ScanLine aria-hidden="true" className="h-5 w-5 shrink-0 text-[#21634e]" />{label}</li>
               ))}
             </ul>
           </div>
@@ -311,18 +355,54 @@ export default function Home() {
 
         <section className="border-b border-black/10 bg-white py-20 lg:py-28">
           <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
-            <div className="max-w-3xl">
-              <p className="text-xs font-bold uppercase text-[#2b654f]">Launch scope</p>
-              <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Built for the garment details generic try-on loses.</h2>
-              <p className="mt-6 text-lg leading-8 text-[#59645c]">Our launch scope prioritizes difficult upper-body products instead of making an unverified all-garment promise.</p>
-            </div>
-            <div className="mt-12 grid border-l border-t border-black/10 sm:grid-cols-2 lg:grid-cols-4">
-              {supportedDetails.map((detail, index) => (
-                <div key={detail} className="flex min-h-28 items-end justify-between border-b border-r border-black/10 p-5">
-                  <span className="max-w-[180px] text-lg font-bold">{detail}</span>
-                  <span className="font-mono text-xs text-[#5d6961]">{String(index + 1).padStart(2, '0')}</span>
+            <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:gap-12">
+              <figure className="order-2 mx-auto w-full max-w-[583px] lg:order-1">
+                <div className="relative overflow-hidden border border-black/10 bg-[#dde3de]">
+                  <Image src="/hero-standard-tryon.png" alt="Man wearing a green shirt in an illustrative virtual try-on sample" width={583} height={777} sizes="(max-width: 1024px) 100vw, 42vw" className="h-auto w-full" />
+                  <div className="absolute left-3 top-3 border border-black/10 bg-white/95 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-[#183f32] shadow-sm backdrop-blur-sm sm:left-4 sm:top-4 sm:text-[11px]">SKU SH-1042 · sample</div>
+                  {[
+                    ['01', 'left-[59%] top-[16%]'],
+                    ['02', 'left-[47%] top-[26%]'],
+                    ['03', 'left-[60%] top-[36%]'],
+                    ['04', 'left-[25%] top-[68%]'],
+                    ['05', 'left-[52%] top-[48%]'],
+                    ['06', 'left-[53%] top-[77%]'],
+                  ].map(([number, position]) => (
+                    <span key={number} aria-hidden="true" className={`absolute ${position} flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white bg-[#183f32] text-[10px] font-bold text-white shadow-md sm:h-8 sm:w-8`}>{number}</span>
+                  ))}
+                  <div className="absolute left-2 top-[20%] hidden w-[28%] flex-col gap-3 min-[560px]:flex">
+                    {[
+                      ['01', 'Face + pose'], ['02', 'Collar'], ['04', 'Cuff shape'],
+                    ].map(([number, label]) => <div key={number} className="flex w-full items-center gap-2 whitespace-nowrap border border-black/10 bg-white/90 px-2 py-2 text-[10px] font-semibold text-[#344038] shadow-sm backdrop-blur-sm"><span className="font-mono font-bold text-[#31725b]">{number}</span>{label}</div>)}
+                  </div>
+                  <div className="absolute right-2 top-[31%] hidden w-[28%] flex-col gap-3 min-[560px]:flex">
+                    {[
+                      ['03', 'Green tone'], ['05', 'Fabric detail'], ['06', 'Hemline'],
+                    ].map(([number, label]) => <div key={number} className="flex w-full items-center gap-2 whitespace-nowrap border border-black/10 bg-white/90 px-2 py-2 text-[10px] font-semibold text-[#344038] shadow-sm backdrop-blur-sm"><span className="font-mono font-bold text-[#31725b]">{number}</span>{label}</div>)}
+                  </div>
+                  <div className="absolute bottom-3 right-3 inline-flex items-center gap-2 border border-white/80 bg-[#183f32]/95 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm sm:bottom-4 sm:right-4 sm:px-4 sm:text-xs">
+                    <BadgeCheck aria-hidden="true" className="h-4 w-4" /> DrapixAI Ready
+                  </div>
                 </div>
-              ))}
+                <figcaption className="border border-t-0 border-black/10 bg-white px-4 py-3 text-xs font-semibold text-[#344038]">
+                  <span className="block text-[10px] font-bold uppercase tracking-wide text-[#2b654f]">Illustrative SKU review · readiness badge is a sample UI</span>
+                  <PhonePhotoLegend labels={['Face + pose', 'Collar', 'Green tone', 'Cuff shape', 'Fabric detail', 'Hemline']} />
+                  <span className="mt-1 hidden min-[560px]:block font-normal">Face and pose · collar · green tone · cuff shape · fabric detail · hemline</span>
+                </figcaption>
+              </figure>
+              <div className="order-1 lg:order-2">
+                <p className="text-xs font-bold uppercase text-[#2b654f]">Launch scope</p>
+                <h2 className="mt-5 font-serif text-4xl font-normal leading-tight sm:text-5xl">Built for the garment details generic try-on loses.</h2>
+                <p className="mt-6 text-lg leading-8 text-[#59645c]">Our launch scope prioritizes difficult upper-body products instead of making an unverified all-garment promise.</p>
+                <div className="mt-8 grid grid-cols-2 border-l border-t border-black/10">
+                  {supportedDetails.map((detail, index) => (
+                    <div key={detail} className="flex min-h-28 flex-col justify-between gap-5 border-b border-r border-black/10 p-3 sm:p-5">
+                      <span className="font-mono text-xs text-[#5d6961]">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="text-sm font-bold sm:text-lg">{detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -382,11 +462,11 @@ export default function Home() {
             <div className="max-w-3xl">
               <p className="text-xs font-bold uppercase text-[#1f5e46]">Controlled rollout</p>
               <h2 className="mt-5 font-serif text-4xl font-normal leading-tight text-[#102018] sm:text-6xl">Prove one product before you scale the catalog.</h2>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#385345]">Evaluate upper-body previews on your own products once service and access are available. Trial allowances do not guarantee immediate generation. Review every result before publishing.</p>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-[#385345]">The 10-day trial costs {trialPrice} and requires authorization for monthly renewal. {trialAvailability}</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-              <Link href={showDashboardCta ? '/dashboard' : '/auth/register'} className="inline-flex h-14 min-w-56 items-center justify-center gap-2 bg-[#172019] px-7 font-semibold text-white hover:bg-[#26352a]">
-                {showDashboardCta ? 'Open dashboard' : 'Start free trial'} <ArrowRight className="h-4 w-4" />
+              <Link href={showDashboardCta ? '/dashboard' : trialDetailsUrl} className="inline-flex h-14 min-w-56 items-center justify-center gap-2 bg-[#172019] px-7 font-semibold text-white hover:bg-[#26352a]">
+                {showDashboardCta ? 'Open dashboard' : 'Read trial terms'} <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/pricing" className="inline-flex h-14 min-w-56 items-center justify-center border border-[#172019]/30 px-7 font-semibold text-[#172019] hover:bg-white/30">View pricing</Link>
             </div>

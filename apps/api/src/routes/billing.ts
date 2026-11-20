@@ -112,7 +112,8 @@ const claimCheckout = (userId: number, keyHash: string, plan: PublicPlanKey) => 
 
 router.post('/checkout', async (req: BillingRequest, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  if (!isStripeBillingEnabled()) return billingDisabled(res);
+  // Keep live enrollment closed until paid-trial checkout and recurring prices are ready.
+  if (isStripeLiveMode() || !isStripeBillingEnabled()) return billingDisabled(res);
   const apiKey = req.billingApiKey!;
   const plan = normalizeSelectedPlan(req.body?.plan);
   if (!plan) return res.status(400).json({ error: 'BILLING_PLAN_INVALID' });

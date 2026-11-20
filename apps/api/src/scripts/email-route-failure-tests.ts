@@ -23,7 +23,7 @@ export const verifyEmailFailureRoutes = async () => {
     const verification = {normalizeEmail:(value:string)=>value.trim().toLowerCase(),issueVerificationCode:async()=>({code:'synthetic-code'})};
     const adapters: Record<string, unknown> = {
       express:{Router:()=>router}, crypto:{},
-      '@prisma/client':{PrismaClient:class {user={findUnique:async ({where}:any)=>where.id || existing ? user : null};}},
+      '../lib/prisma':{prisma:{user:{findUnique:async ({where}:any)=>where.id || existing ? user : null}}},
       '../lib/rate-limit':{createRateLimitMiddleware:()=>()=>{}},
       '../lib/verification':verification,
       '../services/emailer':{sendOtpEmail:async()=>{const result=deliveries.shift();assert.ok(result,'Missing synthetic send result');return result;}},

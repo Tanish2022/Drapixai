@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { trialDetailsUrl } from '@/app/lib/trial-offer';
 import BrandLogo from './BrandLogo';
 
 type MarketingNavProps = {
@@ -35,7 +36,7 @@ export default function MarketingNav({ active }: MarketingNavProps) {
 
         <div className="flex items-center gap-2">
           <Link href="/auth/login" className="hidden px-3 py-2 text-sm font-semibold text-[#344038] sm:inline-flex">Sign in</Link>
-          <Link href="/auth/register" className="inline-flex h-11 items-center bg-[#183f32] px-4 text-sm font-semibold text-white hover:bg-[#245a48]">Start free trial</Link>
+          <Link href={trialDetailsUrl} className="inline-flex h-11 items-center bg-[#183f32] px-4 text-sm font-semibold text-white hover:bg-[#245a48]">View trial details</Link>
         </div>
       </div>
     </header>

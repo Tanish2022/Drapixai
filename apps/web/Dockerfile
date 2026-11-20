@@ -9,6 +9,9 @@ WORKDIR /app
 
 COPY . .
 
+# Next.js embeds these public origins in browser assets during the build.
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_WEB_BASE_URL
 RUN cd apps/web \
     && npm ci --include=dev \
     && npm run build \

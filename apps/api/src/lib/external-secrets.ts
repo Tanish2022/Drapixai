@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { stagingMailDisabled } from './email-delivery-policy';
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 
 const MANAGED_SECRET_NAMES = new Set([
@@ -46,7 +47,6 @@ const REQUIRED_PRODUCTION_MANAGED_SECRET_NAMES = [
   'DRAPIXAI_AUDIT_LOG_SECRET',
   'DRAPIXAI_WEBHOOK_ENCRYPTION_KEY',
   'DRAPIXAI_METRICS_TOKEN',
-  'SMTP_PASS',
 ] as const;
 
 const parseSecretObject = (raw: string, source: string) => {
@@ -66,6 +66,7 @@ const applySecrets = (values: Record<string, unknown>) => {
   if (process.env.NODE_ENV === 'production') {
     const required = [
       ...REQUIRED_PRODUCTION_MANAGED_SECRET_NAMES,
+      ...(stagingMailDisabled() ? [] : ['SMTP_PASS']),
       ...(process.env.DRAPIXAI_ADMIN_BOOTSTRAP_ENABLED === '1' ? ['DRAPIXAI_ADMIN_PASSWORD'] : []),
       ...(process.env.DRAPIXAI_STRIPE_BILLING_ENABLED === '1' || process.env.DRAPIXAI_API_ENVIRONMENT === 'live'
         ? ['DRAPIXAI_STRIPE_SECRET_KEY', 'DRAPIXAI_STRIPE_WEBHOOK_SECRET'] : []),

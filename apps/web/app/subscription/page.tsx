@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { trialAvailability, trialDetailsUrl } from '@/app/lib/trial-offer';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CreditCard, ExternalLink, Gauge, Loader2, ShieldCheck, Store, UserCircle2 } from 'lucide-react';
@@ -82,22 +83,20 @@ export default function SubscriptionPage() {
   const mutedTextClass = themePreference === 'light' ? 'text-[#68736b]' : 'text-[#aab6ac]';
   const strongTextClass = themePreference === 'light' ? 'text-[#172019]' : 'text-[#edf2ed]';
 
-  const openHostedBilling = async (action: 'checkout' | 'portal', plan?: 'starter' | 'growth' | 'pro') => {
-    setBillingAction(plan || action);
+  const openBillingPortal = async () => {
+    setBillingAction('portal');
     setBillingError(null);
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (action === 'checkout') headers['Idempotency-Key'] = crypto.randomUUID();
-      const payload = await requestJson(`/api/dashboard/proxy/billing/${action}`, {
+      const payload = await requestJson('/api/dashboard/proxy/billing/portal', {
         method: 'POST',
         headers,
-        body: JSON.stringify(plan ? { plan } : {}),
+        body: JSON.stringify({}),
         cache: 'no-store',
       }, { fallback: 'Billing could not be opened. Check your subscription before trying again.' });
       if (typeof payload.url !== 'string') throw new Error('INVALID_BILLING_RESPONSE');
       const hostedUrl = new URL(payload.url);
-      const allowedHost = action === 'checkout' ? 'checkout.stripe.com' : 'billing.stripe.com';
-      if (hostedUrl.protocol !== 'https:' || hostedUrl.hostname !== allowedHost) {
+      if (hostedUrl.protocol !== 'https:' || hostedUrl.hostname !== 'billing.stripe.com') {
         throw new Error('BILLING_REDIRECT_REJECTED');
       }
       window.location.assign(hostedUrl.toString());
@@ -304,7 +303,7 @@ export default function SubscriptionPage() {
             {usage.subscriptionProvider === 'stripe' ? (
               <button
                 type="button"
-                onClick={() => openHostedBilling('portal')}
+                onClick={openBillingPortal}
                 disabled={billingAction !== null}
                 className="inline-flex min-h-11 items-center justify-center gap-2 border border-black/15 bg-white px-4 py-2 text-sm font-semibold text-[#172019] transition-colors hover:bg-[#eef2ed] disabled:cursor-wait disabled:opacity-60"
               >
@@ -318,20 +317,9 @@ export default function SubscriptionPage() {
               Use Manage billing to change plan, update payment details, review invoices, or cancel renewal without creating a duplicate subscription.
             </p>
           ) : (
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {(['starter', 'growth', 'pro'] as const).map((plan) => (
-                <button
-                  key={plan}
-                  type="button"
-                  onClick={() => openHostedBilling('checkout', plan)}
-                  disabled={billingAction !== null}
-                  className={`flex min-h-12 items-center justify-between border px-4 py-3 text-left text-sm font-semibold capitalize transition-colors disabled:cursor-wait disabled:opacity-60 ${themePreference === 'light' ? 'border-black/15 bg-[#f4f6f2] hover:bg-[#e7ede7]' : 'border-white/15 bg-[#101712] hover:bg-white/[0.06]'}`}
-                >
-                  {plan}
-                  {billingAction === plan ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                </button>
-              ))}
-            </div>
+            <p className={`mt-6 text-sm ${mutedTextClass}`}>
+              {trialAvailability} <Link className="underline" href={trialDetailsUrl}>View trial details</Link>
+            </p>
           )}
         </section>
       </div>

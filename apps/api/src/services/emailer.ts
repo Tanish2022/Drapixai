@@ -6,7 +6,7 @@ import {
   buildTrialReminderEmail,
   buildWelcomeEmail,
 } from './email-templates';
-import { getEmailDeliveryConfig, normalizeMailRecipient } from '../lib/email-delivery-policy';
+import { getEmailDeliveryConfig, normalizeMailRecipient, stagingMailDisabled } from '../lib/email-delivery-policy';
 import { canSendTransactionalEmail } from './email-delivery-events';
 import { observeEmailSend } from '../lib/operational-metrics';
 
@@ -84,6 +84,7 @@ export const createEmailSender = (dependencies: EmailDependencies) => async (
   text: string,
   options: EmailSendOptions = {}
 ): Promise<EmailSendResult> => {
+  if (stagingMailDisabled()) return { sent: false, skipped: true, error: 'STAGING_MAIL_DISABLED' };
   if (!process.env.SMTP_HOST) {
     return { sent: false, skipped: true, error: 'SMTP_HOST_NOT_CONFIGURED' };
   }

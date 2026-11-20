@@ -7,8 +7,30 @@ services:
       redis:
         condition: service_healthy
     environment:
+      NODE_ENV: production
+      DRAPIXAI_API_ENVIRONMENT: sandbox
+      DRAPIXAI_REQUIRE_NEON_STAGING: "1"
       DRAPIXAI_TRYON_INTAKE_ENABLED: "0"
       DRAPIXAI_STRIPE_BILLING_ENABLED: "0"
+      DRAPIXAI_STRIPE_LIVE_MODE: "0"
+      DRAPIXAI_DISABLE_STAGING_MAIL: "1"
+      DRAPIXAI_EMAIL_EVENTS_ENABLED: "0"
+      SMTP_HOST: ""
+      DRAPIXAI_SHOPIFY_ENABLED: "0"
+      DRAPIXAI_SHOPIFY_AUTO_PREPARE: "0"
+      DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY: "1"
+      S3_BUCKET: ${DRAPIXAI_STAGING_S3_BUCKET:?set the approved private staging bucket}
+      AWS_REGION: ap-south-1
+      S3_ENDPOINT: ""
+      AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: "true"
+      DRAPIXAI_S3_SERVER_SIDE_ENCRYPTION: AES256
+      DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK: "0"
+      DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON: "0"
+      DRAPIXAI_AUTO_REJECT_BAD_RESULTS: "1"
+      DRAPIXAI_EXCELLENT_LATENCY_MS: "10000"
+  web:
+    environment:
+      DRAPIXAI_API_URL: http://api:8000
 
 volumes:
   staging_postgres: !reset null

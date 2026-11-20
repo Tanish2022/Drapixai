@@ -60,7 +60,7 @@ export default function LoginPage() {
           <Link href="/" className="flex items-center" aria-label="DrapixAI home">
             <BrandLogo className="h-10 w-auto sm:h-12" />
           </Link>
-          <p className="text-sm text-[#68736b]"><span className="hidden sm:inline">New to DrapixAI? </span><Link href={`/auth/register?next=${encodeURIComponent(nextPath)}`} className="font-bold text-[#183f32] hover:text-[#31725b]">Start a trial</Link></p>
+          <p className="text-sm text-[#68736b]"><span className="hidden sm:inline">New to DrapixAI? </span><Link href={`/auth/register?next=${encodeURIComponent(nextPath)}`} className="font-bold text-[#183f32] hover:text-[#31725b]">Create an account</Link></p>
         </div>
       </header>
 

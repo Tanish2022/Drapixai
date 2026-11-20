@@ -36,7 +36,7 @@ import { aiFetch, assertAiMtlsConfiguration } from './lib/ai-client';
 import { admissionEpoch, isTryOnAdmissionAcknowledged } from './lib/tryon-concurrency';
 import { assertStripeEnvironment } from './lib/billing';
 import { assertSmtpConfiguration } from './services/emailer';
-import { getEmailDeliveryConfig } from './lib/email-delivery-policy';
+import { getEmailDeliveryConfig, stagingMailDisabled } from './lib/email-delivery-policy';
 import { mountEmailWebhook } from './routes/email-webhooks';
 import { purgeExpiredEmailEvents } from './services/email-delivery-events';
 import { hasStrictDatabaseTransport } from './lib/database-transport';
@@ -118,11 +118,7 @@ const requireProductionConfig = () => {
     'DRAPIXAI_WEB_BASE_URL',
     'S3_BUCKET',
     'AWS_REGION',
-    'SMTP_HOST',
-    'SMTP_PORT',
-    'SMTP_USER',
-    'SMTP_PASS',
-    'SMTP_FROM',
+    ...(stagingMailDisabled() ? [] : ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM']),
   ]) {
     requireValue(name);
   }
@@ -243,7 +239,7 @@ const requireProductionConfig = () => {
 };
 
 requireProductionConfig();
-if (process.env.NODE_ENV === 'production') assertSmtpConfiguration();
+if (process.env.NODE_ENV === 'production' && !stagingMailDisabled()) assertSmtpConfiguration();
 assertAiMtlsConfiguration();
 if (process.env.NODE_ENV === 'production' && process.env.DRAPIXAI_TRYON_INTAKE_ENABLED !== '0') admissionEpoch();
 assertStripeEnvironment();
@@ -545,7 +541,7 @@ if (shopifyEnabled) {
   }
 }
 
-startTrialNotifications();
+if (!stagingMailDisabled()) startTrialNotifications();
 ensureAdminUser().catch((error) => {
   console.error('Admin bootstrap failed:', formatLogError(error));
 });

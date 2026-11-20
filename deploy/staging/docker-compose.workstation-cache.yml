@@ -1,0 +1,35 @@
+# GPU-stage override for docker-compose.ai.yml only. CPU first startup excludes both.
+x-workstation-cache: &workstation-cache
+  - type: bind
+    source: /data/drapixai/staging/models
+    target: /workspace/drapixai/models
+    read_only: true
+    bind:
+      create_host_path: false
+  - type: bind
+    source: /data/drapixai/staging/runtime
+    target: /workspace/drapixai/runtime
+    bind:
+      create_host_path: false
+  - type: bind
+    source: /data/drapixai/staging/huggingface
+    target: /workspace/.cache/huggingface
+    bind:
+      create_host_path: false
+
+x-cache-env: &cache-env
+  HF_HOME: /workspace/.cache/huggingface
+  DRAPIXAI_GARMENT_CACHE_DIR: /workspace/drapixai/runtime/garments
+  DRAPIXAI_TRANSIENT_SPOOL_DIR: /dev/shm/drapixai-tryon-spool
+
+services:
+  ai-api:
+    volumes: *workstation-cache
+    environment: *cache-env
+  ai-worker:
+    volumes: *workstation-cache
+    environment: *cache-env
+
+volumes:
+  staging_ai_runtime: !reset null
+  staging_ai_hf_cache: !reset null

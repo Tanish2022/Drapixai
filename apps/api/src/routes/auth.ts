@@ -8,7 +8,7 @@ import { resolveActiveApiKey } from '../lib/api-key-auth';
 import { ADMIN_MFA_SCOPE, ADMIN_SESSION_KEY_MAX_AGE_MS, requiresAdminMfa, consumeAdminTotp } from '../lib/admin-mfa';
 import { validatePasswordStrength } from '../lib/security';
 import { hashPassword, hashPasswordAfterAuthorization, verifyPassword, isPasswordHashBusy, LOGIN_TIMING_SENTINEL_HASH } from '../lib/password-hash';
-import { TRIAL_DAYS, normalizeSelectedPlan } from '../lib/plans';
+import { normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail, sendWelcomeEmail } from '../services/emailer';
 import { appendSecurityAudit } from '../lib/audit-log';
@@ -181,8 +181,6 @@ router.post('/register', async (req, res) => {
     }
     
     const normalizedSelectedPlan = normalizeSelectedPlan(selectedPlan);
-    const trialExpiresAt = new Date();
-    trialExpiresAt.setDate(trialExpiresAt.getDate() + TRIAL_DAYS);
     
     const user = await prisma.$transaction(async tx => {
       const created = await tx.user.create({
@@ -192,12 +190,10 @@ router.post('/register', async (req, res) => {
         passwordHash,
         companyName: companyName || '',
         mobileNumber: mobileNumber ? String(mobileNumber).trim() : null,
-        planType: 'trial',
+        planType: 'none',
         selectedPlan: normalizedSelectedPlan,
-        subscriptionPlan: normalizedSelectedPlan,
-        subscriptionStatus: 'trialing',
-        trialExpiresAt,
-        subscriptionCurrentPeriodEndsAt: trialExpiresAt,
+        subscriptionPlan: null,
+        subscriptionStatus: 'inactive',
       }
       });
       await recordAccountTermsAcceptance(tx, created.id, termsAcceptance, 'password_signup');
@@ -332,12 +328,10 @@ router.post('/oauth/google', async (req, res) => {
           emailVerifiedAt: new Date(),
           passwordHash: await hashPassword(crypto.randomBytes(32).toString('base64url')),
           companyName: name || null,
-          planType: 'trial',
+          planType: 'none',
           selectedPlan: normalizedSelectedPlan,
-          subscriptionPlan: normalizedSelectedPlan,
-          subscriptionStatus: 'trialing',
-          trialExpiresAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
-          subscriptionCurrentPeriodEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
+          subscriptionPlan: null,
+          subscriptionStatus: 'inactive',
         }
       });
     } else if ((!user.companyName && name) || (!user.selectedPlan && normalizedSelectedPlan)) {
@@ -346,8 +340,6 @@ router.post('/oauth/google', async (req, res) => {
         data: {
           companyName: user.companyName || name || null,
           selectedPlan: user.selectedPlan || normalizedSelectedPlan,
-          subscriptionPlan: user.subscriptionPlan || normalizedSelectedPlan,
-          subscriptionStatus: user.subscriptionStatus || 'trialing',
         },
       });
     }

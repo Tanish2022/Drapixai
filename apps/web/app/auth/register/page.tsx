@@ -6,7 +6,7 @@ import { Suspense, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { GOOGLE_AUTH_ENABLED, PUBLIC_API_BASE_URL } from '@/app/lib/public-env';
-import { trackEvent } from '@/app/lib/analytics';
+import { trialAvailability, trialDetailsUrl } from '@/app/lib/trial-offer';
 import BrandLogo from '@/app/components/BrandLogo';
 import FeedbackMessage from '@/app/components/FeedbackMessage';
 import { requestJson, userError, errorField, type FeedbackTone } from '@/app/lib/user-feedback';
@@ -77,7 +77,6 @@ function RegisterPageContent() {
       if (data.ok !== true) throw new Error('INVALID_SESSION_RESPONSE');
 
       router.push(nextPath);
-      trackEvent('trial_signup', { metadata: { source: 'password' } });
     } catch (error) {
       setInvalid(errorField(error));
       setStatusTone('error');
@@ -115,11 +114,11 @@ function RegisterPageContent() {
           <div className="w-full max-w-xl">
             <p className="text-xs font-bold uppercase text-[#31725b]">Brand workspace</p>
             <h1 className="mt-4 font-serif text-4xl leading-tight text-[#101712] sm:text-5xl">{otpRequested ? 'Check your email.' : 'Let’s start with your brand.'}</h1>
-            <p className="mt-4 max-w-lg leading-7 text-[#68736b]">Create a workspace without a credit card. Trial generation requires service availability and approved access; creating an account does not guarantee immediate try-ons.</p>
+            <p className="mt-4 max-w-lg leading-7 text-[#68736b]">Create your brand workspace. Trial enrollment is separate and currently closed.</p>
 
             {selectedPlanLabel ? (
               <div className="mt-6 border-l-4 border-[#31725b] bg-[#eaf0e9] px-5 py-4 text-sm leading-6">
-                <strong>{selectedPlanLabel} selected.</strong> You will begin on the shared trial and can confirm this plan after measuring real usage.
+                <strong>{selectedPlanLabel} selected.</strong> Your selection is saved as a preference.
               </div>
             ) : null}
 
@@ -195,8 +194,8 @@ function RegisterPageContent() {
               ))}
             </ol>
             <div className="mt-10 border-l-4 border-[#183f32] bg-white px-5 py-5">
-              <p className="flex items-center gap-2 text-sm font-bold"><Check className="h-4 w-4 text-[#31725b]" /> 300 try-ons over 12 days</p>
-              <p className="mt-2 text-sm text-[#68736b]">No credit card. Trial allowance requires available service and approved access. Help center included.</p>
+              <p className="flex items-center gap-2 text-sm font-bold"><Check className="h-4 w-4 text-[#31725b]" /> Paid trial enrollment</p>
+              <p className="mt-2 text-sm text-[#68736b]">{trialAvailability} <Link href={trialDetailsUrl} className="underline">View trial details</Link></p>
             </div>
           </div>
         </aside>
