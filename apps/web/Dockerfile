@@ -15,7 +15,7 @@ ARG NEXT_PUBLIC_WEB_BASE_URL
 RUN cd apps/web \
     && npm ci --include=dev \
     && npm run build \
-    && npm prune --omit=dev
+    && npm prune --omit=dev --offline --no-audit
 
 WORKDIR /app/apps/web
 
@@ -29,7 +29,7 @@ RUN apt-get update \
     && cp /var/lib/dpkg/info/libssl3t64:amd64.md5sums /var/lib/dpkg/status.d/libssl3t64.md5sums \
     && rm -rf /var/lib/apt/lists/*
 
-FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:8ad9cc935b7843c4024b7e1487b5ef472c354ea847b97c667023e2618552607e AS runtime
+FROM gcr.io/distroless/nodejs22-debian13:nonroot@sha256:39c66687298417dbf3ff2fb8b6012c20554494e16414ef7afd07b9abbb45b501 AS runtime
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
