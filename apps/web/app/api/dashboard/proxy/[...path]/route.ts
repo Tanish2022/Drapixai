@@ -1,9 +1,9 @@
 import { cookies } from 'next/headers';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE, readDashboardSessionToken } from '@/app/lib/dashboard-session';
 import { clearSessionCookies } from '@/app/lib/session-cookie';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
-import { noStoreJson, readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
+import { fetchProxyResponse, noStoreJson, readLimitedProxyBody, rejectCrossOriginMutation } from '@/app/lib/request-guard';
 
 type DashboardProxyContext = {
   params: Promise<{ path?: string[] }>;
@@ -66,24 +66,15 @@ const proxyDashboardRequest = async (request: NextRequest, context: DashboardPro
   const bodyResult = await readLimitedProxyBody(request);
   if (bodyResult.rejection) return bodyResult.rejection;
 
-  const upstream = await fetch(buildApiUrl(request, path), {
+  const upstream = await fetchProxyResponse(buildApiUrl(request, path), {
     method: request.method,
     headers,
     body: bodyResult.body,
     cache: 'no-store',
-  });
+  }, request);
   if (upstream.status === 401) clearSessionCookies(cookieStore, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE);
 
-  const responseHeaders = new Headers();
-  responseHeaders.set('Cache-Control', 'no-store, no-cache, max-age=0, must-revalidate');
-  responseHeaders.set('Pragma', 'no-cache');
-  const upstreamContentType = upstream.headers.get('content-type');
-  if (upstreamContentType) responseHeaders.set('Content-Type', upstreamContentType);
-
-  return new NextResponse(await upstream.arrayBuffer(), {
-    status: upstream.status,
-    headers: responseHeaders,
-  });
+  return upstream;
 };
 
 export const GET = proxyDashboardRequest;

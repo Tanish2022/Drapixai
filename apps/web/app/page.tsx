@@ -57,6 +57,7 @@ export default function Home() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const [hasDashboardAccess, setHasDashboardAccess] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileName, setProfileName] = useState('Profile');
@@ -111,14 +112,18 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, []);
 
-  const handleLogout = () => {
-    fetch('/api/dashboard/session', { method: 'DELETE' })
-      .catch(() => undefined)
-      .finally(() => {
-        setHasDashboardAccess(false);
-        setProfileOpen(false);
-        signOut({ redirect: false }).catch(() => undefined).finally(() => router.push('/'));
-      });
+  const handleLogout = async () => {
+    setLogoutError('');
+    try {
+      const result = await fetch('/api/dashboard/session', { method: 'DELETE', signal: AbortSignal.timeout(15000) });
+      if (!result.ok) throw new Error('SIGN_OUT_PENDING');
+      await signOut({ redirect: false });
+      setHasDashboardAccess(false);
+      setProfileOpen(false);
+      router.push('/');
+    } catch {
+      setLogoutError('We could not confirm sign-out. Check your connection and try again.');
+    }
   };
 
   const showDashboardCta = hasDashboardAccess || sessionStatus === 'authenticated';
@@ -168,6 +173,7 @@ export default function Home() {
                           {label}
                         </Link>
                       ))}
+                      {logoutError && <p role="alert" className="px-3 text-sm text-[#9e2e2e]">{logoutError}</p>}
                       <button type="button" onClick={handleLogout} className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-[#9e2e2e] hover:bg-[#fff1f0]">
                         <LogOut className="h-4 w-4" /> Log out
                       </button>

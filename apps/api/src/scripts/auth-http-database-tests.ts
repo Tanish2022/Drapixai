@@ -114,6 +114,10 @@ const main = async () => {
     const keyA = good.body.apiKey as string;
     assert.ok(typeof keyA === 'string' && keyA.length > 20);
     assert.equal((await request('/account/profile',{ key:keyA, proxy:false })).status,403);
+    const deniedAdmin = await request('/auth/login', { body: { email: a.email, password: original, sessionPurpose: 'admin', issueNewKey: true }, client: 7 });
+    assert.equal(deniedAdmin.status, 403);
+    assert.ok(!deniedAdmin.body.apiKey);
+    assert.equal((await request('/account/profile', { key: keyA })).status, 200);
     const profile = await request(`/account/profile?userId=${b.id}`,{key:keyA});
     assert.equal(profile.status,200); assert.equal(profile.body.email,a.email);
     const changed = await request('/account/profile',{key:keyA,body:{companyName:'Fixture A updated',userId:b.id,email:b.email,role:'system_admin',authVersion:0,passwordHash:'ignored-field',planType:'enterprise'}});

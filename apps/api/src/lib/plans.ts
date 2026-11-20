@@ -1,5 +1,5 @@
 export const TRIAL_TRYONS = 300;
-export const TRIAL_DAYS = 12;
+export const TRIAL_DAYS = 10;
 const ENTERPRISE_DEFAULT_QUOTA = Number(process.env.DRAPIXAI_ENTERPRISE_QUOTA || 100000);
 
 export const PUBLIC_PLAN_KEYS = ['starter', 'growth', 'pro'] as const;
@@ -125,7 +125,7 @@ const STRIPE_PERIOD_GRACE_MS = 15 * 60 * 1000;
 
 export const normalizePlanKey = (value: string | null | undefined): PlanKey => {
   const normalized = String(value || '').trim().toLowerCase();
-  if (normalized in PLAN_CONFIG) {
+  if (Object.prototype.hasOwnProperty.call(PLAN_CONFIG, normalized)) {
     return normalized as PlanKey;
   }
   return 'none';
@@ -166,13 +166,13 @@ export const getPlanAccessContext = (input: PlanAccessInput): PlanAccessContext 
   const subscriptionPeriodEndsAt = normalizeTrialExpiry(input.subscriptionCurrentPeriodEndsAt);
   const at = normalizeTrialExpiry(input.at) || new Date();
   const trialDaysLeft = normalizedPlan === 'trial' && trialExpiresAt
-    ? Math.max(0, Math.ceil((trialExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    ? Math.max(0, Math.ceil((trialExpiresAt.getTime() - at.getTime()) / (1000 * 60 * 60 * 24)))
     : 0;
 
   let active = config.active;
   let blockedReason: PlanAccessContext['blockedReason'] = active ? null : 'PLAN_INACTIVE';
 
-  if (active && normalizedPlan === 'trial' && trialExpiresAt && trialExpiresAt.getTime() <= Date.now()) {
+  if (active && normalizedPlan === 'trial' && (!trialExpiresAt || trialExpiresAt.getTime() <= at.getTime())) {
     active = false;
     blockedReason = 'TRIAL_EXPIRED';
   }

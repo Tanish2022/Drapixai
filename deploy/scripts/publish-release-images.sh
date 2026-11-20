@@ -47,6 +47,10 @@ set +a
   exit 1
 }
 
+for origin in "${NEXT_PUBLIC_API_BASE_URL:?set the public API origin}" "${NEXT_PUBLIC_WEB_BASE_URL:?set the public website origin}"; do
+  [[ "$origin" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?/?$ ]] || { echo "Expected an HTTPS origin without a path or credentials." >&2; exit 2; }
+done
+
 registry="${DRAPIXAI_RELEASE_REGISTRY:-}"
 [[ "$registry" =~ ^[a-z0-9][a-z0-9._:/-]*[a-z0-9]$ ]] || {
   echo "DRAPIXAI_RELEASE_REGISTRY must be a lowercase registry namespace such as ghcr.io/acme/drapixai." >&2
@@ -77,6 +81,8 @@ docker build --platform linux/amd64 \
   -f "$repo_root/apps/api/Dockerfile" -t "$api_tag" "$repo_root"
 docker build --platform linux/amd64 \
   --label "org.opencontainers.image.revision=$current_commit" \
+  --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL" \
+  --build-arg NEXT_PUBLIC_WEB_BASE_URL="$NEXT_PUBLIC_WEB_BASE_URL" \
   -f "$repo_root/apps/web/Dockerfile" -t "$web_tag" "$repo_root"
 docker build --platform linux/amd64 \
   --label "org.opencontainers.image.revision=$current_commit" \

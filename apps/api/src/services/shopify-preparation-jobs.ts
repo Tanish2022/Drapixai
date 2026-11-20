@@ -66,16 +66,17 @@ const claimNext = async (prisma: PrismaClient, requestedUser?: number) => runDat
   if (!dispatcher?.acquired) return null;
   // Preserve the previous single global preprocessing operation, while choosing
   // the least-recently-served tenant rather than its entire oldest backlog.
-  if (await tx.shopifyPreparationJob.count({where: {status: {in: ['processing', 'ambiguous']}}})) return null;
+  if (await tx.shopifyPreparationJob.count({where: {status: 'processing'}})) return null;
   if (await tx.catalogPreparationLease.count({where: {id: 'shopify-catalog-preparation', expiresAt: {gt: new Date()}}})) return null;
-  if (await tx.catalogProduct.count({where: {source: {startsWith: 'shopify:'}, preparationStatus: 'reconciliation_required'}})) return null;
   const rows = await tx.$queryRaw<Array<{id: number; userId: number}>>`SELECT p."id", p."userId" FROM "CatalogProduct" p
     JOIN "ShopifyInstallation" s ON p."source" = 'shopify:' || s."shopDomain" AND p."userId" = s."userId" AND s."status" = 'active'
     LEFT JOIN "CatalogPreparationLease" l ON l."id" = 'shopify-preparation:user:' || p."userId"::text
     WHERE p."isVariant" = false AND p."status" <> 'archived' AND p."preparationAttempts" < ${MAX_ATTEMPTS}
       AND (p."preparationStatus" = 'queued' OR (p."preparationStatus" = 'retry' AND p."preparationNextAttemptAt" <= CURRENT_TIMESTAMP))
       AND (l."id" IS NULL OR l."expiresAt" <= CURRENT_TIMESTAMP)
-      AND NOT EXISTS (SELECT 1 FROM "ShopifyPreparationJob" j WHERE j."userId" = p."userId" AND j."status" = 'cleanup_pending')
+      AND NOT EXISTS (SELECT 1 FROM "ShopifyPreparationJob" j WHERE j."userId" = p."userId" AND j."status" IN ('cleanup_pending','ambiguous'))
+      AND NOT EXISTS (SELECT 1 FROM "CatalogProduct" held WHERE held."userId" = p."userId"
+        AND held."source" LIKE 'shopify:%' AND held."preparationStatus" = 'reconciliation_required')
     ORDER BY COALESCE(l."updatedAt", TIMESTAMP '1970-01-01'), p."preparationQueuedAt" ASC NULLS LAST, p."id" LIMIT 1 FOR UPDATE OF p SKIP LOCKED`;
   if (!rows.length || requestedUser !== undefined && rows[0].userId !== requestedUser) return null;
   const product = await tx.catalogProduct.findUniqueOrThrow({where: {id: rows[0].id}});

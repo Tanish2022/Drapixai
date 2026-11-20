@@ -6,10 +6,11 @@ import MarketingFooter from '@/app/components/MarketingFooter';
 import MarketingNav from '@/app/components/MarketingNav';
 import { timedFetch as fetch } from '@/app/lib/user-feedback';
 
-type ServiceState = 'checking' | 'operational' | 'degraded';
+type ServiceState = 'checking' | 'operational' | 'degraded' | 'disabled';
 
 type PublicReadiness = {
   checkedAt?: string;
+  inferenceDisabled?: boolean;
   services?: { storefront?: boolean; api?: boolean; data?: boolean; ai?: boolean };
 };
 
@@ -24,10 +25,12 @@ export default function StatusClient() {
     try {
       const response = await fetch('/api/health', { cache: 'no-store' });
       const payload = (await response.json().catch(() => null)) as PublicReadiness | null;
-      next.storefront = response.ok && payload?.services?.storefront === true ? 'operational' : 'degraded';
-      next.api = response.ok && payload?.services?.api === true ? 'operational' : 'degraded';
-      next.data = response.ok && payload?.services?.data === true ? 'operational' : 'degraded';
-      next.ai = response.ok && payload?.services?.ai === true ? 'operational' : 'degraded';
+      const reportedStatus = response.ok || response.status === 503;
+      next.storefront = reportedStatus && payload?.services?.storefront === true ? 'operational' : 'degraded';
+      next.api = reportedStatus && payload?.services?.api === true ? 'operational' : 'degraded';
+      next.data = reportedStatus && payload?.services?.data === true ? 'operational' : 'degraded';
+      next.ai = reportedStatus && payload?.services?.ai === true ? 'operational' : 'degraded';
+      if (reportedStatus && payload?.inferenceDisabled === true) next.ai = 'disabled';
       const reported = typeof payload?.checkedAt === 'string' ? new Date(payload.checkedAt) : null;
       setCheckedAt(reported && Number.isFinite(reported.getTime()) ? reported : new Date());
     } catch {
@@ -46,7 +49,7 @@ export default function StatusClient() {
     ['data', 'Data and queue', 'PostgreSQL and Redis readiness exposed by the API'],
     ['ai', 'Try-on engine', 'GPU worker and model readiness exposed by the API'],
   ] as const;
-  const allOperational = services.every(([key]) => states[key] === 'operational');
+  const allOperational = services.every(([key]) => states[key] === 'operational' || states[key] === 'disabled');
 
   return (
     <main className="min-h-screen bg-[#fbfcf9] text-[#172019]">
@@ -74,7 +77,7 @@ export default function StatusClient() {
             return (
               <div key={key} className="flex flex-col justify-between gap-4 border-b border-black/10 py-6 last:border-b-0 sm:flex-row sm:items-center">
                 <div><h2 className="font-semibold">{name}</h2><p className="mt-1 text-sm text-[#68736b]">{description}</p></div>
-                <span className={`inline-flex w-fit items-center gap-2 border px-3 py-2 text-sm font-semibold ${state === 'operational' ? 'border-[#9bb6a8] bg-[#eaf0e9] text-[#183f32]' : state === 'checking' ? 'border-black/15 bg-white text-[#68736b]' : 'border-[#d5b77d] bg-[#fbf5e9] text-[#7c5620]'}`}><Activity className="h-4 w-4" />{state === 'operational' ? 'Operational' : state === 'checking' ? 'Checking' : 'Degraded'}</span>
+                <span className={`inline-flex w-fit items-center gap-2 border px-3 py-2 text-sm font-semibold ${state === 'operational' ? 'border-[#9bb6a8] bg-[#eaf0e9] text-[#183f32]' : state === 'checking' ? 'border-black/15 bg-white text-[#68736b]' : 'border-[#d5b77d] bg-[#fbf5e9] text-[#7c5620]'}`}><Activity className="h-4 w-4" />{state === 'operational' ? 'Operational' : state === 'checking' ? 'Checking' : state === 'disabled' ? 'Intake paused' : 'Degraded'}</span>
               </div>
             );
           })}

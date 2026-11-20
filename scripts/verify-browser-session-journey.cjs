@@ -77,16 +77,19 @@ cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_ke
     api = http.createServer(async (req, res) => {
       const url = new URL(req.url, 'http://fixture.invalid');
       const json = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
+      if (url.pathname === '/ready') return json({ status: 'ready', checks: { database: true, redis: true, ai: false, inferenceEnabled: false } });
       if (url.pathname === '/auth/login') {
         let body = ''; for await (const chunk of req) body += chunk;
         const input = JSON.parse(body);
         const admin = input.email === 'operator@example.test';
         if ((admin && (input.password !== '  fixture-operator-password  ' || input.mfaCode !== '123456')) || (!admin && input.password !== 'fixture-merchant-password')) return json({ error: 'INVALID' }, 401);
-        return json({ apiKey: fixtureKey(admin ? 'admin' : 'merchant') });
+        if (input.sessionPurpose === 'admin' && !admin) return json({ error: 'ADMIN_ACCESS_DENIED' }, 403);
+        return json({ apiKey: fixtureKey(admin ? 'admin' : 'merchant'), adminAuthorized: admin && input.sessionPurpose === 'admin' });
       }
       const key = String(req.headers.authorization || '').replace(/^Bearer /, '');
       const role = keys.get(key);
       if (!role) return json({ error: 'INVALID_API_KEY' }, 401);
+      if (url.pathname === '/auth/terms') return json({ accepted: true, ...require('../apps/api/src/legal/terms-metadata.json') });
       if (url.pathname === '/auth/logout') { keys.delete(key); return json({ ok: true }); }
       if (url.pathname.startsWith('/admin/')) {
         if (role !== 'admin') return json({ error: 'ADMIN_REQUIRED' }, 403);

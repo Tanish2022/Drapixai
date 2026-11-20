@@ -1,6 +1,7 @@
 import { sessionCookieName } from './session-cookie';
 export const LEGACY_ADMIN_SESSION_COOKIE = 'drapixai_admin_session';
 export const ADMIN_SESSION_COOKIE = sessionCookieName(LEGACY_ADMIN_SESSION_COOKIE);
+export const ADMIN_REVOCATION_COOKIE = sessionCookieName('drapixai_admin_revocation');
 export const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
 
 const getAdminSessionSecret = () => {
@@ -66,7 +67,7 @@ type AdminSessionPayload = {
   expiresAt: number;
 };
 
-export const createAdminSessionToken = async (apiKey: string) => {
+export const createAdminSessionToken = async (apiKey: string, purpose: 'session' | 'revocation' = 'session') => {
   const payload: AdminSessionPayload = {
     scope: 'admin',
     apiKey,
@@ -75,7 +76,7 @@ export const createAdminSessionToken = async (apiKey: string) => {
 
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipherBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: encoder.encode(ADMIN_SESSION_COOKIE) },
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(purpose === 'session' ? ADMIN_SESSION_COOKIE : ADMIN_REVOCATION_COOKIE) },
     await getEncryptionKey(),
     encoder.encode(JSON.stringify(payload))
   );
@@ -83,7 +84,7 @@ export const createAdminSessionToken = async (apiKey: string) => {
   return `${encodeBase64Url(iv)}.${encodeBase64Url(new Uint8Array(cipherBuffer))}`;
 };
 
-export const readAdminSessionToken = async (token: string | undefined) => {
+export const readAdminSessionToken = async (token: string | undefined, purpose: 'session' | 'revocation' = 'session') => {
   if (!token) {
     return null;
   }
@@ -100,7 +101,7 @@ export const readAdminSessionToken = async (token: string | undefined) => {
 
   try {
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: decodeBase64Url(ivPart), additionalData: encoder.encode(ADMIN_SESSION_COOKIE) },
+      { name: 'AES-GCM', iv: decodeBase64Url(ivPart), additionalData: encoder.encode(purpose === 'session' ? ADMIN_SESSION_COOKIE : ADMIN_REVOCATION_COOKIE) },
       await getEncryptionKey(),
       decodeBase64Url(cipherPart)
     );

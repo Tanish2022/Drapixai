@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { getToken } from 'next-auth/jwt';
 import { NextRequest } from 'next/server';
 import { ADMIN_SESSION_COOKIE, readAdminSessionToken } from '@/app/lib/admin-session';
-import { createDashboardSessionToken, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE, DASHBOARD_SESSION_MAX_AGE_SECONDS, readDashboardSessionToken } from '@/app/lib/dashboard-session';
+import { createDashboardSessionToken, DASHBOARD_REVOCATION_COOKIE, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE, DASHBOARD_SESSION_MAX_AGE_SECONDS, readDashboardSessionToken } from '@/app/lib/dashboard-session';
 import { accountTermsHeaders, readAccountTermsState } from '@/app/lib/account-terms-server';
 import { noStoreJson, readLimitedProxyBody, rejectCrossOriginRequest } from '@/app/lib/request-guard';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
@@ -12,6 +12,7 @@ const resolveSession = async (request: NextRequest) => {
   const store = await cookies();
   const operator = request.nextUrl.searchParams.get('scope') === 'admin';
   if (operator) return { operator, apiKey: (await readAdminSessionToken(store.get(ADMIN_SESSION_COOKIE)?.value))?.apiKey || '' };
+  if (store.has(DASHBOARD_REVOCATION_COOKIE)) return { operator, apiKey: '' };
   const session = await readDashboardSessionToken(store.get(DASHBOARD_SESSION_COOKIE)?.value);
   if (session) return { operator, apiKey: session.apiKey };
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });

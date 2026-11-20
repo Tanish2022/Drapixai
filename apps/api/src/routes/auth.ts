@@ -8,6 +8,7 @@ import { resolveActiveApiKey } from '../lib/api-key-auth';
 import { ADMIN_MFA_SCOPE, ADMIN_SESSION_KEY_MAX_AGE_MS, requiresAdminMfa, consumeAdminTotp } from '../lib/admin-mfa';
 import { validatePasswordStrength } from '../lib/security';
 import { hashPassword, hashPasswordAfterAuthorization, verifyPassword, isPasswordHashBusy, LOGIN_TIMING_SENTINEL_HASH } from '../lib/password-hash';
+import { isConfiguredSystemAdmin } from '../lib/authorization';
 import { normalizeSelectedPlan } from '../lib/plans';
 import { issueVerificationCode, consumeVerificationCode, normalizeEmail } from '../lib/verification';
 import { sendOtpEmail, sendWelcomeEmail } from '../services/emailer';
@@ -237,6 +238,10 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
       }).catch(() => undefined);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    const adminLogin = req.body?.sessionPurpose === 'admin';
+    if (adminLogin && !isConfiguredSystemAdmin(user)) {
+      return res.status(403).json({ error: 'ADMIN_ACCESS_DENIED' });
+    }
     // Do any necessary KDF work before consuming a one-use operator TOTP.
     const upgradedHash = verified.needsUpgrade ? await hashPassword(password) : undefined;
     if (!await consumeAdminTotp(prisma, user, mfaCode)) {
@@ -284,6 +289,7 @@ router.post('/login', authIdentityRateLimit, async (req, res) => {
     res.json({
       apiKey,
       termsRequired,
+      ...(adminLogin ? { adminAuthorized: true } : {}),
       user: {
         email: user.email,
         planType: user.planType,

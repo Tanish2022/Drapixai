@@ -6,7 +6,6 @@ import { Router } from 'express';
 import { aiFetch, aiTransportFailure } from '../lib/ai-client';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { createRequestRedis } from '../lib/request-redis';
 import { acquireTryOnSlot } from '../lib/tryon-concurrency';
 import { dispatchTryOnWithUsage } from '../lib/tryon-dispatch';
 import { aiRequestSignal } from '../lib/ai-request-signal';
@@ -58,8 +57,8 @@ import {
 } from '../lib/security';
 import { getUserMonthlyUsage, getUserQuotaUsage } from '../lib/usage';
 import {
-  QuotaTicket, reserveTryOnUsage, markUsageDispatched, releaseUndispatchedUsage,
-  releaseProvenNoResultUsage, commitTryOnResultUsage, commitLegacyRenderUsage,
+  QuotaTicket, reserveTryOnUsage, releaseUndispatchedUsage,
+  releaseProvenNoResultUsage, commitTryOnResultUsage,
 } from '../lib/quota-reservations';
 import { hasPermission, ownsTenantResource } from '../lib/authorization';
 import { appendSecurityAudit, appendSecurityAuditInTransaction } from '../lib/audit-log';
@@ -126,8 +125,6 @@ const getGarmentValidationMessage = (code: string) => {
   }
 };
 
-const redis = createRequestRedis('Legacy render queue');
-
 // Initialize S3 client (MinIO)
 const s3 = createStorageClient();
 const BUCKET = STORAGE_BUCKET;
@@ -139,13 +136,13 @@ const MAX_UPLOAD_BYTES = Number(process.env.DRAPIXAI_MAX_UPLOAD_BYTES || 10 * 10
 const AI_SERVICE_TOKEN = process.env.DRAPIXAI_AI_SERVICE_TOKEN || '';
 const LEGACY_ASYNC_RENDER_ENABLED = (process.env.DRAPIXAI_ENABLE_LEGACY_ASYNC_RENDER || '0') === '1';
 
-const requireLegacyAsyncRender = (_req: any, res: any, next: any) => {
-  if (!LEGACY_ASYNC_RENDER_ENABLED) {
-    return res.status(410).json({
-      error: 'LEGACY_ASYNC_RENDER_DISABLED',
-      message: 'Use POST /sdk/tryon for the supported Standard try-on flow.',
-    });
-  }
+const legacyRenderGone = (_req: any, res: any) => res.status(410).json({
+  error: 'LEGACY_ASYNC_RENDER_DISABLED',
+  message: 'Use POST /sdk/tryon for the supported Standard try-on flow.',
+});
+
+const requireLegacyAsyncRender = (req: any, res: any, next: any) => {
+  if (!LEGACY_ASYNC_RENDER_ENABLED) return legacyRenderGone(req, res);
   next();
 };
 
@@ -723,143 +720,8 @@ router.post('/validate', authMiddleware, async (req: any, res: any) => {
   }
 });
 
-/**
- * POST /sdk/render
- * Submit a new render job
- */
-router.post('/render', authMiddleware, requireLegacyAsyncRender, requireTryOnIntake, upload.single('image'), async (req: any, res: any) => {
-  if (rejectInvalidMultipartFields(req, res)) return;
-  let usageTicket: QuotaTicket | null = null;
-  try {
-    const apiKey = req.apiKey;
-    const user = req.user;
-    if (!(await enforceSdkRequestDomain(req, res))) {
-      removeUploadedFile(req.file);
-      return;
-    }
-    const { productId } = req.body;
-
-    if (!req.file) {
-      return res.status(400).json({ 
-        error: 'Image required',
-        message: 'Please upload a user photo for the virtual try-on'
-      });
-    }
-
-    if (!(await isAllowedImageFileContent(req.file))) {
-      removeUploadedFile(req.file);
-      return res.status(400).json({ error: 'INVALID_IMAGE_CONTENT' });
-    }
-
-    if (productId) {
-      const mappedGarment = await resolveConfirmedGarmentForProduct(prisma, user.id, String(productId));
-      if (!mappedGarment?.cacheKey) {
-        return res.status(409).json({
-          error: 'GARMENT_MAPPING_NOT_CONFIRMED',
-          message: 'This product does not have a confirmed garment mapping yet. Confirm the pairing in the dashboard before using the storefront SDK.'
-        });
-      }
-    }
-
-    const plan = getUserPlanContext(user);
-    if (!plan.active) {
-      removeUploadedFile(req.file);
-      return res.status(403).json({ 
-        error: 'No active subscription',
-        reason: plan.blockedReason,
-        message: plan.blockedReason === 'TRIAL_EXPIRED'
-          ? 'Your DrapixAI trial has expired. Please upgrade your plan to continue.'
-          : 'Please upgrade your plan to continue using DrapixAI'
-      });
-    }
-
-    const now = new Date();
-    const rendersUsed = await getUserMonthlyUsage(prisma, user.id, now);
-
-    if (rendersUsed >= plan.quota) {
-      return res.status(403).json({ 
-        error: 'Quota exceeded',
-        message: `You've reached your monthly limit of ${plan.quota} renders. Please upgrade your plan.`
-      });
-    }
-
-    const admission = await reserveTryOnUsage(prisma, user.id, apiKey.id, crypto.randomUUID(), 'legacy_render', now);
-    if (!admission.ok) return res.status(admission.reason === 'QUOTA_EXCEEDED' ? 429 : 403).json({ error: admission.reason });
-    usageTicket = admission.ticket;
-
-    // Read uploaded file
-    const fileContent = fs.readFileSync(req.file.path);
-    const fileExtension = path.extname(req.file.originalname) || '.jpg';
-    
-    // Session-based storage
-    const inputKey = `session/${crypto.randomUUID()}-${Date.now()}${fileExtension}`;
-
-    // Upload to S3/MinIO
-    try {
-      await s3.send(new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: inputKey,
-        Body: fileContent,
-        ContentType: req.file.mimetype,
-        ...getStorageEncryptionParams(),
-      }));
-      console.log('Uploaded encrypted session image');
-    } catch (s3Error) {
-      if (!STORAGE_LOCAL_FALLBACK_ALLOWED) throw s3Error;
-      console.log('S3 not available, using local temp storage');
-    }
-
-    // Create render job
-    const render = await prisma.render.create({ 
-      data: { 
-        apiKeyId: apiKey.id, 
-        status: 'pending', 
-        progress: 0, 
-        inputUrl: inputKey, 
-        productId: productId || 'default' 
-      } 
-    });
-
-    // Add job to Redis queue
-    await markUsageDispatched(prisma, usageTicket, render.id);
-    await redis.run(client => client.lPush('render_queue', JSON.stringify({
-      jobId: render.id,
-      inputKey: inputKey,
-      productId: productId || 'default',
-      quality: plan.quality,
-      userPlan: plan.normalizedPlan,
-      userId: user.id,
-      apiKeyId: apiKey.id
-    })));
-
-    // Update usage count
-    await commitLegacyRenderUsage(prisma, usageTicket);
-
-    // Clean up temp file
-    fs.unlinkSync(req.file.path);
-
-    res.json({ 
-      jobId: render.id, 
-      status: 'pending',
-      quality: plan.quality,
-      plan: plan.normalizedPlan,
-      planName: plan.planName,
-      message: 'Your render job has been queued. Check status using the job ID.'
-    });
-  } catch (error) {
-    console.error('Render error:', formatLogError(error));
-    res.status(500).json({ 
-      error: 'Render failed',
-      message: 'Failed to process your request. Please try again.'
-    });
-  } finally {
-    removeUploadedFile(req.file);
-    if (usageTicket) {
-      await releaseUndispatchedUsage(prisma, usageTicket).catch((error) =>
-        console.error('Quota cleanup failed:', formatLogError(error)));
-    }
-  }
-});
+// Historical jobs remain available to the existing legacy read/cleanup routes.
+router.post('/render', authMiddleware, legacyRenderGone);
 
 /**
  * POST /sdk/tryon

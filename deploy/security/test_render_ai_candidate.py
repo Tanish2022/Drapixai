@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import unittest
 
-from render_ai_candidate import render, VERSIONS
+from render_ai_candidate import render, VERSIONS, WHEEL_INSTALL
 
 
 class CandidateDockerfileTests(unittest.TestCase):
@@ -16,7 +16,8 @@ class CandidateDockerfileTests(unittest.TestCase):
     def test_only_exact_dependency_assertions_change(self):
         candidate = render(self.source, self.requirements)
         self.assertNotEqual(candidate, self.source)
-        restored = candidate
+        self.assertEqual(candidate.count(WHEEL_INSTALL.encode()), 1)
+        restored = candidate.replace(WHEEL_INSTALL.encode(), b'')
         for name, (old, new) in VERSIONS.items():
             restored = restored.replace(f"    '{name}': '{new}',".encode(),
                                         f"    '{name}': '{old}',".encode())

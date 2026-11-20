@@ -17,9 +17,7 @@ forces try-on intake, Stripe billing (including live mode), Shopify preparation
 and real email delivery off. The API skips SMTP before opening a connection,
 including when a stale mail credential is present. Signup flows requiring an
 emailed code cannot complete during this first start. API and web remain on loopback.
-Use the private access path on the workstation for this stage. The full API
-`/ready` check still requires the private AI service. Record CPU component
-health separately while AI is absent.
+Use the private access path on the workstation for this stage. The API's `/ready` check tests the database and Redis while inference intake is paused. With intake enabled, it also requires the private AI endpoint to be ready. The website reports a paused engine separately.
 
 Provide the verified pooled staging runtime URL through the existing mounted API
 secret. The database owner URL belongs only to the separately approved migration
@@ -50,6 +48,14 @@ procedure below applies to the standalone edge topology.
 1. In the private images env set `DRAPIXAI_STAGING_S3_BUCKET` to the approved
    CPU-staging bucket from the provisioning record in Mumbai. Supply a Linux
    workload identity restricted to that bucket and its approved prefixes.
+   For Linux, the API expects the host's 15-minute Roles Anywhere
+   `credential-process` JSON at `/run/drapixai/staging-s3/session.json`.
+   This directory lives on host tmpfs, owned by root, group 65532, mode 0750.
+   The host credential refresher should write the new session to a temporary
+   file in that directory, set owner root, group 65532 and mode 0440, then
+   rename it over `session.json` on success. Refresh every five minutes.
+   Keep the certificate private key on the host. Verify rotation through
+   the actual API container over at least one 15-minute expiry before enabling intake.
    Provision the mounted API secret with the pooled Neon runtime URL, isolated
    Redis URL and application secrets. The CPU bootstrap validates the staging
    endpoint, database, runtime login and TLS settings before importing Prisma.
@@ -68,8 +74,8 @@ procedure below applies to the standalone edge topology.
    candidate. This checks both merged profiles using synthetic inputs. Use the
    service-list command above on the workstation with its private inputs. After
    supervised startup, verify the loopback listeners, actual container limits,
-   private TLS access, API `/health`, Redis health and staging DB role. Full
-   `/ready` includes AI dependency checks.
+   private TLS access, API `/health`, Redis health and staging DB role. Run
+   `bash deploy/staging/verify-release-images.sh cpu deploy/staging/.images.env` to check all three running image IDs, the merged topology and the first-start settings. Enable inference before using `/ready` for GPU acceptance.
 
 ### Workstation cache placement
 
@@ -353,3 +359,13 @@ Passing this source check does not mean staging is deployed. Gate 2 closes only
 when the live host evidence proves distinct identities, private listeners, HTTPS
 WAF routing, VPN/mTLS GPU communication, backup restoration, and successful health
 checks. Store that evidence under the ignored `runtime/launch-evidence` directory.
+
+### Local Windows regression prerequisites
+
+Use Node 22 or 24 for both applications. From the repository root run
+`node scripts/verify-node-runtime.mjs`. For the SDK browser test, point
+`DRAPIXAI_BROWSER_MODULES` at the directory containing the installed
+`playwright` package, make Google Chrome available, then run
+`node scripts/test-sdk-deadline.cjs`. The browser fixture uses loopback.
+Run the Python worker from the project root with its dependencies installed
+using `python -m drapixai_ai.worker.gpu_worker`.

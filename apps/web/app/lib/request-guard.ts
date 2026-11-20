@@ -54,21 +54,29 @@ const getProxyBodyLimitBytes = () => {
 
 export const readLimitedProxyBody = async (request: Request, explicitMaxBytes?: number) => {
   if (['GET', 'HEAD'].includes(request.method.toUpperCase())) {
-    return { body: undefined as BodyInit | undefined, rejection: null as NextResponse | null };
+    return { body: undefined as ArrayBuffer | undefined, rejection: null as NextResponse | null };
   }
 
   const maxBytes = explicitMaxBytes ?? getProxyBodyLimitBytes();
-  const rawContentLength = request.headers.get('content-length');
+  try {
+    return { body: await readBoundedBody(request, maxBytes), rejection: null };
+  } catch (error) {
+    return { body: undefined, rejection: error instanceof RangeError
+      ? noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 })
+      : noStoreJson({ error: 'INCOMPLETE_REQUEST_BODY' }, { status: 400 }) };
+  }
+};
+
+const readBoundedBody = async (message: Response | Request, maxBytes: number) => {
+  const rawContentLength = message.headers.get('content-length');
   const contentLength = rawContentLength ? Number(rawContentLength) : 0;
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-    return {
-      body: undefined,
-      rejection: noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 }),
-    };
+    await message.body?.cancel().catch(() => undefined);
+    throw new RangeError('BODY_LIMIT');
   }
 
-  if (!request.body) return { body: undefined, rejection: null as NextResponse | null };
-  const reader = request.body.getReader();
+  if (!message.body) return undefined;
+  const reader = message.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
@@ -78,7 +86,7 @@ export const readLimitedProxyBody = async (request: Request, explicitMaxBytes?: 
       total += value.byteLength;
       if (total > maxBytes) {
         await reader.cancel().catch(() => undefined);
-        return { body: undefined, rejection: noStoreJson({ error: 'PROXY_REQUEST_TOO_LARGE' }, { status: 413 }) };
+        throw new RangeError('BODY_LIMIT');
       }
       chunks.push(value);
     }
@@ -88,5 +96,37 @@ export const readLimitedProxyBody = async (request: Request, explicitMaxBytes?: 
   const body = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
-  return { body: body.buffer, rejection: null as NextResponse | null };
+  return body.buffer;
 };
+
+export const readSessionBody = async (request: Request) => {
+  const limited = await readLimitedProxyBody(request, 8192);
+  if (limited.rejection) return { body: null, rejection: limited.rejection };
+  try {
+    const body: unknown = JSON.parse(new TextDecoder().decode(limited.body));
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      return { body: body as Record<string, unknown>, rejection: null };
+    }
+  } catch {
+    // Invalid or empty JSON receives the same client-facing error.
+  }
+  return { body: null, rejection: noStoreJson({ error: 'INVALID_SESSION_REQUEST' }, { status: 400 }) };
+};
+
+export async function fetchProxyResponse(url: URL, init: RequestInit, request: Request) {
+  const timeout = AbortSignal.timeout(120000);
+  try {
+    const upstream = await fetch(url, {
+      ...init, redirect: 'error', signal: AbortSignal.any([request.signal, timeout]),
+    });
+    const body = await readBoundedBody(upstream, 64 * 1024 * 1024);
+    const headers = new Headers({ 'Cache-Control': 'no-store, private', Pragma: 'no-cache' });
+    const type = upstream.headers.get('Content-Type');
+    if (type) headers.set('Content-Type', type);
+    return new NextResponse(body, { status: upstream.status, headers });
+  } catch {
+    return timeout.aborted
+      ? noStoreJson({ error: 'UPSTREAM_TIMEOUT' }, { status: 504 })
+      : noStoreJson({ error: 'UPSTREAM_RESPONSE_UNAVAILABLE' }, { status: 502 });
+  }
+}

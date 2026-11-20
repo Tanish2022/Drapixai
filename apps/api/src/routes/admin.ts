@@ -12,12 +12,10 @@ import { buildProductAccuracyReport, getTryOnConfidenceBadge, normalizeWarnings 
 import { formatLogError, readLocalUploadFile } from '../lib/security';
 import { withOperationTimeout } from '../lib/operation-timeout';
 import { appendSecurityAudit } from '../lib/audit-log';
-import { hasPermission } from '../lib/authorization';
+import { isConfiguredSystemAdmin } from '../lib/authorization';
 import { ADMIN_MFA_SCOPE } from '../lib/admin-mfa';
 
 const router = Router();
-const ADMIN_EMAIL = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
-const ADMIN_USER_ID = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
 const s3 = createStorageClient();
 const redis = createRequestRedis('Admin operations');
 const adminRateLimit = createRateLimitMiddleware(60, 15 * 60 * 1000);
@@ -92,12 +90,7 @@ const adminAuth = async (req: any, res: any, next: any) => {
   }
 
   const user = await prisma.user.findUnique({ where: { id: activeKey.userId } });
-  const matchesConfiguredAdmin = Boolean(user && (
-    (ADMIN_EMAIL && user.email.trim().toLowerCase() === ADMIN_EMAIL)
-    || (ADMIN_USER_ID && user.id === ADMIN_USER_ID)
-  ));
-  const isAdmin = Boolean(user && hasPermission(user.role, 'system:admin') && matchesConfiguredAdmin);
-  if (!user || !isAdmin) {
+  if (!user || !isConfiguredSystemAdmin(user)) {
     return res.status(403).json({ error: 'ADMIN_REQUIRED' });
   }
   if (activeKey.kind !== 'dashboard' || !String(activeKey.scopes || '').split(',').includes(ADMIN_MFA_SCOPE)) {

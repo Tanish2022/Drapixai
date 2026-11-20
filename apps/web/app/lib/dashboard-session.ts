@@ -1,6 +1,7 @@
 import { sessionCookieName } from './session-cookie';
 export const LEGACY_DASHBOARD_SESSION_COOKIE = 'drapixai_dashboard_session';
 export const DASHBOARD_SESSION_COOKIE = sessionCookieName(LEGACY_DASHBOARD_SESSION_COOKIE);
+export const DASHBOARD_REVOCATION_COOKIE = sessionCookieName('drapixai_dashboard_revocation');
 export const DASHBOARD_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
 const encoder = new TextEncoder();
@@ -66,7 +67,7 @@ type DashboardSessionPayload = {
   expiresAt: number;
 };
 
-export const createDashboardSessionToken = async (apiKey: string) => {
+export const createDashboardSessionToken = async (apiKey: string, purpose: 'session' | 'revocation' = 'session') => {
   const payload: DashboardSessionPayload = {
     scope: 'dashboard',
     apiKey,
@@ -75,7 +76,7 @@ export const createDashboardSessionToken = async (apiKey: string) => {
 
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipherBuffer = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: encoder.encode(DASHBOARD_SESSION_COOKIE) },
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(purpose === 'session' ? DASHBOARD_SESSION_COOKIE : DASHBOARD_REVOCATION_COOKIE) },
     await getEncryptionKey(),
     encoder.encode(JSON.stringify(payload))
   );
@@ -83,7 +84,7 @@ export const createDashboardSessionToken = async (apiKey: string) => {
   return `${encodeBase64Url(iv)}.${encodeBase64Url(new Uint8Array(cipherBuffer))}`;
 };
 
-export const readDashboardSessionToken = async (token: string | undefined) => {
+export const readDashboardSessionToken = async (token: string | undefined, purpose: 'session' | 'revocation' = 'session') => {
   if (!token) {
     return null;
   }
@@ -100,7 +101,7 @@ export const readDashboardSessionToken = async (token: string | undefined) => {
 
   try {
     const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: decodeBase64Url(ivPart), additionalData: encoder.encode(DASHBOARD_SESSION_COOKIE) },
+      { name: 'AES-GCM', iv: decodeBase64Url(ivPart), additionalData: encoder.encode(purpose === 'session' ? DASHBOARD_SESSION_COOKIE : DASHBOARD_REVOCATION_COOKIE) },
       await getEncryptionKey(),
       decodeBase64Url(cipherPart)
     );
@@ -118,4 +119,11 @@ export const readDashboardSessionToken = async (token: string | undefined) => {
 
 export const verifyDashboardSessionToken = async (token: string | undefined) => {
   return Boolean(await readDashboardSessionToken(token));
+};
+
+export const dashboardRevocation = {
+  name: DASHBOARD_REVOCATION_COOKIE,
+  maxAge: DASHBOARD_SESSION_MAX_AGE_SECONDS,
+  seal: (key: string) => createDashboardSessionToken(key, 'revocation'),
+  open: (token: string | undefined) => readDashboardSessionToken(token, 'revocation'),
 };

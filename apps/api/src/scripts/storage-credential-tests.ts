@@ -65,7 +65,24 @@ const main = async () => {
     assert.equal(delegated['x-amz-security-token'], 'synthetic-process-session-only');
     assert.match(delegated.authorization, /Credential=synthetic-process-access\//);
     console.log('PASS SDK default chain obtains temporary credentials from an isolated credential_process');
-    console.log('Storage credential signing: 3 groups passed; 0 network requests; no real credentials.');
+    resetEnvironment();
+    delete process.env.S3_ENDPOINT;
+    const sessionPath = path.join(fixture, 'session.json');
+    Object.assign(process.env, { DRAPIXAI_REQUIRE_NEON_STAGING: '1', DRAPIXAI_STAGING_S3_SESSION_FILE: sessionPath });
+    delete require.cache[storagePath];
+    const client = (require('../lib/storage') as typeof import('../lib/storage')).createStorageClient();
+    const write = (token: string, ttl: number) => fs.writeFileSync(sessionPath, JSON.stringify({
+      Version: 1, AccessKeyId: 'fixture-id', SecretAccessKey: 'fixture-secret', SessionToken: token, Expiration: new Date(Date.now()+ttl).toISOString(),
+    }));
+    try {
+      write('fixture-a', 60000);
+      assert.equal((await client.config.credentials()).sessionToken, 'fixture-a');
+      write('fixture-b', 600000);
+      assert.equal((await client.config.credentials({ forceRefresh: true })).sessionToken, 'fixture-b');
+      write('expired', -1000);
+      await assert.rejects(client.config.credentials({ forceRefresh: true }), /STAGING_S3_SESSION_INVALID/);
+    } finally { client.destroy(); }
+    console.log('Storage credential signing and staging session rotation: 4 groups passed; 0 network requests; no real credentials.');
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key];
     Object.assign(process.env, original);

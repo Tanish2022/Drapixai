@@ -1,3 +1,4 @@
+import { isTryOnIntakeEnabled } from './lib/tryon-intake';
 import 'dotenv/config';
 import crypto from 'crypto';
 import express, { NextFunction, Request, Response } from 'express';
@@ -363,7 +364,8 @@ app.get('/health', (req, res) => {
 app.get('/ready', async (req, res) => {
   let databaseReady = false;
   let redisReady = false;
-  let aiReady = !aiBaseUrl;
+  const inferenceEnabled = isTryOnIntakeEnabled();
+  let aiReady = false;
   let databaseError: string | null = null;
   let aiStatus: ({ status?: string } & Record<string, unknown>) | null = null;
 
@@ -397,7 +399,7 @@ app.get('/ready', async (req, res) => {
       }
     })(),
     (async () => {
-      if (!aiBaseUrl) return;
+      if (!inferenceEnabled || !aiBaseUrl) return;
       try {
         const response = await aiFetch(`${aiBaseUrl}/ready`, {
           headers: aiServiceHeaders,
@@ -415,7 +417,7 @@ app.get('/ready', async (req, res) => {
     })(),
   ]);
 
-  const ready = databaseReady && redisReady && aiReady;
+  const ready = databaseReady && redisReady && (!inferenceEnabled || aiReady);
   const payload = exposeReadyDetails ? {
     status: ready ? 'ready' : 'not_ready',
     checks: {
@@ -424,6 +426,7 @@ app.get('/ready', async (req, res) => {
         error: databaseError,
       },
       redis: redisReady,
+      inferenceEnabled,
       ai: aiStatus,
       storage: getStorageSummary(),
     },
@@ -432,6 +435,7 @@ app.get('/ready', async (req, res) => {
     checks: {
       database: databaseReady,
       redis: redisReady,
+      inferenceEnabled,
       ai: aiReady,
     },
   };

@@ -128,6 +128,16 @@ test('Password/TOTP admin login issues bounded MFA-assured key; missing code den
   assert.equal(f.issued[0].expiresAt.getTime(), 59000 + 8 * 60 * 60 * 1000);
 });
 
+test('Requesting an administrator session checks merchant role before key issuance', async () => {
+  const merchant = { id: 12, email: 'merchant@example.test', role: 'brand_admin', emailVerifiedAt: new Date(0) };
+  const f = routeFixture(merchant);
+  f.load('apps/api/src/routes/auth.ts');
+  const denied = response();
+  await f.routes.get('post:/login').at(-1)({ body: { email: merchant.email, password: 'correct-fixture-password', sessionPurpose: 'admin', issueNewKey: true } }, denied);
+  assert.equal(denied.statusCode, 403);
+  assert.equal(f.issued.length, 0);
+});
+
 test('Admin API denies older/non-MFA keys even for an operator identity', async () => {
   const f = routeFixture({ id: 1, email: 'operator@example.test', role: 'system_admin' });
   f.load('apps/api/src/routes/admin.ts');
@@ -673,7 +683,7 @@ for (const expired of [true, false]) test(`Dashboard preview ${expired ? 'cannot
 function browserSessionFixture(purpose = 'admin', mode = 'production') {
   const values = new Map(), writes = [], calls = [];
   const env = { NODE_ENV: mode, NEXT_PUBLIC_WEB_BASE_URL: 'https://app.example.test', ADMIN_SESSION_SECRET: 'synthetic-admin-browser-cookie-secret-32-plus', DASHBOARD_SESSION_SECRET: 'synthetic-dashboard-browser-cookie-secret-32-plus', DRAPIXAI_DASHBOARD_PROXY_TOKEN: 'synthetic-proxy-fixture' };
-  const store = { get: (name) => values.has(name) ? { value: values.get(name) } : undefined,
+  const store = { has: (name) => values.has(name), get: (name) => values.has(name) ? { value: values.get(name) } : undefined,
     set: (cookie) => { writes.push(cookie); if (cookie.maxAge === 0) values.delete(cookie.name); else values.set(cookie.name, cookie.value); } };
   const fixture = { status: 200, loginStatus: 200, expectedPassword: 'fixture-password' };
   const load = loader({
@@ -686,7 +696,7 @@ function browserSessionFixture(purpose = 'admin', mode = 'production') {
     if (String(url).endsWith('/auth/login')) {
       const payload = JSON.parse(init.body);
       if (fixture.loginStatus !== 200) return Response.json({ error: 'AUTHENTICATION_BUSY' }, { status: fixture.loginStatus });
-      return payload.password === fixture.expectedPassword ? Response.json({ apiKey: 'synthetic-browser-key' }) : Response.json({ error: 'INVALID' }, { status: 401 });
+      return payload.password === fixture.expectedPassword ? Response.json({ apiKey: 'synthetic-browser-key', adminAuthorized: payload.sessionPurpose === 'admin' }) : Response.json({ error: 'INVALID' }, { status: 401 });
     }
     return Response.json({ ok: true }, { status: fixture.status });
   } });
@@ -1070,6 +1080,46 @@ test('Unexpected concurrency replies never grant a GPU lease', async () => {
   const mod = loader({ redis: { createClient: () => redis } }, { process: { env: { NODE_ENV: 'test', DRAPIXAI_TRYON_ADMISSION_EPOCH: '11111111-1111-4111-8111-111111111111' } }, console: { error() {} } })('apps/api/src/lib/tryon-concurrency.ts');
   assert.equal((await mod.acquireTryOnSlot(1)).reason, 'CONCURRENCY_CONTROL_UNAVAILABLE');
   assert.equal(evals, 1, 'The negative control must reach the malformed EVAL reply');
+});
+
+test('Both session routes bound request bodies before making upstream requests', async () => {
+  for (const scope of ['admin', 'dashboard']) {
+    const f = browserSessionFixture(scope);
+    const response = await f.load(`apps/web/app/api/${scope}/session/route.ts`).POST(new Request('https://app.example.test/session', {
+      method: 'POST', headers: { origin: 'https://app.example.test' }, body: JSON.stringify({value: 'x'.repeat(8200)}),
+    }));
+    assert.equal(response.status, 413);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('Proxy returns a bounded upstream response and preserves plain successful content', async () => {
+  const request = new Request('https://app.example.test/api/dashboard/proxy/example');
+  const remote = new URL('https://internal.example.test/example');
+  for (const [size, status] of [['2', 200], [String(65*1024*1024), 502]]) {
+    const load = loader({}, { fetch: async (_url, init) => {
+      assert.equal(init.redirect, 'error');
+      assert.ok(init.signal instanceof AbortSignal);
+      return new Response('OK', {headers:{'content-length':size,'content-type':'text/plain'}});
+    } });
+    const res = await load('apps/web/app/lib/request-guard.ts').fetchProxyResponse(remote, {}, request);
+    assert.equal(res.status, status);
+    if (status === 200) assert.equal(await res.text(), 'OK');
+  }
+});
+
+test('Direct-key validation distinguishes invalid input, rejected key and service outage', async () => {
+  const f = browserSessionFixture('dashboard');
+  const send = apiKey => f.load('apps/web/app/api/dashboard/session/route.ts').POST(new Request('https://app.example.test/session', {
+    method: 'POST', headers: { origin: 'https://app.example.test' }, body: JSON.stringify({apiKey}),
+  }));
+  assert.equal((await send(123)).status, 400);
+  assert.equal(f.calls.length, 0);
+  f.config.status = 401;
+  assert.equal((await send('fixture-key')).status, 401);
+  f.config.status = 503;
+  assert.equal((await send('fixture-key')).status, 503);
+  assert.equal(f.writes.length, 0);
 });
 
 test('Malformed admin credential types fail before an upstream authentication request', async () => {

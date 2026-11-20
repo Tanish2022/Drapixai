@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Render stricter dependency assertions for the isolated RTX review image.
 
-The serving Dockerfile remains unchanged. Only three dependency assertions may
-change; all build stages, base digests, runtime permissions and commands stay
-byte-identical. This does not approve the candidate for serving traffic.
+The serving Dockerfile remains unchanged. The candidate installs the two reviewed backports into the builder virtual environment
+and checks the patched package metadata before copying it to the runtime stage. This does not approve the candidate for serving traffic.
 """
 from __future__ import annotations
 
@@ -15,6 +14,15 @@ from pathlib import Path
 VERSIONS = {"pillow": ("12.3.0", "13.0.0"),
             "msgpack": ("1.2.1", "1.2.3"),
             "urllib3": ("2.7.0", "2.8.0")}
+
+
+# The named BuildKit context contains only the two outputs of prepare_rtx_wheels.
+WHEEL_INSTALL = """RUN --mount=type=bind,from=reviewed-wheels,target=/wheels,ro \\
+    python -m pip install --no-index --no-deps --force-reinstall /wheels/*.whl \\
+    && python -m pip check \\
+    && python -c "from importlib.metadata import distribution; assert all(distribution(n).read_text('DRAPIXAI_PATCH.json') for n in ('accelerate','rembg'))"
+
+"""
 
 
 def render(source: bytes, requirements: str) -> bytes:
@@ -34,6 +42,13 @@ def render(source: bytes, requirements: str) -> bytes:
         if text.count(before) != 1:
             raise ValueError(f"SERVING_ASSERTION_CHANGED:{name}")
         text = text.replace(before, f"    '{name}': '{new}',")
+    for name, version in {"accelerate": "1.11.0", "rembg": "2.0.69"}.items():
+        if pins.get(name) != version:
+            raise ValueError(f"BACKPORT_PIN_MISMATCH:{name}")
+    boundary = "FROM ${DRAPIXAI_AI_BASE_IMAGE} AS runtime"
+    if text.count(boundary) != 1:
+        raise ValueError("RUNTIME_BOUNDARY_CHANGED")
+    text = text.replace(boundary, WHEEL_INSTALL + boundary)
     return text.encode("utf-8")
 
 

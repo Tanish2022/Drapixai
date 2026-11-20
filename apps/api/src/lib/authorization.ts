@@ -20,6 +20,13 @@ export const isUserRole = (role: unknown): role is UserRole =>
 export const hasPermission = (role: unknown, permission: Permission) =>
   isUserRole(role) && ROLE_PERMISSIONS[role].has(permission);
 
+export const isConfiguredSystemAdmin = (user: { id: number; role: unknown; email: string }) => {
+  const email = (process.env.DRAPIXAI_ADMIN_EMAIL || '').trim().toLowerCase();
+  const id = Number(process.env.DRAPIXAI_ADMIN_USER_ID || 0);
+  return hasPermission(user.role, 'system:admin')
+    && ((email.length > 0 && email === user.email.trim().toLowerCase()) || (id > 0 && id === user.id));
+};
+
 export const ownsTenantResource = (authenticatedUserId: number, resourceUserId: number) =>
   Number.isInteger(authenticatedUserId)
   && Number.isInteger(resourceUserId)

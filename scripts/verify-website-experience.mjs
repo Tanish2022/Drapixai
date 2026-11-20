@@ -33,7 +33,7 @@ const api=http.createServer(async(req,res)=>{
   const custom=overrides.get(`${req.method} ${pathname}`)||overrides.get(pathname);
   if(custom){if(custom.delay)await delay(custom.delay);res.writeHead(custom.status||200,{'Content-Type':custom.raw?'text/html':'application/json'});res.end(custom.raw||JSON.stringify(custom.body));return;}
   let status=200,data={ok:true};
-  if((pathname==='/auth/login'||pathname==='/auth/register')) {status=loginStatus;data=status===200?{apiKey:'synthetic-website-session-key'}:{error:loginError};}
+  if((pathname==='/auth/login'||pathname==='/auth/register')) {status=loginStatus;data=status===200?{apiKey:'synthetic-website-session-key',adminAuthorized:true}:{error:loginError};}
   else if(pathname==='/auth/terms') {status=termsDown?503:200;data=termsDown?{error:'SYNTHETIC_PRIVATE_DATABASE_DETAILS'}:{accepted:true,...terms};}
   else if(pathname==='/admin/verify')data={ok:true};
   else if(pathname==='/analytics/summary')data=summary;
@@ -65,7 +65,7 @@ try{
   page=await context.newPage();page.on('pageerror',error=>report.errors.push(error.message));page.setDefaultTimeout(15000);page.setDefaultNavigationTimeout(30000);
   page.on('request',r=>pending.add(r));page.on('requestfinished',r=>pending.delete(r));page.on('requestfailed',r=>pending.delete(r));
   const go=async route=>{await page.goto(origin+route,{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.documentElement.dataset.theme||document.title.startsWith('Terms version not found')||document.title.startsWith('Account access temporarily'));};
-  const scan=async(label)=>{const regular=label.replace(' [dark]','');const headings={'/settings':'Keep the workspace simple and launch-ready.','/subscription':'Manage rollout capacity and commercial access.','/sdk-install':'Install DrapixAI on your store.'};if(headings[regular])await page.getByRole('heading',{name:headings[regular],exact:true}).waitFor();if(label.endsWith(' [dark]')&&regular!=='/sdk-install')await page.waitForFunction(()=>{const main=[...document.querySelectorAll('main')].find(el=>el.getClientRects().length>0);return main&&getComputedStyle(main).color==='rgb(237, 242, 237)';});await page.evaluate(async()=>{await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});await page.evaluate(axe);const result=await page.evaluate(async()=>await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa']}}));report.accessibility.push({route:label,violations:result.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),manualReview:result.incomplete.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)}))});};
+  const scan=async(label)=>{const regular=label.replace(' [dark]','');const headings={'/settings':'Keep the workspace simple and launch-ready.','/subscription':'Manage rollout capacity and commercial access.','/sdk-install':'Install DrapixAI on your store.'};if(headings[regular])await page.getByRole('heading',{name:headings[regular],exact:true}).waitFor();if(label.endsWith(' [dark]')&&regular!=='/sdk-install')await page.waitForFunction(()=>{const main=[...document.querySelectorAll('main')].find(el=>el.getClientRects().length>0);return main&&getComputedStyle(main).color==='rgb(237, 242, 237)';});await page.evaluate(async()=>{await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});await page.waitForFunction(()=>document.title.trim().length>0,{},{timeout:5000});await page.evaluate(axe);const result=await page.evaluate(async()=>await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa']}}));report.accessibility.push({route:label,violations:result.violations.map(v=>({id:v.id,impact:v.impact,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),manualReview:result.incomplete.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)}))});};
   await go('/');await page.getByRole('button',{name:'Reject optional',exact:true}).click();
   const publicRoutes=['/','/pricing','/demo','/virtual-try-on','/docs','/help','/contact','/privacy','/cookies','/refund-policy','/terms','/terms/2026-10-19','/terms/2026-10-21','/terms/invalid','/status','/changelog','/auth/login','/auth/register','/auth/forgot-password','/auth/terms','/admin-access','/missing-task3-page'];
   for(const route of publicRoutes){await go(route);await scan(route);}
@@ -115,6 +115,12 @@ try{
   overrides.set('/analytics/summary',{raw:'<html>SYNTHETIC_PRIVATE_DETAILS</html>'});await go('/dashboard');await page.locator('[role="alert"]:not(#__next-route-announcer__)').filter({hasText:'unexpected response'}).waitFor();assert.ok(!await page.locator('body').innerText().then(s=>s.includes('SYNTHETIC_PRIVATE')));overrides.delete('/analytics/summary');
   pass('Malformed successful HTTP data becomes a safe recovery screen rather than a false dashboard');
   overrides.set('/ready',{status:500,body:{status:'ready',checks:{database:true,redis:true,ai:{status:'ready'}}}});await go('/status');await page.getByRole('heading',{name:'One or more services need attention',exact:true}).waitFor();const health=await page.evaluate(async()=>await(await fetch('/api/health')).json());assert.equal(health.services.api,false);assert.equal(health.services.ai,false);overrides.delete('/ready');
+  overrides.set('/ready',{status:200,body:{status:'ready',checks:{database:true,redis:true,ai:false,inferenceEnabled:false}}});
+  const paused=await page.evaluate(async()=>{const res=await fetch('/api/health');return {status:res.status,body:await res.json()};});
+  assert.equal(paused.status,200);assert.equal(paused.body.inferenceDisabled,true);assert.equal(paused.body.services.ai,false);
+  overrides.set('/ready',{status:503,body:{status:'not_ready',checks:{database:false,redis:true,ai:false,inferenceEnabled:false}}});
+  assert.equal(await page.evaluate(async()=>(await fetch('/api/health')).status),503);
+  overrides.delete('/ready');pass('Paused inference preserves healthy CPU readiness and still reports dependency failures');
   ready=false;await go('/demo');await page.getByRole('status').filter({hasText:'Demo generation is currently unavailable'}).waitFor();await page.locator('label:has-text("Person image") input[type="file"]:visible').setInputFiles({name:'synthetic.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic invalid image')});await page.locator('[role="alert"]:not(#__next-route-announcer__)').filter({hasText:'JPEG, PNG, or WebP'}).waitFor();await page.getByRole('checkbox').check();assert.equal(await page.getByRole('button',{name:'Run Free Try-On',exact:true}).isDisabled(),true);assert.equal(requests.filter(r=>r.path==='/demo/tryon').length,0);await scan('/demo [unavailable and invalid file]');ready=true;
   pass('An HTTP 500 readiness body cannot claim healthy service; unavailable demo and invalid files send no generation request');
   await page.evaluate(()=>localStorage.setItem('drapixai-theme','dark'));overrides.set('/account/profile',{body:{...profile,themePreference:'dark'}});
@@ -129,6 +135,29 @@ try{
   pass('All reviewed routes measured at 320px reflow');
   await go('/settings');await page.screenshot({path:path.join(out,'settings-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});await go('/auth/login');await page.screenshot({path:path.join(out,'login-desktop.png'),fullPage:true});
   assert.equal(report.accessibility.flatMap(r=>r.violations).length,0,'Accessibility violations need review');assert.equal(report.reflow.filter(r=>r.document>r.viewport).length,0,'Horizontal page overflow needs review');assert.deepEqual(report.externalRequestsBlocked,[]);assert.deepEqual(report.errors,[]);
+
+  const sessionCall = (role, method, body) => page.evaluate(async ({role,method,body}) => {
+    const response = await fetch('/api/'+role+'/session', {method, headers:{'Content-Type':'application/json'}, body:body===undefined?undefined:JSON.stringify(body)});
+    return response.status;
+  }, {role,method,body});
+  assert.equal(await sessionCall('dashboard','POST',{apiKey:42}),400);
+  for (const role of ['admin','dashboard']) {
+    assert.equal(await sessionCall(role,'POST',{password:'x'.repeat(9000)}),413);
+  }
+  overrides.set('/analytics/summary',{status:503,body:{error:'UNAVAILABLE'}});
+  assert.equal(await sessionCall('dashboard','POST',{apiKey:'synthetic-direct'}),503);
+  overrides.delete('/analytics/summary');
+  for (const role of ['admin','dashboard']) {
+    overrides.set('/auth/logout',{status:503,body:{error:'UNAVAILABLE'}});
+    assert.equal(await sessionCall(role,'DELETE'),503);
+    const saved = await context.cookies();
+    assert.ok(saved.some(c=>c.name.endsWith(role+'_revocation') && c.httpOnly));
+    assert.ok(!saved.some(c=>c.name.endsWith(role+'_session')));
+    overrides.delete('/auth/logout');
+    assert.equal(await sessionCall(role,'DELETE'),200);
+    assert.ok(!(await context.cookies()).some(c=>c.name.endsWith(role+'_revocation')));
+  }
+  pass('Both session routes bound request size, retain a logout-only retry after upstream failure and confirm revocation on retry');
   report.passed=true;
 }catch(error){report.failure=error.message;process.exitCode=1;if(page){report.pendingRequests=[...pending].map(r=>new URL(r.url()).pathname);report.lastText=await page.locator('body').innerText().catch(()=>null);await page.screenshot({path:path.join(out,'failure.png'),fullPage:true}).catch(()=>undefined);}}
 finally{

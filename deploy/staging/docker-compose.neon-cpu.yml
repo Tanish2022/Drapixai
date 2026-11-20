@@ -19,6 +19,7 @@ services:
       DRAPIXAI_SHOPIFY_ENABLED: "0"
       DRAPIXAI_SHOPIFY_AUTO_PREPARE: "0"
       DRAPIXAI_AWS_USE_WORKLOAD_IDENTITY: "1"
+      DRAPIXAI_STAGING_S3_SESSION_FILE: /run/drapixai-aws/session.json
       S3_BUCKET: ${DRAPIXAI_STAGING_S3_BUCKET:?set the approved private staging bucket}
       AWS_REGION: ap-south-1
       S3_ENDPOINT: ""
@@ -28,6 +29,13 @@ services:
       DRAPIXAI_SDK_PREFER_ORIGINAL_GARMENT_FOR_TRYON: "0"
       DRAPIXAI_AUTO_REJECT_BAD_RESULTS: "1"
       DRAPIXAI_EXCELLENT_LATENCY_MS: "10000"
+    volumes:
+      - type: bind
+        source: /run/drapixai/staging-s3
+        target: /run/drapixai-aws
+        read_only: true
+        bind:
+          create_host_path: false
   web:
     environment:
       DRAPIXAI_API_URL: http://api:8000

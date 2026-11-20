@@ -1,26 +1,16 @@
+import { retryPendingRevocation, finishLogout } from '@/app/lib/logout';
 import { cookies } from 'next/headers';
 import {
   createDashboardSessionToken,
   DASHBOARD_SESSION_COOKIE,
+  dashboardRevocation,
   LEGACY_DASHBOARD_SESSION_COOKIE,
   DASHBOARD_SESSION_MAX_AGE_SECONDS,
   readDashboardSessionToken,
 } from '@/app/lib/dashboard-session';
 import { SERVER_API_BASE_URL } from '@/app/lib/server-env';
-import { noStoreJson, rejectCrossOriginRequest } from '@/app/lib/request-guard';
+import { noStoreJson, readSessionBody, rejectCrossOriginRequest } from '@/app/lib/request-guard';
 import { sessionCookie, retireLegacySessionCookie, clearSessionCookies } from '@/app/lib/session-cookie';
-
-type DashboardSessionRequestBody = {
-  mode?: 'login' | 'register';
-  email?: string;
-  password?: string;
-  companyName?: string;
-  selectedPlan?: string | null;
-  mobileNumber?: string | null;
-  otp?: string;
-  apiKey?: string;
-  termsAcceptance?: unknown;
-};
 
 const dashboardProxyToken = (process.env.DRAPIXAI_DASHBOARD_PROXY_TOKEN || '').trim();
 
@@ -39,15 +29,17 @@ const persistDashboardCookie = async (apiKey: string) => {
 
 const validateApiKey = async (apiKey: string) => {
   if (!dashboardProxyToken && process.env.NODE_ENV === 'production') {
-    return false;
+    return 503;
   }
 
   const response = await fetch(`${SERVER_API_BASE_URL}/analytics/summary`, {
     headers: getDashboardValidationHeaders(apiKey),
+    signal: AbortSignal.timeout(10000),
     cache: 'no-store',
   }).catch(() => null);
 
-  return Boolean(response?.ok);
+  if (response?.ok) return 200;
+  return response?.status === 401 || response?.status === 403 ? 401 : 503;
 };
 
 export async function GET(request: Request) {
@@ -68,18 +60,26 @@ export async function POST(request: Request) {
   const csrfRejection = rejectCrossOriginRequest(request);
   if (csrfRejection) return csrfRejection;
 
-  const body = (await request.json().catch(() => null)) as DashboardSessionRequestBody | null;
-  const directApiKey = body?.apiKey?.trim();
+  const pending = await retryPendingRevocation(await cookies(), dashboardRevocation);
+  if (pending) return pending;
+  const { body, rejection } = await readSessionBody(request);
+  if (rejection || !body) return rejection || noStoreJson({ error: 'INVALID_SESSION_REQUEST' }, { status: 400 });
+  if (body.apiKey !== undefined && typeof body.apiKey !== 'string') {
+    return noStoreJson({ error: 'INVALID_API_KEY_FORMAT' }, { status: 400 });
+  }
+  const directApiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
 
   if (directApiKey) {
-    if (!(await validateApiKey(directApiKey))) {
+    const status = await validateApiKey(directApiKey);
+    if (status === 503) return noStoreJson({ error: 'SESSION_VALIDATION_UNAVAILABLE' }, { status, headers: { 'Retry-After': '1' } });
+    if (status === 401) {
       return noStoreJson({ error: 'INVALID_API_KEY' }, { status: 401 });
     }
     await persistDashboardCookie(directApiKey);
     return noStoreJson({ ok: true });
   }
 
-  if (!body?.mode || !['login', 'register'].includes(body.mode)) {
+  if (typeof body.mode !== 'string' || !['login', 'register'].includes(body.mode)) {
     return noStoreJson({ error: 'INVALID_MODE' }, { status: 400 });
   }
 
@@ -135,15 +135,6 @@ export async function DELETE(request: Request) {
 
   const cookieStore = await cookies();
   const session = await readDashboardSessionToken(cookieStore.get(DASHBOARD_SESSION_COOKIE)?.value);
-  if (session?.apiKey) {
-    await fetch(`${SERVER_API_BASE_URL}/auth/logout`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.apiKey}` },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
-    }).catch(() => null);
-  }
   clearSessionCookies(cookieStore, DASHBOARD_SESSION_COOKIE, LEGACY_DASHBOARD_SESSION_COOKIE);
-
-  return noStoreJson({ ok: true });
+  return finishLogout(cookieStore, dashboardRevocation, session?.apiKey);
 }

@@ -39,8 +39,10 @@ esac
 
 python3 "$repo_root/deploy/security/render_ai_candidate.py" --output-dir "$output_dir"
 dockerfile="$output_dir/Dockerfile"
+wheel_context="$(python3 "$repo_root/deploy/security/prepare_rtx_wheels.py" --output-dir "$output_dir/$commit")"
 
 docker build \
+  --build-context "reviewed-wheels=$wheel_context" \
   --file "$dockerfile" \
   --build-arg "DRAPIXAI_AI_REQUIREMENTS_FILE=$requirements" \
   --label "org.opencontainers.image.revision=$commit" \

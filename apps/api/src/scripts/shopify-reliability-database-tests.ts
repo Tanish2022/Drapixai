@@ -186,6 +186,13 @@ export const verifyShopifyReliability = async (
     const lateGate=latch(); aiHook=lateGate.hold; const lateWork=processShopifyCatalogPreparationBatch(prisma,1); await lateGate.started;
     await prisma.shopifyPreparationJob.updateMany({where:{installationId:late.id,status:'processing'},data:{expiresAt:new Date(0)}});
     await recoverShopifyPreparationJobs(replica,late.id); assert.equal(await prisma.shopifyPreparationJob.count({where:{installationId:late.id,status:'ambiguous'}}),1);
+    const unaffected = await make('outside-hold');
+    nodes.set(unaffected.shopDomain, [product('outside-hold-0')]);
+    await syncShopifyCatalog(prisma, unaffected.id);
+    const independent = await processShopifyCatalogPreparationBatch(replica, 1);
+    assert.equal(independent.items[0]?.productId, 'outside-hold-0');
+    assert.equal(independent.items[0]?.status, 'review_required');
+    pass('A held tenant cannot block a separate store from preparing its garment');
     assert.equal(await webhook(late.shopDomain,'shop/redact'),500); assert.ok(await prisma.shopifyInstallation.findUnique({where:{id:late.id}}));
     failDelete=true; lateGate.release(); await lateWork;
     assert.equal(await prisma.garment.count({where:{userId:late.userId!}}),0); assert.equal(await prisma.shopifyPreparationJob.count({where:{installationId:late.id,status:'cleanup_pending'}}),1);

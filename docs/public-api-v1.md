@@ -57,13 +57,15 @@ Successful responses contain PNG bytes and the same `x-drapixai-*` quality and l
 
 The storefront SDK and REST API share one account quota for each subscription billing period. All public plans use the same Standard generation pipeline.
 
-| Plan | Monthly price | Included successful try-ons | Effective price |
-| --- | ---: | ---: | ---: |
-| Trial | $0 for 12 days | 300 | Evaluation only |
-| Starter | $49 | 1,000 | $0.0490/result |
-| Growth | $199 | 7,500 | $0.0265/result |
-| Pro | $499 | 25,000 | $0.0200/result |
-| Enterprise | Custom | 100,000+ | Negotiated |
+All new customers will need a recurring card mandate or, for INR payments, UPI AutoPay. The one-time trial invoice is ₹1 or US$1 for 10 days. The selected monthly plan renews after day 10 unless canceled before renewal. Enrollment is closed until monthly prices are published and checkout is ready.
+
+| Plan | Price | Included successful try-ons |
+| --- | --- | ---: |
+| Trial | ₹1 or US$1 for 10 days | 300 |
+| Starter | To be announced | 1,000 |
+| Growth | To be announced | 7,500 |
+| Pro | To be announced | 25,000 |
+| Enterprise | Custom | By agreement |
 
 One unit is consumed only when `POST /v1/tryons` produces its first successful, publishable HTTP 200 result. The following do not consume another unit:
 
@@ -72,7 +74,7 @@ One unit is consumed only when `POST /v1/tryons` produces its first successful, 
 - a duplicate idempotency key after an already-counted result
 - token exchange, usage reads, webhook operations, and OpenAPI access
 
-Public plans use a hard quota aligned to the exact Stripe monthly subscription period, with no automatic overage billing at launch. Trial quota runs from account creation through the trial expiry. When quota is exhausted, try-on creation returns HTTP 429. Use `GET /v1/usage` to read current usage, quota, remaining capacity, `period_start`, and `period_end`. Prices are in USD and exclude applicable taxes.
+Public plans use a hard quota aligned to the exact Stripe monthly subscription period, with no automatic overage billing at launch. Trial access requires a recorded expiry. When quota is exhausted, try-on creation returns HTTP 429. Use `GET /v1/usage` to read current usage, quota, remaining capacity, `period_start`, and `period_end`.
 
 ## Idempotency
 

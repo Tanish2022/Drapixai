@@ -35,7 +35,27 @@ export const getStorageEncryptionParams = (): Partial<Pick<PutObjectCommandInput
   return { ServerSideEncryption: 'AES256' };
 };
 
+async function readStagingSession(file: string) {
+  // The directory mount follows host-side atomic file rotation across refreshes.
+  try {
+    const value = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    const expiration = new Date(value.Expiration);
+    const remaining = expiration.getTime() - Date.now();
+    if (value.Version === 1 && Number.isFinite(remaining) && remaining > 0 && remaining <= 16 * 60_000
+        && [value.AccessKeyId, value.SecretAccessKey, value.SessionToken].every(v => typeof v === 'string' && v.length > 0)) {
+      return { accessKeyId: value.AccessKeyId, secretAccessKey: value.SecretAccessKey, sessionToken: value.SessionToken, expiration };
+    }
+  } catch {
+    // JSON parse errors can quote credential material. Return only the fixed error below.
+  }
+  throw new Error('STAGING_S3_SESSION_INVALID');
+}
+
 export function createStorageClient() {
+  const sessionFile = process.env.DRAPIXAI_STAGING_S3_SESSION_FILE;
+  if (sessionFile && (process.env.DRAPIXAI_REQUIRE_NEON_STAGING !== '1' || hasStaticCredentials || isCustomEndpoint)) {
+    throw new Error('STAGING_S3_IDENTITY_CONFIGURATION_INVALID');
+  }
   const client = new S3Client({
     region,
     ...(isCustomEndpoint ? { endpoint } : {}),
@@ -47,7 +67,7 @@ export function createStorageClient() {
             ...(sessionToken ? { sessionToken } : {}),
           },
         }
-      : {}),
+      : sessionFile ? { credentials: () => readStagingSession(sessionFile) } : {}),
     forcePathStyle: STORAGE_FORCE_PATH_STYLE,
   });
 

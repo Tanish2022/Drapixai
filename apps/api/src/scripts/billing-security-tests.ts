@@ -18,6 +18,13 @@ import {
 import { getPlanAccessContext } from '../lib/plans';
 import { getUsagePeriodBounds } from '../lib/usage';
 
+const trialEnd = new Date('2026-01-11T00:00:00Z');
+const trial = {planType: 'trial', trialExpiresAt: trialEnd};
+assert.equal(getPlanAccessContext({...trial, at: new Date('2026-01-01T00:00:00Z')}).trialDaysLeft, 10);
+assert.equal(getPlanAccessContext({...trial, at: trialEnd}).active, false);
+assert.equal(getPlanAccessContext({planType: 'trial'}).active, false);
+assert.equal(getPlanAccessContext({planType: 'trial', trialExpiresAt: 'invalid'}).active, false);
+
 process.env.NODE_ENV = 'test';
 process.env.DRAPIXAI_STRIPE_BILLING_ENABLED = '1';
 process.env.DRAPIXAI_STRIPE_LIVE_MODE = '0';

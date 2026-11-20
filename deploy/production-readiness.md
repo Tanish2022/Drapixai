@@ -36,6 +36,8 @@ Production hosts must never rebuild DrapixAI source during a rollout. Build and 
 2. Set `DRAPIXAI_RELEASE_REGISTRY` to the private registry namespace and `DRAPIXAI_EXPECTED_GIT_REF` to that 40-character commit, then run:
 
 ```bash
+NEXT_PUBLIC_API_BASE_URL=https://api.example.com \
+NEXT_PUBLIC_WEB_BASE_URL=https://www.example.com \
 DRAPIXAI_RELEASE_REGISTRY=registry.example/drapixai \
 DRAPIXAI_EXPECTED_GIT_REF=<release-commit> \
 bash deploy/scripts/publish-release-images.sh deploy/env/ai.production.env

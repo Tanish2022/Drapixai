@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient, TryOnResult } from '@prisma/client';
-import { getPlanAccessContext, TRIAL_DAYS } from './plans';
+import { getPlanAccessContext } from './plans';
 import { getUsagePeriodBounds, incrementUsageInTransaction, lockAccountUsage } from './usage';
 import { runDatabaseTransaction } from './database-transaction';
 import { appendSecurityAuditInTransaction } from './audit-log';
@@ -24,9 +24,7 @@ export const reserveTryOnUsage = async (
     });
     if (!key) return { ok: false as const, reason: 'API_KEY_INACTIVE' as const };
     const user = key.user;
-    const plan = getPlanAccessContext({ ...user, at,
-      trialExpiresAt: user.trialExpiresAt || new Date(user.createdAt.getTime() + TRIAL_DAYS * 86400000),
-    });
+    const plan = getPlanAccessContext({ ...user, at });
     if (!plan.active || !Number.isSafeInteger(plan.quota) || plan.quota <= 0) {
       return { ok: false as const, reason: 'PLAN_INACTIVE' as const };
     }
