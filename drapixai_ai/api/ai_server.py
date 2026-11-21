@@ -9,6 +9,7 @@ import os
 import time
 import uuid
 from typing import Optional
+from redis.exceptions import RedisError
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request, Header
 from fastapi.exceptions import RequestValidationError
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field
 from PIL import Image
 from rq import Worker
 
+from drapixai_ai.api.monitoring import router as monitoring_router
 from drapixai_ai.configs.settings import settings
 from drapixai_ai.queue.redis_queue import get_redis
 from drapixai_ai.services.garment_cache import GarmentCache
@@ -41,6 +43,7 @@ from drapixai_ai.services.transient_spool import run_transient_cleanup_loop
 from drapixai_ai.services.upper_body_validator import is_upper_body
 
 app = FastAPI(title="DrapixAI", version="1.0.0")
+app.include_router(monitoring_router)
 service = TryOnService()
 garment_cache = GarmentCache()
 logger = get_logger("drapixai_ai.api")
@@ -119,6 +122,10 @@ class TryOnBase64Request(BaseModel):
     garment_type: Optional[str] = Field(default=None)
     garment_category: Optional[str] = Field(default=None)
     cloth_cache_key: Optional[str] = Field(default=None)
+
+
+class DemoSettlement(BaseModel):
+    receipt: uuid.UUID
 
 
 class GarmentBase64Request(BaseModel):
@@ -609,8 +616,32 @@ async def tryon(
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
 
+@app.post("/ai/tryon/demo/settle")
+async def settle_public_demo(payload: DemoSettlement):
+    # The service-token middleware authenticates the API, which owns the quality gate.
+    if not settings.ai_service_token:
+        raise HTTPException(status_code=401, detail="AI_SERVICE_TOKEN_REQUIRED")
+    try:
+        accepted = await asyncio.to_thread(
+            service.limiter.check_and_increment, "public-demo", demo_receipt=str(payload.receipt)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=410, detail="DEMO_RECEIPT_EXPIRED") from exc
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail="TRY_ON_USAGE_UNAVAILABLE") from exc
+    if not accepted:
+        raise HTTPException(status_code=429, detail="TRY_ON_LIMIT_EXCEEDED")
+    return Response(status_code=204)
+
+
+@app.post("/ai/tryon/demo/base64")
 @app.post("/ai/tryon/base64")
 async def tryon_base64(payload: TryOnBase64Request, request: Request):
+    demo = request.url.path == "/ai/tryon/demo/base64"
+    if demo and not settings.ai_service_token:
+        raise HTTPException(status_code=401, detail="AI_SERVICE_TOKEN_REQUIRED")
+    if demo and (payload.user_id != "public-demo" or getattr(request.state, "subscription_quota_reserved", False)):
+        raise HTTPException(status_code=400, detail="INVALID_DEMO_REQUEST")
     quality_mode = _quality_mode(payload.quality)
     normalized_garment_type = _normalize_garment_type(payload.garment_type)
     profile_garment_type = _tryon_profile_type(normalized_garment_type, payload.garment_category)
@@ -649,6 +680,7 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
             request_id=getattr(request.state, "request_id", None),
             garment_type=profile_garment_type,
             subscription_quota_reserved=getattr(request.state, "subscription_quota_reserved", False),
+            defer_demo_quota=demo,
         )
     except TryOnLimitExceeded:
         request.state.admission_work_state = "not-dispatched"
@@ -741,6 +773,11 @@ async def tryon_base64(payload: TryOnBase64Request, request: Request):
         "x-drapixai-media-retention": "transient-only",
         "x-drapixai-training-use": "none",
     }
+    if demo:
+        try:
+            headers["x-drapixai-demo-receipt"] = await asyncio.to_thread(service.limiter.issue_demo_receipt)
+        except RedisError as exc:
+            raise HTTPException(status_code=503, detail="TRY_ON_USAGE_UNAVAILABLE") from exc
     return Response(content=image_bytes, media_type=f"image/{result['format']}", headers=headers)
 
 

@@ -50,6 +50,7 @@ class TryOnService:
         garment_type: str | None = None,
         *,
         subscription_quota_reserved: bool = False,
+        defer_demo_quota: bool = False,
     ) -> Job:
         # Direct and demo calls use the local guard. API-dispatched work is
         # accounted for by the tenant's subscription reservation ledger.
@@ -83,7 +84,7 @@ class TryOnService:
                 "request_id": request_id,
                 "garment_type": garment_type,
                 "enqueued_at_ms": int(time.time() * 1000),
-                "count_local_quota_on_result": count_local_quota,
+                "count_local_quota_on_result": count_local_quota and not defer_demo_quota,
             }
 
             queue = self.lower_queue if self._is_lower_body(garment_type) else self.upper_queue

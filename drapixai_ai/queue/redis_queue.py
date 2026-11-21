@@ -45,3 +45,12 @@ def get_queue(name: str | None = None) -> Queue:
     if queue_name not in _queues:
         _queues[queue_name] = Queue(name=queue_name, connection=get_redis())
     return _queues[queue_name]
+
+
+def tryon_queue_depth() -> int:
+    # Count both submission queues, including work awaiting a stopped worker.
+    keys = {get_queue(name).key for name in (settings.queue_name, settings.lower_body_queue_name)}
+    with get_redis().pipeline(transaction=False) as pipe:
+        for key in keys:
+            pipe.llen(key)
+        return sum(pipe.execute())

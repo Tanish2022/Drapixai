@@ -107,7 +107,7 @@ async function main() {
     await assert.rejects(prisma.emailRecipientSuppression.updateMany({ data: { reason: 'hard_bounce', priority: 1 } }));
     assert.equal((await prisma.emailRecipientSuppression.findFirstOrThrow()).reason, 'complaint');
     pass('Bounded retention preserves suppression; SQL grants/trigger reject deletion, moving the recipient hash and complaint downgrade');
-    const metrics = await renderOperationalMetrics(prisma, { lLen: async () => 0, zCard: async () => 0 });
+    const metrics = await renderOperationalMetrics(prisma, { zCard: async () => 0, hLen: async () => 0 }, null);
     assert.match(metrics, /drapixai_email_complaints_recent 1/); assert.match(metrics, /drapixai_email_suppression_count 1/); assert.match(metrics, /drapixai_email_retention_overdue 0/);
     assert.ok(!metrics.includes('recipient@') && !metrics.includes(event.recipientHash) && !metrics.includes('PRIVATE'));
     pass('Persisted complaint/suppression/retention metrics survive a client boundary without recipient or payload labels');

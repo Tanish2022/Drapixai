@@ -1,7 +1,7 @@
 """Queue-lifecycle receipt only. No image/model/inference configuration."""
 from __future__ import annotations
 
-TRYON_PATHS = frozenset({"/ai/tryon", "/ai/tryon/base64"})
+TRYON_PATHS = frozenset({"/ai/tryon", "/ai/tryon/base64", "/ai/tryon/demo/base64"})
 
 
 class TryOnLimitExceeded(PermissionError):

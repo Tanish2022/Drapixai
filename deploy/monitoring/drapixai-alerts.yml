@@ -1,4 +1,24 @@
 groups:
+  - name: drapixai-monitoring
+    rules:
+      - alert: DrapixAIApiMetricsUnavailable
+        expr: up{job="drapixai-api"} == 0 or absent(up{job="drapixai-api"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: DrapixAI API metrics are unavailable
+          description: Check API health and the private Prometheus scrape target and credentials.
+
+      - alert: DrapixAIGpuQueueMetricsUnavailable
+        expr: drapixai_gpu_queue_metrics_available == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: DrapixAI GPU queue depth is unavailable
+          description: Check the private API-to-AI connection and AI Redis before increasing intake.
+
   - name: drapixai-email
     rules:
       - alert: DrapixAIEmailSendFailures

@@ -1,9 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
+import { ADMISSION_KEYS } from './tryon-concurrency';
 
 type RedisMetricsClient = {
-  lLen(key: string): Promise<number>;
   zCard(key: string): Promise<number>;
-  hLen?(key: string): Promise<number>;
+  hLen(key: string): Promise<number>;
 };
 
 const counters = new Map<string, number>();
@@ -55,6 +55,7 @@ export const observeEmailProviderEvent = (event: string) => {
 export const renderOperationalMetrics = async (
   prisma: PrismaClient,
   redis: RedisMetricsClient,
+  readGpuQueueDepth: (() => Promise<number>) | null,
 ) => {
   const intakeSetting = String(process.env.DRAPIXAI_TRYON_INTAKE_ENABLED || '').trim();
   const intakeEnabled = intakeSetting === '1' || (!intakeSetting && process.env.NODE_ENV !== 'production');
@@ -83,11 +84,22 @@ export const renderOperationalMetrics = async (
   const [pendingWebhooks, failedWebhooks, queueDepth, activeTryOns, uncertainTryOns] = await Promise.all([
     prisma.webhookDelivery.count({ where: { status: { in: ['pending', 'retrying', 'processing'] } } }),
     prisma.webhookDelivery.count({ where: { status: 'failed' } }),
-    redis.lLen(process.env.DRAPIXAI_RQ_QUEUE_KEY || 'rq:queue:default'),
-    redis.zCard('drapixai:tryon-concurrency:global'),
-    redis.hLen ? redis.hLen('drapixai:tryon-concurrency:uncertain') : Promise.resolve(0),
+    readGpuQueueDepth ? readGpuQueueDepth().catch(() => NaN) : null,
+    redis.zCard(ADMISSION_KEYS.global),
+    redis.hLen(ADMISSION_KEYS.uncertain),
   ]);
 
+  if (queueDepth !== null) {
+    const available = Number.isSafeInteger(queueDepth) && queueDepth >= 0;
+    lines.push(
+      '# HELP drapixai_gpu_queue_metrics_available Whether the AI service reported a valid queue depth.',
+      '# TYPE drapixai_gpu_queue_metrics_available gauge',
+      `drapixai_gpu_queue_metrics_available ${available ? 1 : 0}`,
+      '# HELP drapixai_gpu_queue_depth Total queued try-ons in the AI service submission queues.',
+      '# TYPE drapixai_gpu_queue_depth gauge',
+      `drapixai_gpu_queue_depth ${available ? queueDepth : 'NaN'}`,
+    );
+  }
   lines.push(
     '# HELP drapixai_webhook_pending Current pending, retrying, or processing webhook deliveries.',
     '# TYPE drapixai_webhook_pending gauge',
@@ -95,9 +107,6 @@ export const renderOperationalMetrics = async (
     '# HELP drapixai_webhook_failed Current permanently failed webhook deliveries.',
     '# TYPE drapixai_webhook_failed gauge',
     `drapixai_webhook_failed ${failedWebhooks}`,
-    '# HELP drapixai_gpu_queue_depth Current RQ try-on queue depth.',
-    '# TYPE drapixai_gpu_queue_depth gauge',
-    `drapixai_gpu_queue_depth ${queueDepth}`,
     '# HELP drapixai_active_tryons Current distributed GPU slot leases.',
     '# TYPE drapixai_active_tryons gauge',
     `drapixai_active_tryons ${activeTryOns}`,

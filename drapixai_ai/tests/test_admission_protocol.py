@@ -115,7 +115,7 @@ class AdmissionTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(route=route_name, mode=mode):
                     routes = actual_routes(mode)
                     async def invoke(state):
-                        request = SimpleNamespace(state=state)
+                        request = SimpleNamespace(state=state, url=SimpleNamespace(path="/ai/tryon/base64"))
                         if route_name == "tryon":
                             return await routes[route_name](request=request, user_id="synthetic", person_image=object(), cloth_image=object(), quality="standard", garment_type="upper", garment_category=None, cloth_cache_key=None)
                         payload = SimpleNamespace(user_id="synthetic", quality="standard", garment_type="upper", garment_category=None, person_image_base64="eA==", cloth_image_base64="eA==", cloth_cache_key=None)
@@ -143,7 +143,7 @@ class AdmissionTests(unittest.IsolatedAsyncioTestCase):
             ("", "", reservation, 401, []),
             (token, token, "invalid-id", 400, []),
         )
-        for path in sorted(protocol.TRYON_PATHS):
+        for path in ("/ai/tryon", "/ai/tryon/base64"):
             for configured, supplied, claimed, status, expected in cases:
                 with self.subTest(path=path, authenticated=configured == supplied and bool(configured),
                                   claim=claimed, status=status):
@@ -166,6 +166,41 @@ class AdmissionTests(unittest.IsolatedAsyncioTestCase):
                     result = await routes["request_logger"](request, route)
                     self.assertEqual(getattr(result, "status_code", 200), status)
                     self.assertEqual(received, expected)
+
+    async def test_demo_only_defers_settlement_for_authenticated_public_demo(self):
+        path = "/ai/tryon/demo/base64"
+        self.assertIn(path, protocol.TRYON_PATHS)
+        cases = (("", "", "public-demo", False, 401),
+                 ("private", "invalid", "public-demo", False, 401),
+                 ("private", "private", "other-brand", False, 400),
+                 ("private", "private", "public-demo", True, 400),
+                 ("private", "private", "public-demo", False, 200))
+        for configured, supplied, user, paid, status in cases:
+            with self.subTest(user=user, paid=paid, status=status):
+                routes = actual_routes("success", service_token=configured)
+                queued = []
+                routes["service"].enqueue_tryon = lambda **kwargs: queued.append(kwargs)
+                receipt = str(uuid.uuid4())
+                routes["service"].limiter = SimpleNamespace(issue_demo_receipt=lambda: receipt)
+                request = SimpleNamespace(url=SimpleNamespace(path=path), method="POST", state=SimpleNamespace(),
+                                          headers={"x-drapixai-service-token": supplied})
+                if paid:
+                    request.headers["x-drapixai-quota-reservation"] = str(uuid.uuid4())
+                payload = SimpleNamespace(user_id=user, quality="standard", garment_type="upper", garment_category=None,
+                                          person_image_base64="eA==", cloth_image_base64="eA==", cloth_cache_key=None)
+                async def route(req):
+                    try:
+                        return await routes["tryon_base64"](payload, req)
+                    except HttpError as exc:
+                        return JsonResponse(exc.status_code, {}, {})
+                result = await routes["request_logger"](request, route)
+                self.assertEqual(result.status_code, status)
+                if status == 200:
+                    self.assertTrue(queued[0]["defer_demo_quota"])
+                    self.assertFalse(queued[0]["subscription_quota_reserved"])
+                    self.assertEqual(result.headers["x-drapixai-demo-receipt"], receipt)
+                else:
+                    self.assertEqual(queued, [])
 
     def test_middleware_wraps_existing_auth_body_refusals(self):
         tree = ast.parse((ROOT / "drapixai_ai/api/ai_server.py").read_text(encoding="utf-8"))
@@ -293,6 +328,26 @@ class AdmissionTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(deleted_files, [])
                     self.assertEqual(deleted_jobs, [])
                 self.assertEqual(poll_times, [0, 1])
+
+    def test_deferred_demo_checks_capacity_and_generates_without_spending_it(self):
+        service, namespace, _ = self.queue_service()
+        namespace["settings"] = SimpleNamespace(job_timeout_seconds=900, queue_ttl_seconds=180,
+                                                result_ttl_seconds=60, failure_ttl_seconds=60, max_wait_seconds=0)
+        namespace.update(write_transient_bytes=lambda data: "input", read_transient_bytes=lambda ref: b"image",
+                         run_tryon_job=noop)
+        service.upper_queue = SimpleNamespace(enqueue=lambda worker, payload, **kwargs: payload)
+        checked = []
+        service.limiter = SimpleNamespace(has_capacity=lambda user: checked.append(user) or True)
+        for score in (0.5, 0.95):
+            payload = service.enqueue_tryon("public-demo", b"p", b"g", defer_demo_quota=True)
+            self.assertFalse(payload["count_local_quota_on_result"])
+            job = SimpleNamespace(args=(payload,), result={"output_image_ref": "output", "quality_score": score},
+                                  refresh=lambda: None, get_status=lambda **kw: "finished", delete=lambda: None)
+            self.assertEqual(service.wait_for_result(job)["quality_score"], score)
+        self.assertEqual(checked, ["public-demo", "public-demo"])
+        service.limiter.has_capacity = lambda user: False
+        with self.assertRaises(protocol.TryOnLimitExceeded):
+            service.enqueue_tryon("public-demo", b"p", b"g", defer_demo_quota=True)
 
 
 if __name__ == "__main__":

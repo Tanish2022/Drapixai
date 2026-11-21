@@ -1,5 +1,6 @@
 import assert from 'assert';
 import { getTryOnConfidenceBadge, shouldAutoRejectTryOn, TryOnQualityInput } from '../lib/tryon-quality';
+import { acceptPublicDemoOutput } from '../lib/public-demo-result';
 
 const valid: TryOnQualityInput = {
   qualityScore: 0.95,
@@ -35,4 +36,30 @@ assert.equal(shouldAutoRejectTryOn({ ...valid, latencyMs: 60_000 }), false, 'Lat
 assert.equal(shouldAutoRejectTryOn({ ...valid, warnings: ['GARMENT_COLOR_DRIFT'] }), true, 'Upper-body failures still reject');
 assert.equal(getTryOnConfidenceBadge(valid), 'Excellent', 'Existing clean upper-body behavior is preserved');
 
-console.log('Try-on quality score boundaries and lower-body warning tests passed.');
+async function demoSettlementChecks() {
+  const receipt = '00000000-0000-4000-8000-000000000001';
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jNKkAAAAASUVORK5CYII=', 'base64');
+  const output = (bytes = png, token = receipt) => new Response(bytes, { headers: { 'x-drapixai-demo-receipt': token } });
+  const settlements: string[] = [];
+  const settle = async (token: string) => { settlements.push(token); return new Response(null, { status: 204 }); };
+  assert.equal((await acceptPublicDemoOutput({ ...valid, qualityScore: 0.5 }, output(), settle)).state, 'rejected');
+  assert.equal((await acceptPublicDemoOutput({ ...valid, warnings: ['GARMENT_COLOR_DRIFT'] }, output(), settle)).state, 'rejected');
+  assert.equal((await acceptPublicDemoOutput(valid, output(Buffer.alloc(0)), settle)).state, 'unavailable');
+  assert.equal((await acceptPublicDemoOutput(valid, output(png, ''), settle)).state, 'unavailable');
+  assert.deepEqual(settlements, []);
+  const accepted = await acceptPublicDemoOutput(valid, output(), settle);
+  assert.equal(accepted.state, 'accepted');
+  assert.deepEqual(settlements, [receipt]);
+  assert.equal((await acceptPublicDemoOutput(valid, output(), async () => new Response(null, { status: 429 }))).state, 'limited');
+  const attempts: string[] = [];
+  const retried = await acceptPublicDemoOutput(valid, output(), async token => {
+    attempts.push(token);
+    if (attempts.length === 1) throw Error('synthetic lost acknowledgement');
+    return new Response(null, { status: 204 });
+  });
+  assert.equal(retried.state, 'accepted');
+  assert.deepEqual(attempts, [receipt, receipt]);
+}
+
+demoSettlementChecks().then(() => console.log('Try-on quality and public demo settlement checks passed.'))
+  .catch(error => { console.error(error); process.exitCode = 1; });

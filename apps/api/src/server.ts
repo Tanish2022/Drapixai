@@ -273,6 +273,17 @@ const aiServiceHeaders: Record<string, string> = {};
 if (process.env.DRAPIXAI_AI_SERVICE_TOKEN) {
   aiServiceHeaders['x-drapixai-service-token'] = process.env.DRAPIXAI_AI_SERVICE_TOKEN;
 }
+async function readGpuQueueDepth(): Promise<number> {
+  const response = await aiFetch(`${aiBaseUrl}/internal/queue-depth`, {
+    headers: aiServiceHeaders,
+    signal: AbortSignal.timeout(3000),
+  });
+  if (!response.ok) throw new Error('AI_QUEUE_DEPTH_UNAVAILABLE');
+  const payload = await response.json() as { depth?: unknown } | null;
+  if (typeof payload?.depth !== 'number') throw new Error('AI_QUEUE_DEPTH_INVALID');
+  return payload.depth;
+}
+
 const sdkExposedHeaders = [
   'x-drapixai-tryon-result-id',
   'x-drapixai-engine',
@@ -449,10 +460,11 @@ app.get('/internal/metrics', async (req, res) => {
     return res.status(404).json({ error: 'NOT_FOUND' });
   }
   try {
+    const monitorGpu = isTryOnIntakeEnabled() || process.env.DRAPIXAI_GPU_QUEUE_MONITORING_ENABLED !== '0';
     const metrics = await renderOperationalMetrics(prisma, {
-      lLen: key => redis.run(client => client.lLen(key)),
       zCard: key => redis.run(client => client.zCard(key)),
-    });
+      hLen: key => redis.run(client => client.hLen(key)),
+    }, monitorGpu ? readGpuQueueDepth : null);
     res.type('text/plain; version=0.0.4; charset=utf-8').send(metrics);
   } catch (error) {
     console.error('Operational metrics collection failed:', formatLogError(error));

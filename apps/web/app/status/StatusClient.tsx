@@ -68,7 +68,7 @@ export default function StatusClient() {
       <section className="mx-auto max-w-[1440px] px-5 py-16 sm:px-8 lg:px-12">
         <div role="status" aria-atomic="true" className={`border-l-4 p-6 ${allOperational ? 'border-[#31725b] bg-[#eaf0e9]' : 'border-[#b7832f] bg-[#fbf5e9]'}`}>
           <div className="flex items-center gap-3">{allOperational ? <CheckCircle2 className="h-6 w-6 text-[#31725b]" /> : <TriangleAlert className="h-6 w-6 text-[#9a6a1d]" />}<h2 className="text-xl font-semibold">{allOperational ? 'All checked services operational' : checking ? 'Checking services' : 'One or more services need attention'}</h2></div>
-          <p className="mt-2 text-sm text-[#68736b]">{checkedAt ? `Last checked ${checkedAt.toLocaleString()}` : 'Waiting for the first readiness check.'}</p>
+          <p className="mt-2 text-sm text-[#59665e]">{checkedAt ? `Last checked ${checkedAt.toLocaleString()}` : 'Waiting for the first readiness check.'}</p>
         </div>
 
         <div className="mt-8 border-y border-black/10">

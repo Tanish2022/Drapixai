@@ -258,6 +258,16 @@ jobs:
   ai-contracts:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+        ports:
+          - "127.0.0.1:6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -270,6 +280,7 @@ jobs:
         run: >-
           python -m pip install
           pip-audit==2.9.0
+          fastapi==0.139.0
           redis==5.0.8
           rq==1.16.2
           pillow==13.0.0
@@ -297,6 +308,21 @@ jobs:
         run: python -m drapixai_ai.scripts.validate_ai_ingress_security
       - name: AI Redis deadline and worker dequeue regression
         run: timeout 20s python -m unittest drapixai_ai.tests.test_redis_deadlines
+      - name: Verify AI queue monitoring and demo quota settlement against disposable Redis
+        env:
+          DRAPIXAI_TEST_DISPOSABLE_REDIS: "1"
+        run: >-
+          timeout 60s python -m unittest -v
+          drapixai_ai.tests.test_queue_monitoring
+          drapixai_ai.tests.test_demo_settlement_redis
+      - name: Test Prometheus outage, try-on and queue alerts
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777 \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/deploy/monitoring,dst=/rules,readonly" \
+            --workdir /rules --entrypoint /bin/promtool \
+            prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2 \
+            test rules drapixai-alerts.test.yml
       - name: AI log privacy regression
         run: python -m drapixai_ai.scripts.validate_log_privacy
       - name: Garment cache expiry regression
@@ -427,6 +453,9 @@ jobs:
   container-scan:
     runs-on: ubuntu-22.04
     timeout-minutes: 35
+    env:
+      NEXT_PUBLIC_API_BASE_URL: https://api.staging.drapixai.com
+      NEXT_PUBLIC_WEB_BASE_URL: https://staging.drapixai.com
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -436,8 +465,16 @@ jobs:
         id: edge_build
         run: |
           docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" -f apps/api/Dockerfile -t "drapixai-api:${GITHUB_SHA}" .
-          docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" -f apps/web/Dockerfile -t "drapixai-web:${GITHUB_SHA}" .
+          docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --build-arg NEXT_PUBLIC_API_BASE_URL --build-arg NEXT_PUBLIC_WEB_BASE_URL \
+            -f apps/web/Dockerfile -t "drapixai-web:${GITHUB_SHA}" .
+      - name: Check the staging origins compiled into the website
+        run: |
+          docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
+            -i "drapixai-web:${GITHUB_SHA}" - "$NEXT_PUBLIC_API_BASE_URL" "$NEXT_PUBLIC_WEB_BASE_URL" \
+            < scripts/verify-web-bundle-origins.cjs
       - name: Verify native edge runtime compatibility
+        if: ${{ !cancelled() && steps.edge_build.outcome == 'success' }}
         run: node scripts/verify-edge-container-runtime.mjs "drapixai-api:${GITHUB_SHA}" "drapixai-web:${GITHUB_SHA}"
       - name: Scan production API image
         if: ${{ !cancelled() && steps.edge_build.outcome == 'success' }}

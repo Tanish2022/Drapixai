@@ -5,6 +5,54 @@ evaluation_interval: 1m
 tests:
   - interval: 1m
     input_series:
+      - series: 'up{job="drapixai-api",instance="api.fixture"}'
+        values: '1 0 0 0 1'
+      - series: drapixai_gpu_queue_metrics_available
+        values: '1 0 0 0 1'
+      - series: drapixai_gpu_queue_depth
+        values: '0 31 31 31 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DrapixAIApiMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: DrapixAIApiMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical, job: drapixai-api, instance: api.fixture}
+            exp_annotations:
+              summary: DrapixAI API metrics are unavailable
+              description: Check API health and the private Prometheus scrape target and credentials.
+      - eval_time: 4m
+        alertname: DrapixAIApiMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: DrapixAIGpuQueueMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: DrapixAI GPU queue depth is unavailable
+              description: Check the private API-to-AI connection and AI Redis before increasing intake.
+      - eval_time: 4m
+        alertname: DrapixAIGpuQueueMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: DrapixAIGpuQueueCritical
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: DrapixAI GPU queue is critically backed up
+              description: Protect latency by pausing intake or adding a worker.
+  - interval: 1m
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: DrapixAIApiMetricsUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical, job: drapixai-api}
+            exp_annotations:
+              summary: DrapixAI API metrics are unavailable
+              description: Check API health and the private Prometheus scrape target and credentials.
+  - interval: 1m
+    input_series:
       - series: drapixai_tryon_uncertain_work
         values: '0 1 1 0'
       - series: drapixai_tryon_intake_enabled

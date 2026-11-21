@@ -637,7 +637,7 @@ assertIncludes(apiServer, "requireExact('DRAPIXAI_ALLOW_LOCAL_STORAGE_FALLBACK',
 assertIncludes(apiServer, "requireExact('DRAPIXAI_ENABLE_LOWER_BODY', '0')", 'API server must keep unverified lower-body support disabled for launch');
 assertIncludes(apiServer, "requireNumberAtLeast('DRAPIXAI_MIN_PUBLISHABLE_QUALITY_SCORE', 0.95)", 'API server must enforce the launch quality floor');
 assertIncludes(apiServer, "requireExact('DRAPIXAI_AUTO_REJECT_BAD_RESULTS', '1')", 'API server must require public low-quality result rejection');
-assertIncludes(publicRoute, 'shouldAutoRejectTryOn', 'Public demo must apply the publishability quality gate');
+assertIncludes(publicRoute, 'acceptPublicDemoOutput', 'Public demo must gate the image and settle only accepted output');
 assertIncludes(publicRoute, "error: 'TRYON_RESULT_NOT_PUBLISHABLE'", 'Public demo must reject sub-threshold results');
 assertIncludes(apiServer, '/replace-with|RUNPOD_POD_IP|USERNAME:PASSWORD/i', 'API server must reject placeholder production configuration');
 assertIncludes(apiServer, "error.type === 'entity.parse.failed'", 'API server must return sanitized JSON for malformed JSON requests');

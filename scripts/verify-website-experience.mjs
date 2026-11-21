@@ -56,7 +56,7 @@ Object.assign(env,{NODE_ENV:'production',NEXT_TELEMETRY_DISABLED:'1',NEXT_DIST_D
 let next,browser,page;let serverLog='';const pending=new Set();const pass=s=>{report.checks.push(s);console.log('PASS '+s);};
 const child=async(args,name)=>{const log=fs.openSync(path.join(out,name+'.log'),'w');const p=spawn(process.execPath,args,{cwd:web,env,windowsHide:true,stdio:['ignore',log,log]});let timer;try{const code=await Promise.race([new Promise(r=>p.on('exit',r)),new Promise((_,reject)=>{timer=setTimeout(()=>{p.kill();reject(Error('Owned build deadline exceeded'));},180000);})]);generated=new Map([...before].map(([name])=>[name,fs.readFileSync(path.join(web,name))]));assert.equal(code,0,name+' failed; inspect log');}finally{clearTimeout(timer);fs.closeSync(log);}};
 try{
-  await child(['node_modules/next/dist/bin/next','build'],'build');generated=new Map([...before].map(([name])=>[name,fs.readFileSync(path.join(web,name))]));
+  await child(['node_modules/next/dist/bin/next','build','--webpack'],'build');generated=new Map([...before].map(([name])=>[name,fs.readFileSync(path.join(web,name))]));
   pass('Isolated private production build completed with synthetic configuration');
   next=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p',String(port)],{cwd:web,env,windowsHide:true,stdio:['ignore','pipe','pipe']});next.stdout.on('data',d=>serverLog=(serverLog+d).slice(-32768));next.stderr.on('data',d=>serverLog=(serverLog+d).slice(-32768));
   let live=false;for(let i=0;i<80;i++){assert.equal(next.exitCode,null);if((await fetch(origin+'/auth/login').catch(()=>null))?.ok){live=true;break;}await delay(250);}assert.ok(live);
@@ -116,6 +116,10 @@ try{
   pass('Malformed successful HTTP data becomes a safe recovery screen rather than a false dashboard');
   overrides.set('/ready',{status:500,body:{status:'ready',checks:{database:true,redis:true,ai:{status:'ready'}}}});await go('/status');await page.getByRole('heading',{name:'One or more services need attention',exact:true}).waitFor();const health=await page.evaluate(async()=>await(await fetch('/api/health')).json());assert.equal(health.services.api,false);assert.equal(health.services.ai,false);overrides.delete('/ready');
   overrides.set('/ready',{status:200,body:{status:'ready',checks:{database:true,redis:true,ai:false,inferenceEnabled:false}}});
+  await scan('/status [degraded]');
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.getByRole('heading', { name: 'All checked services operational', exact: true }).waitFor();
+  await scan('/status [operational]');
   const paused=await page.evaluate(async()=>{const res=await fetch('/api/health');return {status:res.status,body:await res.json()};});
   assert.equal(paused.status,200);assert.equal(paused.body.inferenceDisabled,true);assert.equal(paused.body.services.ai,false);
   overrides.set('/ready',{status:503,body:{status:'not_ready',checks:{database:false,redis:true,ai:false,inferenceEnabled:false}}});

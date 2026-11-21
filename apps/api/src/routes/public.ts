@@ -13,7 +13,7 @@ import {
   SHOPPER_PRIVACY_POLICY_VERSION,
   SHOPPER_TRAINING_USE,
 } from '../lib/privacy';
-import { shouldAutoRejectTryOn } from '../lib/tryon-quality';
+import { acceptPublicDemoOutput } from '../lib/public-demo-result';
 import { validateMultipartFields } from '../lib/input-validation';
 import { acquireTryOnSlot, dispatchTryOnSlot, observeTryOnTerminalResponse, releaseTryOnSlot } from '../lib/tryon-concurrency';
 import { aiRequestSignal } from '../lib/ai-request-signal';
@@ -238,7 +238,7 @@ router.post(
 
       try { await dispatchTryOnSlot(slot.lease); }
       catch (error) { slot.lease.phase = 'terminal'; throw error; }
-      const tryOnResponse = await aiFetch(`${AI_URL}/ai/tryon/base64`, {
+      const tryOnResponse = await aiFetch(`${AI_URL}/ai/tryon/demo/base64`, {
         method: 'POST',
         signal: AbortSignal.any([slot.lease.signal, aiRequestSignal(req, res)]),
         headers: getAiHeaders({ 'Content-Type': 'application/json', 'X-Request-ID': slot.lease.token }),
@@ -271,11 +271,17 @@ router.post(
       const parsedQualityScore = Number(qualityScore);
       const parsedWarnings = warnings.split(',').map((warning) => warning.trim()).filter(Boolean);
       const parsedTimingJson = timingJson ? parseJsonSafe<Record<string, unknown>>(timingJson) : null;
-      if (shouldAutoRejectTryOn({
+      const result = await acceptPublicDemoOutput({
         qualityScore: Number.isFinite(parsedQualityScore) ? parsedQualityScore : null,
         warnings: parsedWarnings,
         timingJson: parsedTimingJson,
-      })) {
+      }, tryOnResponse, receipt => aiFetch(`${AI_URL}/ai/tryon/demo/settle`, {
+        method: 'POST',
+        signal: AbortSignal.any([aiRequestSignal(req, res), AbortSignal.timeout(5000)]),
+        headers: getAiHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ receipt }),
+      }));
+      if (result.state === 'rejected') {
         await trackWebsiteEvent('demo_tryon_rejected', '/demo', null, req.headers.referer || null, {
           source: 'public_demo',
           qualityScore,
@@ -288,7 +294,12 @@ router.post(
         });
       }
 
-      const buffer = Buffer.from(await tryOnResponse.arrayBuffer());
+      if (result.state === 'limited') {
+        return res.status(429).json({ error: 'TRY_ON_LIMIT_EXCEEDED', message: 'The monthly public demo allowance has been reached.' });
+      }
+      if (result.state === 'unavailable') {
+        return res.status(503).json({ error: 'DEMO_RESULT_UNAVAILABLE', message: 'The demo result is temporarily unavailable.' });
+      }
       await trackWebsiteEvent('demo_tryon_succeeded', '/demo', null, req.headers.referer || null, {
         source: 'public_demo',
         engine,
@@ -296,8 +307,8 @@ router.post(
         candidateCount,
         warnings,
         processingMs,
-      });
-      res.setHeader('Content-Type', tryOnResponse.headers.get('content-type') || 'image/png');
+      }).catch(error => console.error('Demo success tracking failed:', formatLogError(error)));
+      res.setHeader('Content-Type', result.mime);
       res.setHeader('Cache-Control', 'no-store, private');
       if (engine) res.setHeader('x-drapixai-engine', engine);
       if (qualityScore) res.setHeader('x-drapixai-quality-score', qualityScore);
@@ -305,7 +316,7 @@ router.post(
       if (warnings) res.setHeader('x-drapixai-warnings', warnings);
       if (processingMs) res.setHeader('x-drapixai-processing-ms', processingMs);
       if (timingJson) res.setHeader('x-drapixai-timing-json', timingJson);
-      return res.send(buffer);
+      return res.send(result.bytes);
     } catch (error) {
       console.error('Public demo try-on error:', formatLogError(error));
       await trackWebsiteEvent('demo_tryon_failed', '/demo', null, req.headers.referer || null, {
